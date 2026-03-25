@@ -4,6 +4,7 @@ import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { TerminalToolbar } from "../terminal/TerminalToolbar";
 import { XTermContainer } from "../terminal/XTermContainer";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
+import { GitPanel } from "../git/GitPanel";
 import { buildSpawnArgs } from "../../lib/agents";
 import type { AgentType, Session, SessionStatus } from "../../state/types";
 
@@ -13,6 +14,7 @@ export function AppLayout() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [gitPanelOpen, setGitPanelOpen] = useState(true);
 
   const sessions = Object.values(state.sessions);
   const activeSession = state.activeSessionId
@@ -113,7 +115,11 @@ export function AppLayout() {
       {/* Main area */}
       <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
         {/* Toolbar */}
-        <TerminalToolbar session={activeSession} />
+        <TerminalToolbar
+          session={activeSession}
+          gitPanelOpen={gitPanelOpen}
+          onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
+        />
 
         {/* Terminal area */}
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
@@ -188,6 +194,12 @@ export function AppLayout() {
           )}
         </div>
       </div>
+
+      {/* Git Panel (right side) */}
+      <GitPanel
+        cwd={activeSession?.cwd ?? "/Users/nyangshawbin/Documents/projects/switchboard"}
+        visible={gitPanelOpen && sessions.length > 0}
+      />
 
       {/* New Session Dialog */}
       <NewSessionDialog
