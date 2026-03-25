@@ -59,3 +59,9 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--sb-text-tertiary);
 }
+
+/* Status pulse animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
