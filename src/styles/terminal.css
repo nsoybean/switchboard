@@ -1,0 +1,18 @@
+/* xterm.js theme overrides */
+.xterm {
+  height: 100%;
+  padding: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--sb-border);
+  border-radius: 3px;
+}
