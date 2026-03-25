@@ -35,6 +35,12 @@ pub fn run() {
             commands::git::git_push,
             commands::git::git_create_branch,
             commands::git::git_create_pr,
+            commands::session::load_sessions,
+            commands::session::save_session,
+            commands::session::delete_session,
+            commands::session::is_first_run,
+            commands::session::complete_onboarding,
+            commands::session::detect_agents,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

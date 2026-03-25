@@ -1,10 +1,12 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { TerminalToolbar } from "../terminal/TerminalToolbar";
 import { XTermContainer } from "../terminal/XTermContainer";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { GitPanel } from "../git/GitPanel";
+import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildSpawnArgs } from "../../lib/agents";
 import type { AgentType, Session, SessionStatus } from "../../state/types";
 
@@ -17,20 +19,42 @@ export function AppLayout() {
   const [gitPanelOpen, setGitPanelOpen] = useState(true);
 
   const sessions = Object.values(state.sessions);
+  const sortedSessionIds = useMemo(
+    () =>
+      sessions
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+        .map((s) => s.id),
+    [sessions],
+  );
   const activeSession = state.activeSessionId
     ? state.sessions[state.activeSessionId]
     : null;
 
-  // Keep most recent N terminals alive
-  const aliveSessionIds = new Set(
-    sessions
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      )
-      .slice(0, MAX_ALIVE_TERMINALS)
-      .map((s) => s.id),
-  );
+  const aliveSessionIds = new Set(sortedSessionIds.slice(0, MAX_ALIVE_TERMINALS));
+
+  // Persist session to ~/.switchboard/sessions.json
+  const persistSession = useCallback(async (session: Session) => {
+    try {
+      await invoke("save_session", {
+        session: {
+          id: session.id,
+          agent: session.agent,
+          label: session.label,
+          worktree_path: session.worktreePath,
+          branch: session.branch,
+          cwd: session.cwd,
+          created_at: session.createdAt,
+          command: session.command,
+          args: session.args,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to persist session:", err);
+    }
+  }, []);
 
   const handleNewSession = useCallback(
     (config: {
@@ -40,8 +64,11 @@ export function AppLayout() {
       useWorktree: boolean;
     }) => {
       const id = crypto.randomUUID();
-      const cwd = "/Users/nyangshawbin/Documents/projects/switchboard"; // TODO: make configurable
-      const { command, args } = buildSpawnArgs(config.agent, config.task || undefined);
+      const cwd = "/Users/nyangshawbin/Documents/projects/switchboard"; // TODO: configurable
+      const { command, args } = buildSpawnArgs(
+        config.agent,
+        config.task || undefined,
+      );
 
       const session: Session = {
         id,
@@ -57,15 +84,14 @@ export function AppLayout() {
         command,
         args,
       };
-
       dispatch({ type: "ADD_SESSION", session });
+      persistSession(session);
     },
-    [dispatch],
+    [dispatch, persistSession],
   );
 
   const handleResumeSession = useCallback(
     (sessionId: string, projectPath: string) => {
-      // Check if already active
       if (state.sessions[sessionId]) {
         dispatch({ type: "SET_ACTIVE", id: sessionId });
         return;
@@ -86,8 +112,9 @@ export function AppLayout() {
         args: ["--resume", sessionId],
       };
       dispatch({ type: "ADD_SESSION", session });
+      persistSession(session);
     },
-    [dispatch, state.sessions],
+    [dispatch, state.sessions, persistSession],
   );
 
   const handleSessionExit = useCallback(
@@ -103,6 +130,39 @@ export function AppLayout() {
     },
     [dispatch],
   );
+
+  // Keyboard shortcuts
+  const shortcutHandlers = useMemo(
+    () => ({
+      onSwitchSession: (index: number) => {
+        if (index < sortedSessionIds.length) {
+          dispatch({ type: "SET_ACTIVE", id: sortedSessionIds[index] });
+        }
+      },
+      onNextSession: () => {
+        if (sortedSessionIds.length === 0 || !state.activeSessionId) return;
+        const currentIdx = sortedSessionIds.indexOf(state.activeSessionId);
+        const nextIdx = (currentIdx + 1) % sortedSessionIds.length;
+        dispatch({ type: "SET_ACTIVE", id: sortedSessionIds[nextIdx] });
+      },
+      onPrevSession: () => {
+        if (sortedSessionIds.length === 0 || !state.activeSessionId) return;
+        const currentIdx = sortedSessionIds.indexOf(state.activeSessionId);
+        const prevIdx =
+          (currentIdx - 1 + sortedSessionIds.length) % sortedSessionIds.length;
+        dispatch({ type: "SET_ACTIVE", id: sortedSessionIds[prevIdx] });
+      },
+      onNewSession: () => setDialogOpen(true),
+      onToggleGitPanel: () => setGitPanelOpen((prev) => !prev),
+      onFocusTerminal: () => {
+        // Focus the active terminal's xterm element
+        const termEl = document.querySelector(".xterm-helper-textarea");
+        if (termEl instanceof HTMLElement) termEl.focus();
+      },
+    }),
+    [sortedSessionIds, state.activeSessionId, dispatch],
+  );
+  useKeyboardShortcuts(shortcutHandlers);
 
   return (
     <div className="flex h-full">
@@ -195,9 +255,12 @@ export function AppLayout() {
         </div>
       </div>
 
-      {/* Git Panel (right side) */}
+      {/* Git Panel */}
       <GitPanel
-        cwd={activeSession?.cwd ?? "/Users/nyangshawbin/Documents/projects/switchboard"}
+        cwd={
+          activeSession?.cwd ??
+          "/Users/nyangshawbin/Documents/projects/switchboard"
+        }
         visible={gitPanelOpen && sessions.length > 0}
       />
 
