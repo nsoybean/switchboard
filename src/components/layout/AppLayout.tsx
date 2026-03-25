@@ -1,26 +1,25 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { TerminalToolbar } from "../terminal/TerminalToolbar";
 import { XTermContainer } from "../terminal/XTermContainer";
-import type { Session, SessionStatus } from "../../state/types";
+import { NewSessionDialog } from "../dialogs/NewSessionDialog";
+import { buildSpawnArgs } from "../../lib/agents";
+import type { AgentType, Session, SessionStatus } from "../../state/types";
 
 const MAX_ALIVE_TERMINALS = 8;
-
-function generateId(): string {
-  return crypto.randomUUID();
-}
 
 export function AppLayout() {
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const sessions = Object.values(state.sessions);
   const activeSession = state.activeSessionId
     ? state.sessions[state.activeSessionId]
     : null;
 
-  // Determine which terminals to keep alive (most recently active, capped at 8)
+  // Keep most recent N terminals alive
   const aliveSessionIds = new Set(
     sessions
       .sort(
@@ -31,23 +30,36 @@ export function AppLayout() {
       .map((s) => s.id),
   );
 
-  const handleNewSession = useCallback(() => {
-    const id = generateId();
-    const cwd = "/Users/nyangshawbin/Documents/projects/switchboard";
-    const session: Session = {
-      id,
-      agent: "bash",
-      label: `bash-${sessions.length + 1}`,
-      status: "running",
-      ptyId: null,
-      worktreePath: null,
-      branch: null,
-      cwd,
-      createdAt: new Date().toISOString(),
-      exitCode: null,
-    };
-    dispatch({ type: "ADD_SESSION", session });
-  }, [dispatch, sessions.length]);
+  const handleNewSession = useCallback(
+    (config: {
+      agent: AgentType;
+      label: string;
+      task: string;
+      useWorktree: boolean;
+    }) => {
+      const id = crypto.randomUUID();
+      const cwd = "/Users/nyangshawbin/Documents/projects/switchboard"; // TODO: make configurable
+      const { command, args } = buildSpawnArgs(config.agent, config.task || undefined);
+
+      const session: Session = {
+        id,
+        agent: config.agent,
+        label: config.label,
+        status: "running",
+        ptyId: null,
+        worktreePath: null,
+        branch: null,
+        cwd,
+        createdAt: new Date().toISOString(),
+        exitCode: null,
+        command,
+        args,
+      };
+
+      dispatch({ type: "ADD_SESSION", session });
+    },
+    [dispatch],
+  );
 
   const handleSessionExit = useCallback(
     (sessionId: string) => (code: number | null) => {
@@ -66,7 +78,7 @@ export function AppLayout() {
   return (
     <div className="flex h-full">
       {/* Sidebar */}
-      <SessionSidebar onNewSession={handleNewSession} />
+      <SessionSidebar onNewSession={() => setDialogOpen(true)} />
 
       {/* Main area */}
       <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
@@ -76,7 +88,6 @@ export function AppLayout() {
         {/* Terminal area */}
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
           {sessions.length === 0 ? (
-            /* Empty state */
             <div
               className="h-full flex items-center justify-center"
               style={{ background: "var(--sb-bg-terminal)" }}
@@ -105,7 +116,7 @@ export function AppLayout() {
                   Each session gets its own interactive terminal.
                 </p>
                 <button
-                  onClick={handleNewSession}
+                  onClick={() => setDialogOpen(true)}
                   style={{
                     background: "var(--sb-accent)",
                     color: "white",
@@ -122,7 +133,6 @@ export function AppLayout() {
               </div>
             </div>
           ) : (
-            /* Terminal instances — keep alive, show/hide */
             sessions.map((session) => {
               if (!aliveSessionIds.has(session.id)) return null;
               const isActive = session.id === state.activeSessionId;
@@ -137,7 +147,8 @@ export function AppLayout() {
                   }}
                 >
                   <XTermContainer
-                    command="/bin/bash"
+                    command={session.command}
+                    args={session.args}
                     cwd={session.cwd}
                     onExit={handleSessionExit(session.id)}
                   />
@@ -147,6 +158,13 @@ export function AppLayout() {
           )}
         </div>
       </div>
+
+      {/* New Session Dialog */}
+      <NewSessionDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSubmit={handleNewSession}
+      />
     </div>
   );
 }
