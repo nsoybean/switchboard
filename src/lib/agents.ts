@@ -30,7 +30,12 @@ export function getAgentConfig(agent: AgentType): AgentConfig {
 
 /**
  * Build the spawn command + args for an agent session.
- * If a task is provided for claude-code, it's passed as a prompt argument.
+ *
+ * Claude Code: always interactive. If a task is provided, pass it as a
+ * positional arg (first message in the interactive session).
+ * Do NOT use --print (non-interactive, exits after response).
+ *
+ * Codex: pass task as positional arg for interactive mode.
  */
 export function buildSpawnArgs(
   agent: AgentType,
@@ -40,7 +45,8 @@ export function buildSpawnArgs(
   const args = [...config.defaultArgs];
 
   if (task && agent === "claude-code") {
-    args.push("--print", task);
+    // Positional arg = first message in interactive session
+    args.push(task);
   } else if (task && agent === "codex") {
     args.push(task);
   }
