@@ -16,10 +16,11 @@ const AGENT_LABELS: Record<string, string> = {
 interface SessionCardProps {
   session: Session;
   isActive: boolean;
+  isPast?: boolean;
   onClick: () => void;
 }
 
-export function SessionCard({ session, isActive, onClick }: SessionCardProps) {
+export function SessionCard({ session, isActive, isPast: _isPast, onClick }: SessionCardProps) {
   const statusColor = STATUS_COLORS[session.status] ?? "var(--sb-text-tertiary)";
   const isDone = session.status === "done" || session.status === "error";
 

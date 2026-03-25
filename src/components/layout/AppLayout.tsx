@@ -61,6 +61,33 @@ export function AppLayout() {
     [dispatch],
   );
 
+  const handleResumeSession = useCallback(
+    (sessionId: string, projectPath: string) => {
+      // Check if already active
+      if (state.sessions[sessionId]) {
+        dispatch({ type: "SET_ACTIVE", id: sessionId });
+        return;
+      }
+
+      const session: Session = {
+        id: sessionId,
+        agent: "claude-code",
+        label: `resumed-${sessionId.slice(0, 8)}`,
+        status: "running",
+        ptyId: null,
+        worktreePath: null,
+        branch: null,
+        cwd: projectPath,
+        createdAt: new Date().toISOString(),
+        exitCode: null,
+        command: "claude",
+        args: ["--resume", sessionId],
+      };
+      dispatch({ type: "ADD_SESSION", session });
+    },
+    [dispatch, state.sessions],
+  );
+
   const handleSessionExit = useCallback(
     (sessionId: string) => (code: number | null) => {
       const status: SessionStatus =
@@ -78,7 +105,10 @@ export function AppLayout() {
   return (
     <div className="flex h-full">
       {/* Sidebar */}
-      <SessionSidebar onNewSession={() => setDialogOpen(true)} />
+      <SessionSidebar
+        onNewSession={() => setDialogOpen(true)}
+        onResumeSession={handleResumeSession}
+      />
 
       {/* Main area */}
       <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>

@@ -21,6 +21,8 @@ pub fn run() {
             commands::pty::pty_write,
             commands::pty::pty_resize,
             commands::pty::pty_kill,
+            commands::claude_data::get_claude_sessions,
+            commands::claude_data::get_claude_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
