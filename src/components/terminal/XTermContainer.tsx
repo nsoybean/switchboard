@@ -163,9 +163,11 @@ export function XTermContainer({
   }, [terminal, resize]);
 
   return (
-    <div
-      ref={containerRef}
-      className="size-full bg-background"
-    />
+    <div className="size-full bg-background p-2 border-0">
+      <div
+        ref={containerRef}
+        className="size-full border-0"
+      />
+    </div>
   );
 }

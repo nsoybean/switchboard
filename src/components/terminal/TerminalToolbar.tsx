@@ -19,14 +19,14 @@ export function TerminalToolbar({
 }: TerminalToolbarProps) {
   if (!session) {
     return (
-      <div className="flex items-center px-4 py-2 border-b bg-background text-sm text-muted-foreground">
+      <div className="flex items-center px-4 py-2 border-b bg-background text-sm text-muted-foreground shrink-0">
         Switchboard v0.1.0
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 border-b bg-background text-sm">
+    <div className="flex items-center gap-3 px-4 py-2 border-b bg-background text-sm shrink-0">
       <span className="font-semibold">{session.label}</span>
       <Badge variant="secondary" className="text-[11px]">
         {AGENT_LABELS[session.agent] ?? session.agent}

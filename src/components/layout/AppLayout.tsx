@@ -199,7 +199,7 @@ export function AppLayout() {
 
         {/* Main area */}
         <ResizablePanel defaultSize="55%">
-          <div className="flex flex-col h-full min-w-0">
+          <div className="flex flex-col h-full min-w-0 overflow-hidden">
             <TerminalToolbar
               session={activeSession}
               gitPanelOpen={gitPanelOpen}

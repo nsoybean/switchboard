@@ -1,7 +1,11 @@
 /* xterm.js theme overrides */
+.xterm,
+.xterm * {
+  border: none !important;
+}
+
 .xterm {
   height: 100%;
-  padding: 8px;
 }
 
 .xterm-viewport::-webkit-scrollbar {
