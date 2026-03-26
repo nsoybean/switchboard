@@ -3,7 +3,6 @@ import { useAppState, useAppDispatch } from "../../state/context";
 import { useClaudeSessions } from "../../hooks/useSessions";
 import { SessionCard } from "./SessionCard";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import type { Session } from "../../state/types";
 
@@ -45,7 +44,7 @@ export function SessionSidebar({
       </div>
 
       {/* Session list */}
-      <ScrollArea className="flex-1 w-full [&>[data-slot=scroll-area-viewport]]:!overflow-x-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col gap-0.5 p-2">
           {/* Active sessions */}
           {activeSessions.length > 0 && pastSessions.length > 0 && (
@@ -117,7 +116,7 @@ export function SessionSidebar({
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
