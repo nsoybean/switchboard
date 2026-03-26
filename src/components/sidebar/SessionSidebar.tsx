@@ -46,7 +46,7 @@ export function SessionSidebar({
 
       {/* Session list */}
       <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-0.5 p-2">
+        <div className="flex flex-col gap-0.5 p-2 overflow-hidden">
           {/* Active sessions */}
           {activeSessions.length > 0 && pastSessions.length > 0 && (
             <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
