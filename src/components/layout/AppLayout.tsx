@@ -134,7 +134,7 @@ export function AppLayout() {
   );
 
   const handleResumeSession = useCallback(
-    (sessionId: string, projectPath: string) => {
+    (sessionId: string, projectPath: string, label: string) => {
       if (state.sessions[sessionId]) {
         dispatch({ type: "SET_ACTIVE", id: sessionId });
         return;
@@ -143,7 +143,7 @@ export function AppLayout() {
       const session: Session = {
         id: sessionId,
         agent: "claude-code",
-        label: `resumed-${sessionId.slice(0, 8)}`,
+        label,
         status: "running",
         ptyId: null,
         worktreePath: null,

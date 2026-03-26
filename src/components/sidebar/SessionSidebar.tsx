@@ -13,7 +13,7 @@ import type { Session } from "../../state/types";
 
 interface SessionSidebarProps {
   onNewSession: () => void;
-  onResumeSession?: (sessionId: string, projectPath: string) => void;
+  onResumeSession?: (sessionId: string, projectPath: string, label: string) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onDeleteSession?: (sessionId: string) => Promise<void>;
 }
@@ -164,7 +164,7 @@ export function SessionSidebar({
                     }}
                     onClick={() => {
                       if (onResumeSession) {
-                        onResumeSession(cs.session_id, cs.project_path);
+                        onResumeSession(cs.session_id, cs.project_path, cs.display);
                       }
                     }}
                   />

@@ -36,7 +36,9 @@ export function TerminalToolbar({
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b bg-background text-sm shrink-0">
-      <span className="font-semibold">{session.label}</span>
+      <span className="max-w-[15ch] truncate font-semibold" title={session.label}>
+        {session.label}
+      </span>
       <Badge variant="secondary" className="text-[11px]">
         {AGENT_LABELS[session.agent] ?? session.agent}
       </Badge>
