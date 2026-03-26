@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { useClaudeSessions } from "../../hooks/useSessions";
 import { SessionCard } from "./SessionCard";
+import { FilePanel } from "../files/FilePanel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import type { Session } from "../../state/types";
 
 interface SessionSidebarProps {
@@ -17,10 +20,10 @@ export function SessionSidebar({
 }: SessionSidebarProps) {
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const [activeTab, setActiveTab] = useState<"sessions" | "files">("sessions");
 
-  const projectPath = "/Users/nyangshawbin/Documents/projects/switchboard";
   const { sessions: claudeSessions, loading } =
-    useClaudeSessions(projectPath);
+    useClaudeSessions(state.projectPath);
 
   const activeSessions = Object.values(state.sessions).sort(
     (a, b) =>
@@ -43,7 +46,38 @@ export function SessionSidebar({
         </Button>
       </div>
 
-      {/* Session list */}
+      {/* Tab switcher */}
+      <div className="flex border-b shrink-0">
+        <button
+          onClick={() => setActiveTab("sessions")}
+          className={cn(
+            "flex-1 py-1.5 text-xs font-medium transition-colors",
+            activeTab === "sessions"
+              ? "text-foreground border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Sessions
+        </button>
+        <button
+          onClick={() => setActiveTab("files")}
+          className={cn(
+            "flex-1 py-1.5 text-xs font-medium transition-colors",
+            activeTab === "files"
+              ? "text-foreground border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Files
+        </button>
+      </div>
+
+      {/* Content */}
+      {activeTab === "files" && state.projectPath ? (
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          <FilePanel rootPath={state.projectPath} />
+        </div>
+      ) : (
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col gap-0.5 p-2">
           {/* Active sessions */}
@@ -91,6 +125,11 @@ export function SessionSidebar({
                     session={pseudoSession}
                     isActive={state.activeSessionId === cs.session_id}
                     isPast
+                    tokenInfo={{
+                      inputTokens: cs.input_tokens,
+                      outputTokens: cs.output_tokens,
+                      model: cs.model,
+                    }}
                     onClick={() => {
                       if (onResumeSession) {
                         onResumeSession(cs.session_id, cs.project_path);
@@ -117,6 +156,7 @@ export function SessionSidebar({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

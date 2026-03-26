@@ -1,5 +1,8 @@
-import { GitBranch, FolderOpen } from "lucide-react";
+import { GitBranch, FolderOpen, Coins } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useTokenUsage } from "../../hooks/useTokenUsage";
+import { useAppState } from "../../state/context";
+import { formatTokens, formatCost } from "../../lib/pricing";
 import type { Session } from "../../state/types";
 
 const AGENT_LABELS: Record<string, string> = {
@@ -17,6 +20,12 @@ interface TerminalToolbarProps {
 export function TerminalToolbar({
   session,
 }: TerminalToolbarProps) {
+  const state = useAppState();
+  const usage = useTokenUsage(
+    session?.id ?? null,
+    state.projectPath,
+    session?.status === "running",
+  );
   if (!session) {
     return (
       <div className="flex items-center px-4 py-2 border-b bg-background text-sm text-muted-foreground shrink-0">
@@ -37,7 +46,14 @@ export function TerminalToolbar({
           {session.branch}
         </span>
       )}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-3">
+        {usage && (usage.inputTokens > 0 || usage.outputTokens > 0) && (
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Coins className="size-3" />
+            {formatTokens(usage.inputTokens + usage.outputTokens)} tokens
+            <span className="text-muted-foreground/60">{formatCost(usage.cost)}</span>
+          </span>
+        )}
         <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
           <FolderOpen className="size-3" />
           {session.cwd.split("/").slice(-2).join("/")}

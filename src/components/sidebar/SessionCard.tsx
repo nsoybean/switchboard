@@ -1,6 +1,7 @@
 import { Bot, Terminal, CircleDot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { formatTokens, formatCost, estimateCost } from "../../lib/pricing";
 import type { Session } from "../../state/types";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -16,14 +17,21 @@ const AGENT_ICONS: Record<string, typeof Bot> = {
   bash: Terminal,
 };
 
+interface TokenInfo {
+  inputTokens: number;
+  outputTokens: number;
+  model: string | null;
+}
+
 interface SessionCardProps {
   session: Session;
   isActive: boolean;
   isPast?: boolean;
+  tokenInfo?: TokenInfo;
   onClick: () => void;
 }
 
-export function SessionCard({ session, isActive, onClick }: SessionCardProps) {
+export function SessionCard({ session, isActive, tokenInfo, onClick }: SessionCardProps) {
   const isDone = session.status === "done" || session.status === "error";
   const AgentIcon = AGENT_ICONS[session.agent] ?? Terminal;
 
@@ -59,6 +67,13 @@ export function SessionCard({ session, isActive, onClick }: SessionCardProps) {
           <Badge variant="secondary" className="h-4 px-1 text-[10px] font-normal">
             {STATUS_LABELS[session.status] ?? session.status}
           </Badge>
+          {tokenInfo && (tokenInfo.inputTokens > 0 || tokenInfo.outputTokens > 0) && (
+            <span className="text-[10px] text-muted-foreground/70 ml-auto">
+              {formatTokens(tokenInfo.inputTokens + tokenInfo.outputTokens)}
+              {" · "}
+              {formatCost(estimateCost(tokenInfo.model, tokenInfo.inputTokens, tokenInfo.outputTokens))}
+            </span>
+          )}
         </div>
       </div>
     </button>

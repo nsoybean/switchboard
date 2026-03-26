@@ -73,14 +73,7 @@ pub fn delete_session(id: String) -> Result<(), String> {
 /// Check if first-run onboarding has been completed
 #[tauri::command]
 pub fn is_first_run() -> Result<bool, String> {
-    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
-    let config_path = home.join(".switchboard").join("config.json");
-    if !config_path.exists() {
-        return Ok(true);
-    }
-    let data = fs::read_to_string(&config_path).map_err(|e| format!("Read failed: {}", e))?;
-    let config: serde_json::Value =
-        serde_json::from_str(&data).map_err(|e| format!("Parse failed: {}", e))?;
+    let config = read_config()?;
     Ok(!config
         .get("onboarding_complete")
         .and_then(|v| v.as_bool())
@@ -90,22 +83,57 @@ pub fn is_first_run() -> Result<bool, String> {
 /// Mark onboarding as complete
 #[tauri::command]
 pub fn complete_onboarding() -> Result<(), String> {
+    let mut config = read_config()?;
+    config["onboarding_complete"] = serde_json::json!(true);
+    write_config(&config)
+}
+
+fn config_path() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or("Could not determine home directory")?;
     let dir = home.join(".switchboard");
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    let config_path = dir.join("config.json");
+    Ok(dir.join("config.json"))
+}
 
-    let mut config: serde_json::Value = if config_path.exists() {
-        let data = fs::read_to_string(&config_path).map_err(|e| format!("Read failed: {}", e))?;
-        serde_json::from_str(&data).unwrap_or(serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
+fn read_config() -> Result<serde_json::Value, String> {
+    let path = config_path()?;
+    if !path.exists() {
+        return Ok(serde_json::json!({}));
+    }
+    let data = fs::read_to_string(&path).map_err(|e| format!("Read failed: {}", e))?;
+    serde_json::from_str(&data).map_err(|e| format!("Parse failed: {}", e))
+}
 
-    config["onboarding_complete"] = serde_json::json!(true);
+fn write_config(config: &serde_json::Value) -> Result<(), String> {
+    let path = config_path()?;
     let data =
-        serde_json::to_string_pretty(&config).map_err(|e| format!("Serialize failed: {}", e))?;
-    fs::write(&config_path, data).map_err(|e| format!("Write failed: {}", e))
+        serde_json::to_string_pretty(config).map_err(|e| format!("Serialize failed: {}", e))?;
+    fs::write(&path, data).map_err(|e| format!("Write failed: {}", e))
+}
+
+/// Get the stored project path, or None if not set
+#[tauri::command]
+pub fn get_project_path() -> Result<Option<String>, String> {
+    let config = read_config()?;
+    Ok(config
+        .get("project_path")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string()))
+}
+
+/// Set and validate the project path (must be a directory with .git)
+#[tauri::command]
+pub fn set_project_path(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.is_dir() {
+        return Err(format!("'{}' is not a directory", path));
+    }
+    if !p.join(".git").exists() {
+        return Err(format!("'{}' is not a git repository", path));
+    }
+    let mut config = read_config()?;
+    config["project_path"] = serde_json::json!(path);
+    write_config(&config)
 }
 
 /// Detect which agent CLIs are available in PATH

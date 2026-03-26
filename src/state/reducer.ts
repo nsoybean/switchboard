@@ -4,6 +4,8 @@ export const initialState: AppState = {
   sessions: {},
   activeSessionId: null,
   gitPanelOpen: false,
+  projectPath: null,
+  viewMode: "focused",
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -71,6 +73,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         gitPanelOpen: !state.gitPanelOpen,
+      };
+    }
+
+    case "SET_PROJECT_PATH": {
+      return {
+        ...state,
+        projectPath: action.path,
+      };
+    }
+
+    case "SET_VIEW_MODE": {
+      return {
+        ...state,
+        viewMode: action.mode,
       };
     }
 

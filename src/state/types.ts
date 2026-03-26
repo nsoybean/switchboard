@@ -23,6 +23,8 @@ export interface AppState {
   sessions: Record<string, Session>;
   activeSessionId: string | null;
   gitPanelOpen: boolean;
+  projectPath: string | null;
+  viewMode: "focused" | "scroll";
 }
 
 export type AppAction =
@@ -31,4 +33,6 @@ export type AppAction =
   | { type: "SET_ACTIVE"; id: string | null }
   | { type: "UPDATE_STATUS"; id: string; status: SessionStatus; exitCode?: number | null }
   | { type: "SET_PTY_ID"; id: string; ptyId: number }
-  | { type: "TOGGLE_GIT_PANEL" };
+  | { type: "TOGGLE_GIT_PANEL" }
+  | { type: "SET_PROJECT_PATH"; path: string | null }
+  | { type: "SET_VIEW_MODE"; mode: "focused" | "scroll" };

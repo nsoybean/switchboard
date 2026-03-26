@@ -2,6 +2,7 @@ import { AppProvider } from "./state/context";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ThemeProvider } from "./components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "sonner";
 
 function App() {
   return (
@@ -9,6 +10,7 @@ function App() {
       <TooltipProvider>
         <AppProvider>
           <AppLayout />
+          <Toaster position="bottom-right" richColors />
         </AppProvider>
       </TooltipProvider>
     </ThemeProvider>

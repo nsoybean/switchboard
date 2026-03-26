@@ -5,17 +5,21 @@ import { Titlebar } from "./Titlebar";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { TerminalToolbar } from "../terminal/TerminalToolbar";
 import { XTermContainer } from "../terminal/XTermContainer";
+import { ScrollView } from "../terminal/ScrollView";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
+import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
 import { GitPanel } from "../git/GitPanel";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildSpawnArgs } from "../../lib/agents";
+import { worktreeCommands } from "../../lib/tauri-commands";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
-import { Plus } from "lucide-react";
+import { FolderOpen, Plus } from "lucide-react";
 import type { AgentType, Session, SessionStatus } from "../../state/types";
 
 const MAX_ALIVE_TERMINALS = 8;
@@ -24,6 +28,7 @@ export function AppLayout() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [gitPanelOpen, setGitPanelOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -65,14 +70,41 @@ export function AppLayout() {
   }, []);
 
   const handleNewSession = useCallback(
-    (config: {
+    async (config: {
       agent: AgentType;
       label: string;
       task: string;
       useWorktree: boolean;
     }) => {
+      if (!state.projectPath) return;
       const id = crypto.randomUUID();
-      const cwd = "/Users/nyangshawbin/Documents/projects/switchboard";
+      let cwd = state.projectPath;
+      let worktreePath: string | null = null;
+      let branch: string | null = null;
+
+      if (config.useWorktree) {
+        try {
+          const slug = config.label
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "") || "untitled";
+          const branchName = `sb/${slug}`;
+          const info = await worktreeCommands.create(
+            state.projectPath,
+            branchName,
+            config.label,
+          );
+          cwd = info.path;
+          worktreePath = info.path;
+          branch = info.branch;
+        } catch (err) {
+          toast.error("Failed to create worktree", {
+            description: String(err),
+          });
+          return;
+        }
+      }
+
       const { command, args } = buildSpawnArgs(
         config.agent,
         config.task || undefined,
@@ -84,8 +116,8 @@ export function AppLayout() {
         label: config.label,
         status: "running",
         ptyId: null,
-        worktreePath: null,
-        branch: null,
+        worktreePath,
+        branch,
         cwd,
         createdAt: new Date().toISOString(),
         exitCode: null,
@@ -95,7 +127,7 @@ export function AppLayout() {
       dispatch({ type: "ADD_SESSION", session });
       persistSession(session);
     },
-    [dispatch, persistSession],
+    [dispatch, persistSession, state.projectPath],
   );
 
   const handleResumeSession = useCallback(
@@ -166,8 +198,14 @@ export function AppLayout() {
         const termEl = document.querySelector(".xterm-helper-textarea");
         if (termEl instanceof HTMLElement) termEl.focus();
       },
+      onToggleViewMode: () => {
+        dispatch({
+          type: "SET_VIEW_MODE",
+          mode: state.viewMode === "focused" ? "scroll" : "focused",
+        });
+      },
     }),
-    [sortedSessionIds, state.activeSessionId, dispatch],
+    [sortedSessionIds, state.activeSessionId, state.viewMode, dispatch],
   );
   useKeyboardShortcuts(shortcutHandlers);
 
@@ -180,6 +218,19 @@ export function AppLayout() {
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
         branch={activeSession?.branch ?? undefined}
+        projectName={
+          state.projectPath
+            ? state.projectPath.split("/").pop() ?? "switchboard"
+            : "switchboard"
+        }
+        onProjectClick={() => setProjectPickerOpen(true)}
+        viewMode={state.viewMode}
+        onToggleViewMode={() =>
+          dispatch({
+            type: "SET_VIEW_MODE",
+            mode: state.viewMode === "focused" ? "scroll" : "focused",
+          })
+        }
       />
 
       {/* Main content below titlebar */}
@@ -207,7 +258,24 @@ export function AppLayout() {
             />
 
             <div className="flex-1 relative min-h-0">
-              {sessions.length === 0 ? (
+              {!state.projectPath ? (
+                <div className="h-full flex items-center justify-center bg-background">
+                  <div className="text-center max-w-sm">
+                    <h2 className="text-lg font-semibold mb-3">
+                      Welcome to Switchboard
+                    </h2>
+                    <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+                      Manage multiple AI coding agents in parallel.
+                      <br />
+                      Open a project to get started.
+                    </p>
+                    <Button onClick={() => setProjectPickerOpen(true)}>
+                      <FolderOpen data-icon="inline-start" />
+                      Open Project
+                    </Button>
+                  </div>
+                </div>
+              ) : sessions.length === 0 ? (
                 <div className="h-full flex items-center justify-center bg-background">
                   <div className="text-center max-w-sm">
                     <h2 className="text-lg font-semibold mb-3">
@@ -224,6 +292,15 @@ export function AppLayout() {
                     </Button>
                   </div>
                 </div>
+              ) : state.viewMode === "scroll" ? (
+                <ScrollView
+                  sessions={sessions.filter((s) => aliveSessionIds.has(s.id))}
+                  onSessionClick={(id) => {
+                    dispatch({ type: "SET_ACTIVE", id });
+                    dispatch({ type: "SET_VIEW_MODE", mode: "focused" });
+                  }}
+                  onSessionExit={handleSessionExit}
+                />
               ) : (
                 sessions.map((session) => {
                   if (!aliveSessionIds.has(session.id)) return null;
@@ -249,16 +326,13 @@ export function AppLayout() {
           </div>
         </ResizablePanel>
 
-        {/* Git Panel */}
-        {gitPanelOpen && sessions.length > 0 && (
+        {/* Git Panel (hidden in scroll view) */}
+        {gitPanelOpen && sessions.length > 0 && state.viewMode === "focused" && (
           <>
             <ResizableHandle />
             <ResizablePanel defaultSize="25%" minSize="15%" maxSize="40%">
               <GitPanel
-                cwd={
-                  activeSession?.cwd ??
-                  "/Users/nyangshawbin/Documents/projects/switchboard"
-                }
+                cwd={activeSession?.cwd ?? state.projectPath ?? ""}
                 visible
               />
             </ResizablePanel>
@@ -271,6 +345,15 @@ export function AppLayout() {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onSubmit={handleNewSession}
+      />
+
+      {/* Project Picker Dialog */}
+      <ProjectPickerDialog
+        open={projectPickerOpen}
+        onClose={() => setProjectPickerOpen(false)}
+        onSelect={(path) => {
+          dispatch({ type: "SET_PROJECT_PATH", path });
+        }}
       />
     </div>
   );

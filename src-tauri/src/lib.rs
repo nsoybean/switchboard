@@ -6,6 +6,8 @@ use commands::pty::PtyState;
 pub fn run() {
     tauri::Builder::default()
         .manage(PtyState::new())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -41,6 +43,9 @@ pub fn run() {
             commands::session::is_first_run,
             commands::session::complete_onboarding,
             commands::session::detect_agents,
+            commands::session::get_project_path,
+            commands::session::set_project_path,
+            commands::files::list_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
