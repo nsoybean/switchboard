@@ -3,8 +3,55 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { usePty } from "../../hooks/usePty";
+import { useTheme } from "@/components/theme-provider";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
+
+const DARK_THEME = {
+  background: "#1c1917",
+  foreground: "#e7e5e4",
+  cursor: "#a8a29e",
+  selectionBackground: "#44403c",
+  black: "#1c1917",
+  red: "#ef4444",
+  green: "#22c55e",
+  yellow: "#eab308",
+  blue: "#3b82f6",
+  magenta: "#a855f7",
+  cyan: "#06b6d4",
+  white: "#e7e5e4",
+  brightBlack: "#78716c",
+  brightRed: "#f87171",
+  brightGreen: "#4ade80",
+  brightYellow: "#facc15",
+  brightBlue: "#60a5fa",
+  brightMagenta: "#c084fc",
+  brightCyan: "#22d3ee",
+  brightWhite: "#fafaf9",
+};
+
+const LIGHT_THEME = {
+  background: "#fafaf9",
+  foreground: "#1c1917",
+  cursor: "#78716c",
+  selectionBackground: "#e7e5e4",
+  black: "#1c1917",
+  red: "#dc2626",
+  green: "#16a34a",
+  yellow: "#ca8a04",
+  blue: "#2563eb",
+  magenta: "#9333ea",
+  cyan: "#0891b2",
+  white: "#fafaf9",
+  brightBlack: "#a8a29e",
+  brightRed: "#ef4444",
+  brightGreen: "#22c55e",
+  brightYellow: "#eab308",
+  brightBlue: "#3b82f6",
+  brightMagenta: "#a855f7",
+  brightCyan: "#06b6d4",
+  brightWhite: "#ffffff",
+};
 
 interface XTermContainerProps {
   command?: string;
@@ -25,6 +72,12 @@ export function XTermContainer({
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   const { spawn, resize } = usePty(terminal, onExit);
   const spawnedRef = useRef(false);
+  const { theme } = useTheme();
+
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   // Initialize xterm.js
   useEffect(() => {
@@ -36,28 +89,7 @@ export function XTermContainer({
       lineHeight: 1.4,
       cursorBlink: true,
       cursorStyle: "block",
-      theme: {
-        background: "#0d0d1a",
-        foreground: "#e0e0e8",
-        cursor: "#4a4aff",
-        selectionBackground: "#2a2a50",
-        black: "#1a1a2e",
-        red: "#ff6b6b",
-        green: "#4ade80",
-        yellow: "#fbbf24",
-        blue: "#4a4aff",
-        magenta: "#c084fc",
-        cyan: "#22d3ee",
-        white: "#e0e0e8",
-        brightBlack: "#555",
-        brightRed: "#ff8a8a",
-        brightGreen: "#6ee7a0",
-        brightYellow: "#fcd34d",
-        brightBlue: "#6b6bff",
-        brightMagenta: "#d8b4fe",
-        brightCyan: "#67e8f9",
-        brightWhite: "#f0f0f8",
-      },
+      theme: isDark ? DARK_THEME : LIGHT_THEME,
     });
 
     const fitAddon = new FitAddon();
@@ -65,7 +97,6 @@ export function XTermContainer({
 
     term.open(containerRef.current);
 
-    // Try WebGL addon, fall back to canvas
     try {
       const webglAddon = new WebglAddon();
       webglAddon.onContextLoss(() => {
@@ -73,7 +104,7 @@ export function XTermContainer({
       });
       term.loadAddon(webglAddon);
     } catch {
-      // Canvas renderer fallback — no action needed
+      // Canvas renderer fallback
     }
 
     fitAddon.fit();
@@ -81,11 +112,9 @@ export function XTermContainer({
     fitAddonRef.current = fitAddon;
     setTerminal(term);
 
-    // Handle window resize
-    const handleResize = () => {
+    const observer = new ResizeObserver(() => {
       fitAddon.fit();
-    };
-    const observer = new ResizeObserver(handleResize);
+    });
     observer.observe(containerRef.current);
 
     return () => {
@@ -95,6 +124,13 @@ export function XTermContainer({
       fitAddonRef.current = null;
     };
   }, []);
+
+  // Update theme dynamically
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.options.theme = isDark ? DARK_THEME : LIGHT_THEME;
+    }
+  }, [isDark]);
 
   // Spawn PTY when terminal is ready
   useEffect(() => {
@@ -129,11 +165,7 @@ export function XTermContainer({
   return (
     <div
       ref={containerRef}
-      style={{
-        width: "100%",
-        height: "100%",
-        background: "var(--sb-bg-terminal)",
-      }}
+      className="size-full bg-background"
     />
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppState, useAppDispatch } from "../../state/context";
+import { Titlebar } from "./Titlebar";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { TerminalToolbar } from "../terminal/TerminalToolbar";
 import { XTermContainer } from "../terminal/XTermContainer";
@@ -8,6 +9,8 @@ import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { GitPanel } from "../git/GitPanel";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildSpawnArgs } from "../../lib/agents";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import type { AgentType, Session, SessionStatus } from "../../state/types";
 
 const MAX_ALIVE_TERMINALS = 8;
@@ -17,6 +20,7 @@ export function AppLayout() {
   const dispatch = useAppDispatch();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [gitPanelOpen, setGitPanelOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const sessions = Object.values(state.sessions);
   const sortedSessionIds = useMemo(
@@ -35,7 +39,6 @@ export function AppLayout() {
 
   const aliveSessionIds = new Set(sortedSessionIds.slice(0, MAX_ALIVE_TERMINALS));
 
-  // Persist session to ~/.switchboard/sessions.json
   const persistSession = useCallback(async (session: Session) => {
     try {
       await invoke("save_session", {
@@ -64,7 +67,7 @@ export function AppLayout() {
       useWorktree: boolean;
     }) => {
       const id = crypto.randomUUID();
-      const cwd = "/Users/nyangshawbin/Documents/projects/switchboard"; // TODO: configurable
+      const cwd = "/Users/nyangshawbin/Documents/projects/switchboard";
       const { command, args } = buildSpawnArgs(
         config.agent,
         config.task || undefined,
@@ -131,7 +134,6 @@ export function AppLayout() {
     [dispatch],
   );
 
-  // Keyboard shortcuts
   const shortcutHandlers = useMemo(
     () => ({
       onSwitchSession: (index: number) => {
@@ -155,7 +157,6 @@ export function AppLayout() {
       onNewSession: () => setDialogOpen(true),
       onToggleGitPanel: () => setGitPanelOpen((prev) => !prev),
       onFocusTerminal: () => {
-        // Focus the active terminal's xterm element
         const termEl = document.querySelector(".xterm-helper-textarea");
         if (termEl instanceof HTMLElement) termEl.focus();
       },
@@ -165,104 +166,87 @@ export function AppLayout() {
   useKeyboardShortcuts(shortcutHandlers);
 
   return (
-    <div className="flex h-full">
-      {/* Sidebar */}
-      <SessionSidebar
-        onNewSession={() => setDialogOpen(true)}
-        onResumeSession={handleResumeSession}
+    <div className="flex flex-col h-full bg-background">
+      {/* Custom titlebar */}
+      <Titlebar
+        sidebarOpen={sidebarOpen}
+        gitPanelOpen={gitPanelOpen}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
+        branch={activeSession?.branch ?? undefined}
       />
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col" style={{ minWidth: 0 }}>
-        {/* Toolbar */}
-        <TerminalToolbar
-          session={activeSession}
-          gitPanelOpen={gitPanelOpen}
-          onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
-        />
+      {/* Main content below titlebar */}
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar */}
+        {sidebarOpen && (
+          <SessionSidebar
+            onNewSession={() => setDialogOpen(true)}
+            onResumeSession={handleResumeSession}
+          />
+        )}
 
-        {/* Terminal area */}
-        <div className="flex-1 relative" style={{ minHeight: 0 }}>
-          {sessions.length === 0 ? (
-            <div
-              className="h-full flex items-center justify-center"
-              style={{ background: "var(--sb-bg-terminal)" }}
-            >
-              <div className="text-center" style={{ maxWidth: 400 }}>
-                <h2
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 600,
-                    color: "var(--sb-text-primary)",
-                    marginBottom: 12,
-                  }}
-                >
-                  Welcome to Switchboard
-                </h2>
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "var(--sb-text-secondary)",
-                    marginBottom: 24,
-                    lineHeight: 1.6,
-                  }}
-                >
-                  Manage multiple AI coding agents in parallel.
-                  <br />
-                  Each session gets its own interactive terminal.
-                </p>
-                <button
-                  onClick={() => setDialogOpen(true)}
-                  style={{
-                    background: "var(--sb-accent)",
-                    color: "white",
-                    border: "none",
-                    borderRadius: 6,
-                    padding: "10px 24px",
-                    fontSize: 13,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  Start First Session
-                </button>
-              </div>
-            </div>
-          ) : (
-            sessions.map((session) => {
-              if (!aliveSessionIds.has(session.id)) return null;
-              const isActive = session.id === state.activeSessionId;
+        {/* Main area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Toolbar */}
+          <TerminalToolbar
+            session={activeSession}
+            gitPanelOpen={gitPanelOpen}
+            onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
+          />
 
-              return (
-                <div
-                  key={session.id}
-                  className="absolute inset-0"
-                  style={{
-                    display: isActive ? "block" : "none",
-                    background: "var(--sb-bg-terminal)",
-                  }}
-                >
-                  <XTermContainer
-                    command={session.command}
-                    args={session.args}
-                    cwd={session.cwd}
-                    onExit={handleSessionExit(session.id)}
-                  />
+          {/* Terminal area */}
+          <div className="flex-1 relative min-h-0">
+            {sessions.length === 0 ? (
+              <div className="h-full flex items-center justify-center bg-background">
+                <div className="text-center max-w-sm">
+                  <h2 className="text-lg font-semibold mb-3">
+                    Welcome to Switchboard
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+                    Manage multiple AI coding agents in parallel.
+                    <br />
+                    Each session gets its own interactive terminal.
+                  </p>
+                  <Button onClick={() => setDialogOpen(true)}>
+                    <Plus data-icon="inline-start" />
+                    Start First Session
+                  </Button>
                 </div>
-              );
-            })
-          )}
-        </div>
-      </div>
+              </div>
+            ) : (
+              sessions.map((session) => {
+                if (!aliveSessionIds.has(session.id)) return null;
+                const isActive = session.id === state.activeSessionId;
 
-      {/* Git Panel */}
-      <GitPanel
-        cwd={
-          activeSession?.cwd ??
-          "/Users/nyangshawbin/Documents/projects/switchboard"
-        }
-        visible={gitPanelOpen && sessions.length > 0}
-      />
+                return (
+                  <div
+                    key={session.id}
+                    className="absolute inset-0 bg-background"
+                    style={{ display: isActive ? "block" : "none" }}
+                  >
+                    <XTermContainer
+                      command={session.command}
+                      args={session.args}
+                      cwd={session.cwd}
+                      onExit={handleSessionExit(session.id)}
+                    />
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Git Panel */}
+        <GitPanel
+          cwd={
+            activeSession?.cwd ??
+            "/Users/nyangshawbin/Documents/projects/switchboard"
+          }
+          visible={gitPanelOpen && sessions.length > 0}
+        />
+      </div>
 
       {/* New Session Dialog */}
       <NewSessionDialog

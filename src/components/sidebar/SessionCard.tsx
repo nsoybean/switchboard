@@ -1,16 +1,19 @@
+import { Bot, Terminal, CircleDot } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import type { Session } from "../../state/types";
 
-const STATUS_COLORS: Record<string, string> = {
-  running: "var(--sb-status-running)",
-  "needs-input": "var(--sb-status-waiting)",
-  done: "var(--sb-status-done)",
-  error: "var(--sb-status-error)",
+const STATUS_LABELS: Record<string, string> = {
+  running: "Running",
+  "needs-input": "Needs Input",
+  done: "Done",
+  error: "Error",
 };
 
-const AGENT_LABELS: Record<string, string> = {
-  "claude-code": "claude",
-  codex: "codex",
-  bash: "bash",
+const AGENT_ICONS: Record<string, typeof Bot> = {
+  "claude-code": Bot,
+  codex: Bot,
+  bash: Terminal,
 };
 
 interface SessionCardProps {
@@ -20,79 +23,44 @@ interface SessionCardProps {
   onClick: () => void;
 }
 
-export function SessionCard({ session, isActive, isPast: _isPast, onClick }: SessionCardProps) {
-  const statusColor = STATUS_COLORS[session.status] ?? "var(--sb-text-tertiary)";
+export function SessionCard({ session, isActive, onClick }: SessionCardProps) {
   const isDone = session.status === "done" || session.status === "error";
+  const AgentIcon = AGENT_ICONS[session.agent] ?? Terminal;
 
   return (
-    <div
+    <button
       onClick={onClick}
-      style={{
-        padding: "10px 12px",
-        borderRadius: 8,
-        marginBottom: 4,
-        cursor: "pointer",
-        background: isActive ? "var(--sb-bg-active)" : "transparent",
-        border: isActive ? "1px solid var(--sb-accent)" : "1px solid transparent",
-        ...(session.status === "needs-input" && !isActive
-          ? { borderLeft: "3px solid var(--sb-status-error)" }
-          : {}),
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) e.currentTarget.style.background = "var(--sb-bg-hover)";
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) e.currentTarget.style.background = "transparent";
-      }}
-    >
-      {/* Session name */}
-      <div
-        style={{
-          fontWeight: 600,
-          fontSize: 13,
-          color: isDone ? "var(--sb-text-secondary)" : "var(--sb-text-primary)",
-        }}
-      >
-        {session.label}
-      </div>
-
-      {/* Branch */}
-      {session.branch && (
-        <div style={{ fontSize: 10, color: "var(--sb-accent)", marginTop: 2 }}>
-          {session.branch}
-        </div>
+      className={cn(
+        "flex w-full items-start gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
+        isActive
+          ? "bg-accent text-accent-foreground"
+          : "hover:bg-accent/50 text-foreground",
+        isDone && !isActive && "opacity-60",
       )}
-
-      {/* Agent + status */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          fontSize: 11,
-          color: "var(--sb-text-secondary)",
-          marginTop: 4,
-        }}
-      >
-        <span style={{ color: isDone ? "var(--sb-text-tertiary)" : "var(--sb-accent)" }}>
-          {AGENT_LABELS[session.agent] ?? session.agent}
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: statusColor,
-              display: "inline-block",
-              ...(session.status === "needs-input"
-                ? { animation: "pulse 1.5s infinite" }
-                : {}),
-            }}
+    >
+      <AgentIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium text-[13px]">{session.label}</div>
+        {session.branch && (
+          <div className="truncate text-[11px] text-muted-foreground mt-0.5">
+            {session.branch}
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 mt-1">
+          <CircleDot
+            className={cn(
+              "size-2.5",
+              session.status === "running" && "text-[var(--sb-status-running)]",
+              session.status === "needs-input" && "text-[var(--sb-status-warning)] animate-pulse",
+              session.status === "done" && "text-[var(--sb-status-done)]",
+              session.status === "error" && "text-destructive",
+            )}
           />
-          {session.status === "needs-input" ? "needs input" : session.status}
-        </span>
+          <Badge variant="secondary" className="h-4 px-1 text-[10px] font-normal">
+            {STATUS_LABELS[session.status] ?? session.status}
+          </Badge>
+        </div>
       </div>
-    </div>
+    </button>
   );
 }

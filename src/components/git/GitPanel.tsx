@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
+import { Plus, Minus, Undo2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { gitCommands, type ChangedFile, type DiffStats } from "../../lib/tauri-commands";
 import { GitToolbar } from "./GitToolbar";
 import { DiffView } from "./DiffView";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface GitPanelProps {
   cwd: string;
@@ -13,9 +24,11 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [stats, setStats] = useState<DiffStats>({ additions: 0, deletions: 0, files_changed: 0 });
   const [diff, setDiff] = useState("");
-  const [showStaged, setShowStaged] = useState(false);
+  const [activeTab, setActiveTab] = useState("unstaged");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const showStaged = activeTab === "staged";
 
   const refresh = useCallback(async () => {
     try {
@@ -35,7 +48,6 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
     }
   }, [cwd, showStaged]);
 
-  // Auto-refresh every 5 seconds
   useEffect(() => {
     if (!visible) return;
     refresh();
@@ -88,17 +100,11 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
     ? files.filter((f) => f.staged)
     : files.filter((f) => !f.staged);
 
+  const unstagedCount = files.filter((f) => !f.staged).length;
+  const stagedCount = files.filter((f) => f.staged).length;
+
   return (
-    <div
-      className="flex flex-col h-full"
-      style={{
-        width: 280,
-        minWidth: 280,
-        background: "var(--sb-bg-surface)",
-        borderLeft: "1px solid var(--sb-border)",
-      }}
-    >
-      {/* Toolbar */}
+    <div className="flex flex-col h-full w-[280px] min-w-[280px] border-l bg-card">
       <GitToolbar
         branch={branch}
         stats={stats}
@@ -107,207 +113,127 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
         onRefresh={refresh}
       />
 
-      {/* Staged/Unstaged toggle */}
-      <div
-        style={{
-          display: "flex",
-          borderBottom: "1px solid var(--sb-border)",
-        }}
-      >
-        <button
-          onClick={() => setShowStaged(false)}
-          style={{
-            flex: 1,
-            padding: "6px 0",
-            fontSize: 11,
-            border: "none",
-            borderBottom: showStaged ? "none" : "2px solid var(--sb-accent)",
-            background: "transparent",
-            color: showStaged ? "var(--sb-text-tertiary)" : "var(--sb-text-primary)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Unstaged ({files.filter((f) => !f.staged).length})
-        </button>
-        <button
-          onClick={() => setShowStaged(true)}
-          style={{
-            flex: 1,
-            padding: "6px 0",
-            fontSize: 11,
-            border: "none",
-            borderBottom: showStaged ? "2px solid var(--sb-accent)" : "none",
-            background: "transparent",
-            color: showStaged ? "var(--sb-text-primary)" : "var(--sb-text-tertiary)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          Staged ({files.filter((f) => f.staged).length})
-        </button>
-      </div>
+      {/* Staged/Unstaged tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="w-full rounded-none border-b h-8">
+          <TabsTrigger value="unstaged" className="flex-1 text-xs gap-1.5">
+            Unstaged
+            <Badge variant="secondary" className="h-4 px-1 text-[10px]">{unstagedCount}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="staged" className="flex-1 text-xs gap-1.5">
+            Staged
+            <Badge variant="secondary" className="h-4 px-1 text-[10px]">{stagedCount}</Badge>
+          </TabsTrigger>
+        </TabsList>
 
-      {/* File list + diff */}
-      <div className="flex-1 overflow-y-auto" style={{ fontSize: 12 }}>
-        {error && (
-          <div style={{ padding: 12, color: "var(--sb-status-error)", fontSize: 11 }}>
-            {error}
-          </div>
-        )}
-        {loading && filteredFiles.length === 0 && (
-          <div style={{ padding: 12, color: "var(--sb-text-tertiary)", fontSize: 11 }}>
-            Loading...
-          </div>
-        )}
-        {!loading && filteredFiles.length === 0 && !error && (
-          <div style={{ padding: 12, color: "var(--sb-text-tertiary)", fontSize: 11 }}>
-            {showStaged ? "No staged changes" : "No unstaged changes"}
-          </div>
-        )}
-
-        {/* Changed files */}
-        {filteredFiles.map((file) => (
-          <div
-            key={`${file.path}-${file.staged}`}
-            style={{
-              padding: "6px 12px",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              borderBottom: "1px solid var(--sb-border)",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 10,
-                padding: "1px 4px",
-                borderRadius: 3,
-                background:
-                  file.status === "A" || file.status === "??"
-                    ? "#1a3320"
-                    : file.status === "D"
-                      ? "#331a1a"
-                      : "#332b1a",
-                color:
-                  file.status === "A" || file.status === "??"
-                    ? "var(--sb-diff-add)"
-                    : file.status === "D"
-                      ? "var(--sb-diff-del)"
-                      : "var(--sb-status-waiting)",
-              }}
-            >
-              {file.status}
-            </span>
-            <span
-              className="flex-1"
-              style={{
-                color: "var(--sb-text-secondary)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {file.path}
-            </span>
-            {/* Action buttons */}
-            {showStaged ? (
-              <button
-                onClick={() => handleUnstageFile(file.path)}
-                style={{
-                  fontSize: 10,
-                  color: "var(--sb-text-tertiary)",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-                title="Unstage"
-              >
-                −
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => handleStageFile(file.path)}
-                  style={{
-                    fontSize: 10,
-                    color: "var(--sb-diff-add)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                  title="Stage"
-                >
-                  +
-                </button>
-                {file.status !== "??" && (
-                  <button
-                    onClick={() => handleRevertFile(file.path)}
-                    style={{
-                      fontSize: 10,
-                      color: "var(--sb-status-error)",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
-                    title="Revert"
-                  >
-                    ↩
-                  </button>
-                )}
-              </>
+        <TabsContent value={activeTab} className="mt-0 flex-1 min-h-0">
+          <ScrollArea className="h-full">
+            {error && (
+              <div className="p-3 text-xs text-destructive">{error}</div>
             )}
-          </div>
-        ))}
+            {loading && filteredFiles.length === 0 && (
+              <div className="p-3 text-xs text-muted-foreground">Loading...</div>
+            )}
+            {!loading && filteredFiles.length === 0 && !error && (
+              <div className="p-3 text-xs text-muted-foreground">
+                {showStaged ? "No staged changes" : "No unstaged changes"}
+              </div>
+            )}
 
-        {/* Diff preview */}
-        {diff && <DiffView diff={diff} />}
-      </div>
+            {/* File list */}
+            {filteredFiles.map((file) => (
+              <div
+                key={`${file.path}-${file.staged}`}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs border-b hover:bg-accent/50"
+              >
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "h-4 px-1 text-[10px] font-mono",
+                    (file.status === "A" || file.status === "??") && "text-[var(--sb-diff-add-fg)]",
+                    file.status === "D" && "text-[var(--sb-diff-del-fg)]",
+                    file.status === "M" && "text-[var(--sb-status-warning)]",
+                  )}
+                >
+                  {file.status}
+                </Badge>
+                <span className="flex-1 truncate text-muted-foreground">
+                  {file.path}
+                </span>
+                {showStaged ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-5"
+                        onClick={() => handleUnstageFile(file.path)}
+                      >
+                        <Minus />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Unstage</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-5"
+                          onClick={() => handleStageFile(file.path)}
+                        >
+                          <Plus />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Stage</TooltipContent>
+                    </Tooltip>
+                    {file.status !== "??" && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-5"
+                            onClick={() => handleRevertFile(file.path)}
+                          >
+                            <Undo2 />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Revert</TooltipContent>
+                      </Tooltip>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+
+            {/* Diff */}
+            {diff && <DiffView diff={diff} />}
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
 
       {/* Bottom action bar */}
-      <div
-        style={{
-          display: "flex",
-          borderTop: "1px solid var(--sb-border)",
-          padding: 8,
-          gap: 8,
-        }}
-      >
-        <button
+      <div className="flex gap-2 p-2 border-t">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 text-xs"
           onClick={handleRevertAll}
-          style={{
-            flex: 1,
-            padding: "6px 0",
-            fontSize: 11,
-            background: "transparent",
-            border: "1px solid var(--sb-border)",
-            borderRadius: 4,
-            color: "var(--sb-text-secondary)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
         >
-          ↩ Revert all
-        </button>
-        <button
+          <Undo2 data-icon="inline-start" />
+          Revert all
+        </Button>
+        <Button
+          size="sm"
+          className="flex-1 text-xs"
           onClick={handleStageAll}
-          style={{
-            flex: 1,
-            padding: "6px 0",
-            fontSize: 11,
-            background: "var(--sb-accent)",
-            border: "none",
-            borderRadius: 4,
-            color: "white",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
         >
-          + Stage all
-        </button>
+          <Plus data-icon="inline-start" />
+          Stage all
+        </Button>
       </div>
     </div>
   );

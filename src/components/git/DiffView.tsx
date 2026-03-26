@@ -1,60 +1,37 @@
+import { cn } from "@/lib/utils";
+
 interface DiffViewProps {
   diff: string;
 }
 
-/**
- * Renders a unified git diff with syntax coloring.
- * Green background for additions, red for deletions.
- */
 export function DiffView({ diff }: DiffViewProps) {
   if (!diff.trim()) {
     return (
-      <div style={{ padding: 12, color: "var(--sb-text-tertiary)", fontSize: 11 }}>
-        No diff to show
-      </div>
+      <div className="p-3 text-xs text-muted-foreground">No diff to show</div>
     );
   }
 
   const lines = diff.split("\n");
 
   return (
-    <div
-      style={{
-        fontFamily: '"JetBrains Mono", monospace',
-        fontSize: 11,
-        lineHeight: 1.5,
-        borderTop: "1px solid var(--sb-border)",
-      }}
-    >
+    <div className="font-mono text-[11px] leading-relaxed border-t">
       {lines.map((line, i) => {
-        let bg = "transparent";
-        let color = "var(--sb-text-secondary)";
-
-        if (line.startsWith("+++") || line.startsWith("---")) {
-          color = "var(--sb-text-primary)";
-        } else if (line.startsWith("@@")) {
-          bg = "rgba(74, 74, 255, 0.1)";
-          color = "var(--sb-accent)";
-        } else if (line.startsWith("+")) {
-          bg = "rgba(74, 222, 128, 0.1)";
-          color = "var(--sb-diff-add)";
-        } else if (line.startsWith("-")) {
-          bg = "rgba(255, 107, 107, 0.1)";
-          color = "var(--sb-diff-del)";
-        } else if (line.startsWith("diff ")) {
-          color = "var(--sb-text-primary)";
-        }
+        const isAdd = line.startsWith("+") && !line.startsWith("+++");
+        const isDel = line.startsWith("-") && !line.startsWith("---");
+        const isHunk = line.startsWith("@@");
+        const isHeader = line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff ");
 
         return (
           <div
             key={i}
-            style={{
-              padding: "0 12px",
-              background: bg,
-              color,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-all",
-            }}
+            className={cn(
+              "px-3 whitespace-pre-wrap break-all",
+              isAdd && "bg-[var(--sb-diff-add-bg)] text-[var(--sb-diff-add-fg)]",
+              isDel && "bg-[var(--sb-diff-del-bg)] text-[var(--sb-diff-del-fg)]",
+              isHunk && "bg-accent/30 text-primary",
+              isHeader && "text-foreground font-medium",
+              !isAdd && !isDel && !isHunk && !isHeader && "text-muted-foreground",
+            )}
           >
             {line || " "}
           </div>

@@ -4,11 +4,13 @@ Open-source multi-agent orchestrator for AI coding agents (Claude Code, Codex).
 
 ## Tech Stack
 - **Backend:** Rust (Tauri v2) — `src-tauri/`
-- **Frontend:** React + TypeScript + Tailwind CSS — `src/`
+- **Frontend:** React + TypeScript + Tailwind CSS v4 + shadcn/ui — `src/`
+- **UI Components:** shadcn/ui (radix-mira style, stone base, lucide icons)
 - **Terminal:** xterm.js v6 with WebGL addon
 - **PTY:** portable-pty (custom Tauri commands, not the plugin)
 - **Git:** All operations via git CLI subprocess
 - **State:** React Context + useReducer
+- **Window:** Custom Tauri titlebar (decorations: false, titleBarStyle: overlay)
 
 ## Development
 ```bash
@@ -25,10 +27,13 @@ npx tsc --noEmit       # TypeScript check
 - Git panel: all operations via git CLI subprocess in the session's worktree
 
 ## Design System
-- Font: JetBrains Mono
-- Spacing: 4px base unit
-- Colors: CSS variables prefixed with `--sb-` (see src/styles/globals.css)
-- Aesthetic: terminal-native, dark, dense, minimal chrome
+- Fonts: Inter (UI), JetBrains Mono (terminal/code)
+- Colors: shadcn oklch CSS variables (light + dark mode) in `src/styles/globals.css`
+- Theme: radix-mira style, stone base, preset `bKZTOdKa` from tweakcn.com
+- Switchboard-specific tokens: `--sb-status-*`, `--sb-diff-*` for status/diff colors
+- Icons: lucide-react
+- Use semantic Tailwind classes (`bg-background`, `text-muted-foreground`), not raw colors
+- Aesthetic: clean, minimal, IDE-like with light and dark mode
 
 ## Testing
 ```bash
