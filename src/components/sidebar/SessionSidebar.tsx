@@ -34,7 +34,7 @@ export function SessionSidebar({
   );
 
   return (
-    <div className="flex flex-col h-full bg-card">
+    <div className="flex flex-col h-full bg-card overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h1 className="text-sm font-semibold tracking-wide">SWITCHBOARD</h1>

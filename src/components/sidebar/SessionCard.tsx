@@ -31,7 +31,7 @@ export function SessionCard({ session, isActive, onClick }: SessionCardProps) {
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-start gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
+        "flex w-full min-w-0 items-start gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors overflow-hidden",
         isActive
           ? "bg-accent text-accent-foreground"
           : "hover:bg-accent/50 text-foreground",
