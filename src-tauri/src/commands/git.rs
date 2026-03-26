@@ -188,7 +188,7 @@ pub fn git_create_branch(cwd: String, name: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Create a PR using gh CLI
+/// Build a GitHub "new PR" URL from the current branch and remote
 #[tauri::command]
 pub fn git_create_pr(
     cwd: String,
@@ -196,16 +196,76 @@ pub fn git_create_pr(
     body: String,
     base: String,
 ) -> Result<String, String> {
-    let output = Command::new("gh")
-        .args(["pr", "create", "--title", &title, "--body", &body, "--base", &base])
+    // Get current branch
+    let branch = run_git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])?
+        .trim()
+        .to_string();
+
+    // Push the branch first (set upstream)
+    let push_result = Command::new("git")
+        .args(["push", "-u", "origin", &branch])
         .current_dir(&cwd)
         .output()
-        .map_err(|e| format!("Failed to run gh: {}", e))?;
+        .map_err(|e| format!("Failed to push: {}", e))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("gh pr create failed: {}", stderr.trim()));
+    if !push_result.status.success() {
+        let stderr = String::from_utf8_lossy(&push_result.stderr);
+        return Err(format!("Push failed: {}", stderr.trim()));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    // Get the remote URL and parse owner/repo
+    let remote_url = run_git(&cwd, &["remote", "get-url", "origin"])?
+        .trim()
+        .to_string();
+
+    let (owner, repo) = parse_github_remote(&remote_url)
+        .ok_or_else(|| format!("Could not parse GitHub remote from: {}", remote_url))?;
+
+    // Build the GitHub compare URL with query params
+    let encoded_title = urlencode(&title);
+    let encoded_body = urlencode(&body);
+    let url = format!(
+        "https://github.com/{}/{}/compare/{}...{}?expand=1&title={}&body={}",
+        owner, repo, base, branch, encoded_title, encoded_body
+    );
+
+    Ok(url)
+}
+
+/// Parse a GitHub remote URL (SSH or HTTPS) into (owner, repo)
+fn parse_github_remote(url: &str) -> Option<(String, String)> {
+    let url = url.trim();
+    // SSH: git@github.com:owner/repo.git
+    if let Some(rest) = url.strip_prefix("git@github.com:") {
+        let rest = rest.strip_suffix(".git").unwrap_or(rest);
+        let parts: Vec<&str> = rest.splitn(2, '/').collect();
+        if parts.len() == 2 {
+            return Some((parts[0].to_string(), parts[1].to_string()));
+        }
+    }
+    // HTTPS: https://github.com/owner/repo.git
+    if url.contains("github.com/") {
+        let after = url.split("github.com/").nth(1)?;
+        let after = after.strip_suffix(".git").unwrap_or(after);
+        let parts: Vec<&str> = after.splitn(2, '/').collect();
+        if parts.len() == 2 {
+            return Some((parts[0].to_string(), parts[1].to_string()));
+        }
+    }
+    None
+}
+
+/// Simple percent-encoding for URL query params
+fn urlencode(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() * 2);
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(b as char);
+            }
+            b' ' => result.push_str("%20"),
+            _ => result.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    result
 }

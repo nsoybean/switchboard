@@ -45,6 +45,25 @@ export const gitCommands = {
     invoke<string>("git_create_pr", { cwd, title, body, base }),
 };
 
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number | null;
+}
+
+export const fileCommands = {
+  listDirectory: (path: string) =>
+    invoke<FileEntry[]>("list_directory", { path }),
+  readFile: (path: string) =>
+    invoke<string>("read_file_contents", { path }),
+};
+
+export const projectCommands = {
+  getPath: () => invoke<string | null>("get_project_path"),
+  setPath: (path: string) => invoke<void>("set_project_path", { path }),
+};
+
 export const worktreeCommands = {
   create: (repoPath: string, branchName: string, label: string) =>
     invoke<WorktreeInfo>("create_worktree", { repoPath, branchName, label }),

@@ -111,20 +111,27 @@ export function NewSessionDialog({
           )}
 
           {/* Worktree toggle */}
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="worktree"
-              checked={useWorktree}
-              onCheckedChange={(checked) =>
-                setUseWorktree(checked === true)
-              }
-            />
-            <label
-              htmlFor="worktree"
-              className="text-sm text-muted-foreground cursor-pointer"
-            >
-              Create isolated worktree for this session
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="worktree"
+                checked={useWorktree}
+                onCheckedChange={(checked) =>
+                  setUseWorktree(checked === true)
+                }
+              />
+              <label
+                htmlFor="worktree"
+                className="text-sm text-muted-foreground cursor-pointer"
+              >
+                Create isolated worktree for this session
+              </label>
+            </div>
+            {useWorktree && (
+              <p className="text-[11px] text-muted-foreground/70 pl-6">
+                Creates a separate copy of the repo on a new branch so this agent's changes don't interfere with others.
+              </p>
+            )}
           </div>
 
           {/* Actions */}

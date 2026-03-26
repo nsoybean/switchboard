@@ -125,6 +125,7 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
       <GitToolbar
         branch={branch}
         stats={stats}
+        cwd={cwd}
         onCommit={handleCommit}
         onPush={handlePush}
         onRefresh={refresh}

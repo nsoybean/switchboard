@@ -1,10 +1,12 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useReducer,
   type Dispatch,
   type ReactNode,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { appReducer, initialState } from "./reducer";
 import type { AppState, AppAction } from "./types";
 
@@ -13,6 +15,16 @@ const AppDispatchContext = createContext<Dispatch<AppAction>>(() => {});
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+
+  useEffect(() => {
+    invoke<string | null>("get_project_path")
+      .then((path) => {
+        dispatch({ type: "SET_PROJECT_PATH", path });
+      })
+      .catch((err) => {
+        console.error("Failed to load project path:", err);
+      });
+  }, []);
 
   return (
     <AppStateContext.Provider value={state}>

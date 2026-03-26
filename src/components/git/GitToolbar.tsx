@@ -12,13 +12,16 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CreatePrDialog } from "./CreatePrDialog";
 import type { DiffStats } from "../../lib/tauri-commands";
 
 interface GitToolbarProps {
   branch: string;
   stats: DiffStats;
+  cwd: string;
   onCommit: (message: string) => Promise<void>;
   onPush: () => Promise<void>;
   onRefresh: () => void;
@@ -27,12 +30,14 @@ interface GitToolbarProps {
 export function GitToolbar({
   branch,
   stats,
+  cwd,
   onCommit,
   onPush,
   onRefresh,
 }: GitToolbarProps) {
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
+  const [prDialogOpen, setPrDialogOpen] = useState(false);
 
   const handleCommit = async () => {
     if (!commitMsg.trim()) return;
@@ -71,6 +76,12 @@ export function GitToolbar({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onPush()}>
                 Push
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => setPrDialogOpen(true)}>
+                Create PR
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
@@ -119,6 +130,13 @@ export function GitToolbar({
           </div>
         </div>
       )}
+
+      {/* Create PR dialog */}
+      <CreatePrDialog
+        open={prDialogOpen}
+        onClose={() => setPrDialogOpen(false)}
+        cwd={cwd}
+      />
     </div>
   );
 }

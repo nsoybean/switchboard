@@ -2,9 +2,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ChevronLeft,
   ChevronRight,
+  Columns2,
   GitBranch,
   PanelLeft,
   PanelRight,
+  Square,
   Sun,
   Moon,
 } from "lucide-react";
@@ -24,6 +26,9 @@ interface TitlebarProps {
   onToggleGitPanel: () => void;
   branch?: string;
   projectName?: string;
+  onProjectClick?: () => void;
+  viewMode?: "focused" | "scroll";
+  onToggleViewMode?: () => void;
 }
 
 export function Titlebar({
@@ -33,6 +38,9 @@ export function Titlebar({
   onToggleGitPanel,
   branch,
   projectName = "switchboard",
+  onProjectClick,
+  viewMode = "focused",
+  onToggleViewMode,
 }: TitlebarProps) {
   const { theme, setTheme } = useTheme();
   const appWindow = getCurrentWindow();
@@ -97,7 +105,12 @@ export function Titlebar({
             {branch}
           </span>
         )}
-        <span className="text-xs font-medium">{projectName}</span>
+        <button
+          onClick={onProjectClick}
+          className="text-xs font-medium hover:text-muted-foreground transition-colors"
+        >
+          {projectName}
+        </button>
       </div>
 
       {/* Spacer — drag region */}
@@ -105,6 +118,28 @@ export function Titlebar({
 
       {/* Right controls */}
       <div className="flex items-center gap-0.5 px-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={onToggleViewMode}
+            >
+              {viewMode === "scroll" ? (
+                <Square className="size-3.5" />
+              ) : (
+                <Columns2 className="size-3.5 opacity-40" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {viewMode === "scroll" ? "Focused View (⌘⇧S)" : "Scroll View (⌘⇧S)"}
+          </TooltipContent>
+        </Tooltip>
+
+        <Separator orientation="vertical" className="h-4 mx-0.5" />
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

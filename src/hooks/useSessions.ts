@@ -15,12 +15,18 @@ export interface ClaudeSessionSummary {
  * Load past Claude Code sessions for a given project path.
  * Returns summaries that can be shown in the sidebar as "past sessions".
  */
-export function useClaudeSessions(projectPath: string) {
+export function useClaudeSessions(projectPath: string | null) {
   const [sessions, setSessions] = useState<ClaudeSessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!projectPath) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function load() {
