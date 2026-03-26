@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GitBranch, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -24,6 +25,7 @@ interface GitToolbarProps {
   cwd: string;
   githubToken: string | null;
   onCommit: (message: string) => Promise<void>;
+  onStageAll: () => Promise<void>;
   onPush: () => Promise<void>;
   onRefresh: () => void;
   onOpenSettings?: () => void;
@@ -35,16 +37,21 @@ export function GitToolbar({
   cwd,
   githubToken,
   onCommit,
+  onStageAll,
   onPush,
   onRefresh,
   onOpenSettings,
 }: GitToolbarProps) {
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
+  const [stageAllFirst, setStageAllFirst] = useState(true);
   const [prDialogOpen, setPrDialogOpen] = useState(false);
 
   const handleCommit = async () => {
     if (!commitMsg.trim()) return;
+    if (stageAllFirst) {
+      await onStageAll();
+    }
     await onCommit(commitMsg.trim());
     setCommitMsg("");
     setCommitOpen(false);
@@ -143,18 +150,28 @@ export function GitToolbar({
               }
             }}
           />
-          <div className="flex justify-end gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs"
-              onClick={() => setCommitOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button size="sm" className="text-xs" onClick={handleCommit}>
-              Commit
-            </Button>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox
+                checked={stageAllFirst}
+                onCheckedChange={(v) => setStageAllFirst(v === true)}
+                className="size-3.5"
+              />
+              <span className="text-[11px] text-muted-foreground">Stage all</span>
+            </label>
+            <div className="flex gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => setCommitOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" className="text-xs" onClick={handleCommit}>
+                Commit
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -130,6 +130,7 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
         cwd={cwd}
         githubToken={githubToken ?? null}
         onCommit={handleCommit}
+        onStageAll={handleStageAll}
         onPush={handlePush}
         onRefresh={refresh}
         onOpenSettings={onOpenSettings}
