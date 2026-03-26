@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Minus, Undo2 } from "lucide-react";
+import { Plus, Minus, Undo2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { gitCommands, type ChangedFile, type DiffStats } from "../../lib/tauri-commands";
 import { GitToolbar } from "./GitToolbar";
@@ -22,10 +22,11 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
   const [branch, setBranch] = useState("");
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [stats, setStats] = useState<DiffStats>({ additions: 0, deletions: 0, files_changed: 0 });
-  const [diff, setDiff] = useState("");
   const [activeTab, setActiveTab] = useState("unstaged");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const [fileDiff, setFileDiff] = useState<string>("");
 
   const showStaged = activeTab === "staged";
 
@@ -37,15 +38,12 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
       setBranch(status.branch);
       setFiles(status.files);
       setStats(status.stats);
-
-      const diffText = await gitCommands.diff(cwd, undefined, showStaged);
-      setDiff(diffText);
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [cwd, showStaged]);
+  }, [cwd]);
 
   useEffect(() => {
     if (!visible) return;
@@ -53,6 +51,23 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
     const interval = setInterval(refresh, 5000);
     return () => clearInterval(interval);
   }, [visible, refresh]);
+
+  // Fetch diff when a file is expanded
+  useEffect(() => {
+    if (!expandedFile) {
+      setFileDiff("");
+      return;
+    }
+    let cancelled = false;
+    gitCommands.diff(cwd, expandedFile, showStaged).then((d) => {
+      if (!cancelled) setFileDiff(d);
+    });
+    return () => { cancelled = true; };
+  }, [expandedFile, cwd, showStaged]);
+
+  const toggleFile = (path: string) => {
+    setExpandedFile((prev) => (prev === path ? null : path));
+  };
 
   const handleStageAll = async () => {
     const unstaged = files.filter((f) => !f.staged).map((f) => f.path);
@@ -68,17 +83,20 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
     refresh();
   };
 
-  const handleStageFile = async (path: string) => {
+  const handleStageFile = async (e: React.MouseEvent, path: string) => {
+    e.stopPropagation();
     await gitCommands.stage(cwd, [path]);
     refresh();
   };
 
-  const handleUnstageFile = async (path: string) => {
+  const handleUnstageFile = async (e: React.MouseEvent, path: string) => {
+    e.stopPropagation();
     await gitCommands.unstage(cwd, [path]);
     refresh();
   };
 
-  const handleRevertFile = async (path: string) => {
+  const handleRevertFile = async (e: React.MouseEvent, path: string) => {
+    e.stopPropagation();
     await gitCommands.revert(cwd, [path]);
     refresh();
   };
@@ -103,7 +121,7 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
   const stagedCount = files.filter((f) => f.staged).length;
 
   return (
-    <div className="flex flex-col h-full w-[280px] min-w-[280px] max-w-[280px] border-l bg-card overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       <GitToolbar
         branch={branch}
         stats={stats}
@@ -115,7 +133,7 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
       {/* Staged/Unstaged toggle */}
       <div className="flex border-b shrink-0">
         <button
-          onClick={() => setActiveTab("unstaged")}
+          onClick={() => { setActiveTab("unstaged"); setExpandedFile(null); }}
           className={cn(
             "flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors",
             activeTab === "unstaged"
@@ -127,7 +145,7 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
           <Badge variant="secondary" className="h-4 px-1 text-[10px]">{unstagedCount}</Badge>
         </button>
         <button
-          onClick={() => setActiveTab("staged")}
+          onClick={() => { setActiveTab("staged"); setExpandedFile(null); }}
           className={cn(
             "flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors",
             activeTab === "staged"
@@ -140,7 +158,7 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
         </button>
       </div>
 
-      {/* File list + diff */}
+      {/* File list + per-file diff */}
       <ScrollArea className="flex-1 min-h-0">
         {error && (
           <div className="p-3 text-xs text-destructive">{error}</div>
@@ -154,12 +172,24 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
           </div>
         )}
 
-        {/* File list */}
-        {filteredFiles.map((file) => (
+        {filteredFiles.map((file) => {
+          const isExpanded = expandedFile === file.path;
+          return (
+            <div key={`${file.path}-${file.staged}`}>
+              {/* File row — clickable to toggle diff */}
               <div
-                key={`${file.path}-${file.staged}`}
-                className="flex items-center gap-1.5 px-2 py-1.5 text-xs border-b hover:bg-accent/50 min-w-0"
+                onClick={() => toggleFile(file.path)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1.5 text-xs border-b cursor-pointer min-w-0",
+                  isExpanded ? "bg-accent/60" : "hover:bg-accent/50",
+                )}
               >
+                <ChevronRight
+                  className={cn(
+                    "size-3 shrink-0 transition-transform text-muted-foreground",
+                    isExpanded && "rotate-90",
+                  )}
+                />
                 <Badge
                   variant="secondary"
                   className={cn(
@@ -181,7 +211,7 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
                         variant="ghost"
                         size="icon"
                         className="size-5 shrink-0"
-                        onClick={() => handleUnstageFile(file.path)}
+                        onClick={(e) => handleUnstageFile(e, file.path)}
                       >
                         <Minus />
                       </Button>
@@ -196,7 +226,7 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
                           variant="ghost"
                           size="icon"
                           className="size-5 shrink-0"
-                          onClick={() => handleStageFile(file.path)}
+                          onClick={(e) => handleStageFile(e, file.path)}
                         >
                           <Plus />
                         </Button>
@@ -210,7 +240,7 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
                             variant="ghost"
                             size="icon"
                             className="size-5 shrink-0"
-                            onClick={() => handleRevertFile(file.path)}
+                            onClick={(e) => handleRevertFile(e, file.path)}
                           >
                             <Undo2 />
                           </Button>
@@ -221,14 +251,16 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
                   </>
                 )}
               </div>
-            ))}
 
-            {/* Diff */}
-            {diff && <DiffView diff={diff} />}
+              {/* Inline diff for this file */}
+              {isExpanded && fileDiff && <DiffView diff={fileDiff} />}
+            </div>
+          );
+        })}
       </ScrollArea>
 
       {/* Bottom action bar */}
-      <div className="flex gap-2 p-2 border-t">
+      <div className="flex gap-2 p-2 border-t shrink-0">
         <Button
           variant="outline"
           size="sm"

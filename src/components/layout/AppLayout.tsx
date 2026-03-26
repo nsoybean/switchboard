@@ -10,6 +10,11 @@ import { GitPanel } from "../git/GitPanel";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildSpawnArgs } from "../../lib/agents";
 import { Button } from "@/components/ui/button";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 import { Plus } from "lucide-react";
 import type { AgentType, Session, SessionStatus } from "../../state/types";
 
@@ -178,76 +183,88 @@ export function AppLayout() {
       />
 
       {/* Main content below titlebar */}
-      <div className="flex flex-1 min-h-0">
+      <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
         {/* Sidebar */}
         {sidebarOpen && (
-          <SessionSidebar
-            onNewSession={() => setDialogOpen(true)}
-            onResumeSession={handleResumeSession}
-          />
+          <>
+            <ResizablePanel defaultSize="20%" minSize="15%" maxSize="35%">
+              <SessionSidebar
+                onNewSession={() => setDialogOpen(true)}
+                onResumeSession={handleResumeSession}
+              />
+            </ResizablePanel>
+            <ResizableHandle />
+          </>
         )}
 
         {/* Main area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Toolbar */}
-          <TerminalToolbar
-            session={activeSession}
-            gitPanelOpen={gitPanelOpen}
-            onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
-          />
+        <ResizablePanel defaultSize="55%">
+          <div className="flex flex-col h-full min-w-0">
+            <TerminalToolbar
+              session={activeSession}
+              gitPanelOpen={gitPanelOpen}
+              onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
+            />
 
-          {/* Terminal area */}
-          <div className="flex-1 relative min-h-0">
-            {sessions.length === 0 ? (
-              <div className="h-full flex items-center justify-center bg-background">
-                <div className="text-center max-w-sm">
-                  <h2 className="text-lg font-semibold mb-3">
-                    Welcome to Switchboard
-                  </h2>
-                  <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                    Manage multiple AI coding agents in parallel.
-                    <br />
-                    Each session gets its own interactive terminal.
-                  </p>
-                  <Button onClick={() => setDialogOpen(true)}>
-                    <Plus data-icon="inline-start" />
-                    Start First Session
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              sessions.map((session) => {
-                if (!aliveSessionIds.has(session.id)) return null;
-                const isActive = session.id === state.activeSessionId;
-
-                return (
-                  <div
-                    key={session.id}
-                    className="absolute inset-0 bg-background"
-                    style={{ display: isActive ? "block" : "none" }}
-                  >
-                    <XTermContainer
-                      command={session.command}
-                      args={session.args}
-                      cwd={session.cwd}
-                      onExit={handleSessionExit(session.id)}
-                    />
+            <div className="flex-1 relative min-h-0">
+              {sessions.length === 0 ? (
+                <div className="h-full flex items-center justify-center bg-background">
+                  <div className="text-center max-w-sm">
+                    <h2 className="text-lg font-semibold mb-3">
+                      Welcome to Switchboard
+                    </h2>
+                    <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+                      Manage multiple AI coding agents in parallel.
+                      <br />
+                      Each session gets its own interactive terminal.
+                    </p>
+                    <Button onClick={() => setDialogOpen(true)}>
+                      <Plus data-icon="inline-start" />
+                      Start First Session
+                    </Button>
                   </div>
-                );
-              })
-            )}
+                </div>
+              ) : (
+                sessions.map((session) => {
+                  if (!aliveSessionIds.has(session.id)) return null;
+                  const isActive = session.id === state.activeSessionId;
+
+                  return (
+                    <div
+                      key={session.id}
+                      className="absolute inset-0 bg-background"
+                      style={{ display: isActive ? "block" : "none" }}
+                    >
+                      <XTermContainer
+                        command={session.command}
+                        args={session.args}
+                        cwd={session.cwd}
+                        onExit={handleSessionExit(session.id)}
+                      />
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
+        </ResizablePanel>
 
         {/* Git Panel */}
-        <GitPanel
-          cwd={
-            activeSession?.cwd ??
-            "/Users/nyangshawbin/Documents/projects/switchboard"
-          }
-          visible={gitPanelOpen && sessions.length > 0}
-        />
-      </div>
+        {gitPanelOpen && sessions.length > 0 && (
+          <>
+            <ResizableHandle />
+            <ResizablePanel defaultSize="25%" minSize="15%" maxSize="40%">
+              <GitPanel
+                cwd={
+                  activeSession?.cwd ??
+                  "/Users/nyangshawbin/Documents/projects/switchboard"
+                }
+                visible
+              />
+            </ResizablePanel>
+          </>
+        )}
+      </ResizablePanelGroup>
 
       {/* New Session Dialog */}
       <NewSessionDialog
