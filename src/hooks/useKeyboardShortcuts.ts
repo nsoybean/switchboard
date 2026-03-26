@@ -5,6 +5,7 @@ interface ShortcutHandlers {
   onNextSession: () => void;
   onPrevSession: () => void;
   onNewSession: () => void;
+  onToggleSidebar: () => void;
   onToggleGitPanel: () => void;
   onFocusTerminal: () => void;
 }
@@ -17,6 +18,7 @@ interface ShortcutHandlers {
  * - Ctrl+Tab: Next session
  * - Ctrl+Shift+Tab: Previous session
  * - Ctrl+N: New session dialog
+ * - Ctrl+B: Toggle sidebar
  * - Ctrl+G: Toggle git panel
  * - Escape: Focus terminal
  */
@@ -45,6 +47,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if ((e.ctrlKey || e.metaKey) && e.key === "n") {
         e.preventDefault();
         handlers.onNewSession();
+        return;
+      }
+
+      // Ctrl+B — toggle sidebar
+      if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+        e.preventDefault();
+        handlers.onToggleSidebar();
         return;
       }
 

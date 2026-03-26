@@ -37,12 +37,12 @@ export function GitToolbar({
   };
 
   return (
-    <div className="flex flex-col gap-2 p-3 border-b">
+    <div className="flex flex-col gap-2 p-3 border-b overflow-hidden">
       {/* Branch + stats */}
-      <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs font-medium">
-          <GitBranch className="size-3" />
-          {branch || "\u2014"}
+      <div className="flex items-center justify-between min-w-0">
+        <span className="flex items-center gap-1.5 text-xs font-medium min-w-0">
+          <GitBranch className="size-3 shrink-0" />
+          <span className="truncate">{branch || "\u2014"}</span>
         </span>
         <span className="flex items-center gap-1.5 text-[11px]">
           <span className="text-[var(--sb-diff-add-fg)]">+{stats.additions}</span>

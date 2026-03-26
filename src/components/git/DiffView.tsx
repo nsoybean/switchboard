@@ -14,7 +14,7 @@ export function DiffView({ diff }: DiffViewProps) {
   const lines = diff.split("\n");
 
   return (
-    <div className="font-mono text-[11px] leading-relaxed border-t">
+    <div className="font-mono text-[11px] leading-relaxed border-t overflow-hidden">
       {lines.map((line, i) => {
         const isAdd = line.startsWith("+") && !line.startsWith("+++");
         const isDel = line.startsWith("-") && !line.startsWith("---");

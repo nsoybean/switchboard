@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ChevronLeft,
@@ -8,9 +7,6 @@ import {
   PanelRight,
   Sun,
   Moon,
-  Minus,
-  Square,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -39,22 +35,40 @@ export function Titlebar({
   projectName = "switchboard",
 }: TitlebarProps) {
   const { theme, setTheme } = useTheme();
-  const [isMac, setIsMac] = useState(true);
-
-  useEffect(() => {
-    setIsMac(navigator.userAgent.includes("Mac"));
-  }, []);
-
   const appWindow = getCurrentWindow();
+
+  const handleMaximize = async () => {
+    await appWindow.toggleMaximize();
+  };
 
   return (
     <div
       data-tauri-drag-region
       className="flex items-center h-[38px] border-b bg-background select-none shrink-0"
-      style={{ paddingLeft: isMac ? 78 : 0 }}
     >
+      {/* Window controls — always visible */}
+      <div className="flex items-center gap-1.5 pl-3 pr-2">
+        <button
+          onClick={() => appWindow.close()}
+          className="size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
+          aria-label="Close"
+        />
+        <button
+          onClick={() => appWindow.minimize()}
+          className="size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
+          aria-label="Minimize"
+        />
+        <button
+          onClick={handleMaximize}
+          className="size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
+          aria-label="Maximize"
+        />
+      </div>
+
+      <Separator orientation="vertical" className="h-4" />
+
       {/* Navigation */}
-      <div className="flex items-center gap-0.5 px-2">
+      <div className="flex items-center gap-0.5 px-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon" className="size-7" disabled>
@@ -102,7 +116,7 @@ export function Titlebar({
               <PanelLeft className={sidebarOpen ? "" : "opacity-40"} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Toggle Sidebar</TooltipContent>
+          <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -115,7 +129,7 @@ export function Titlebar({
               <PanelRight className={gitPanelOpen ? "" : "opacity-40"} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Toggle Git Panel</TooltipContent>
+          <TooltipContent>Toggle Git Panel (⌘G)</TooltipContent>
         </Tooltip>
 
         <Separator orientation="vertical" className="h-4 mx-1" />
@@ -133,37 +147,6 @@ export function Titlebar({
           </TooltipTrigger>
           <TooltipContent>Toggle Theme</TooltipContent>
         </Tooltip>
-
-        {/* Window controls — Windows/Linux only */}
-        {!isMac && (
-          <>
-            <Separator orientation="vertical" className="h-4 mx-1" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={() => appWindow.minimize()}
-            >
-              <Minus className="size-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={() => appWindow.toggleMaximize()}
-            >
-              <Square className="size-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 hover:bg-destructive hover:text-destructive-foreground"
-              onClick={() => appWindow.close()}
-            >
-              <X className="size-3" />
-            </Button>
-          </>
-        )}
       </div>
     </div>
   );

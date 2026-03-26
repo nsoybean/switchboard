@@ -155,6 +155,7 @@ export function AppLayout() {
         dispatch({ type: "SET_ACTIVE", id: sortedSessionIds[prevIdx] });
       },
       onNewSession: () => setDialogOpen(true),
+      onToggleSidebar: () => setSidebarOpen((prev) => !prev),
       onToggleGitPanel: () => setGitPanelOpen((prev) => !prev),
       onFocusTerminal: () => {
         const termEl = document.querySelector(".xterm-helper-textarea");
