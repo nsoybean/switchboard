@@ -99,7 +99,7 @@ export function NewSessionDialog({
           {agent !== "bash" && (
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Initial Task (optional)
+                Instructions (optional)
               </label>
               <Textarea
                 value={task}
