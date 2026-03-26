@@ -34,7 +34,7 @@ export function SessionSidebar({
   );
 
   return (
-    <div className="flex flex-col h-full bg-card overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-card overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h1 className="text-sm font-semibold tracking-wide">SWITCHBOARD</h1>
@@ -45,8 +45,8 @@ export function SessionSidebar({
       </div>
 
       {/* Session list */}
-      <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-0.5 p-2 overflow-hidden">
+      <ScrollArea className="flex-1 w-full [&>[data-slot=scroll-area-viewport]]:!overflow-x-hidden">
+        <div className="flex flex-col gap-0.5 p-2">
           {/* Active sessions */}
           {activeSessions.length > 0 && pastSessions.length > 0 && (
             <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
