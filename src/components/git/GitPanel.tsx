@@ -190,72 +190,76 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
                   isExpanded ? "bg-accent/60" : "hover:bg-accent/50",
                 )}
               >
-                <ChevronRight
-                  className={cn(
-                    "size-3 shrink-0 transition-transform text-muted-foreground",
-                    isExpanded && "rotate-90",
-                  )}
-                />
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "h-4 px-1 text-[10px] font-mono shrink-0",
-                    (file.status === "A" || file.status === "??") && "text-[var(--sb-diff-add-fg)]",
-                    file.status === "D" && "text-[var(--sb-diff-del-fg)]",
-                    file.status === "M" && "text-[var(--sb-status-warning)]",
-                  )}
-                >
-                  {file.status}
-                </Badge>
-                <span className="flex-1 truncate text-muted-foreground min-w-0">
-                  {file.path}
-                </span>
-                {showStaged ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-5 shrink-0"
-                        onClick={(e) => handleUnstageFile(e, file.path)}
-                      >
-                        <Minus />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Unstage</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <>
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                  <ChevronRight
+                    className={cn(
+                      "size-3 shrink-0 transition-transform text-muted-foreground",
+                      isExpanded && "rotate-90",
+                    )}
+                  />
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "h-4 shrink-0 px-1 text-[10px] font-mono",
+                      (file.status === "A" || file.status === "??") && "text-[var(--sb-diff-add-fg)]",
+                      file.status === "D" && "text-[var(--sb-diff-del-fg)]",
+                      file.status === "M" && "text-[var(--sb-status-warning)]",
+                    )}
+                  >
+                    {file.status}
+                  </Badge>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground" title={file.path}>
+                    {file.path}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  {showStaged ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="size-5 shrink-0"
-                          onClick={(e) => handleStageFile(e, file.path)}
+                          onClick={(e) => handleUnstageFile(e, file.path)}
                         >
-                          <Plus />
+                          <Minus />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Stage</TooltipContent>
+                      <TooltipContent>Unstage</TooltipContent>
                     </Tooltip>
-                    {file.status !== "??" && (
+                  ) : (
+                    <>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="size-5 shrink-0"
-                            onClick={(e) => handleRevertFile(e, file.path)}
+                            onClick={(e) => handleStageFile(e, file.path)}
                           >
-                            <Undo2 />
+                            <Plus />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Revert</TooltipContent>
+                        <TooltipContent>Stage</TooltipContent>
                       </Tooltip>
-                    )}
-                  </>
-                )}
+                      {file.status !== "??" && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-5 shrink-0"
+                              onClick={(e) => handleRevertFile(e, file.path)}
+                            >
+                              <Undo2 />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Revert</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Inline diff for this file */}

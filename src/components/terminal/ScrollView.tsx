@@ -63,6 +63,7 @@ export function ScrollView({
                     session.status === "running" && "text-[var(--sb-status-running)]",
                     session.status === "needs-input" && "text-[var(--sb-status-warning)] animate-pulse",
                     session.status === "done" && "text-[var(--sb-status-done)]",
+                    session.status === "stopped" && "text-muted-foreground",
                     session.status === "error" && "text-destructive",
                   )}
                 />

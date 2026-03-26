@@ -14,6 +14,7 @@ import type { Session } from "../../state/types";
 interface SessionSidebarProps {
   onNewSession: () => void;
   onResumeSession?: (sessionId: string, projectPath: string, label: string) => void;
+  onStopSession?: (sessionId: string) => Promise<void>;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onDeleteSession?: (sessionId: string) => Promise<void>;
 }
@@ -21,6 +22,7 @@ interface SessionSidebarProps {
 export function SessionSidebar({
   onNewSession,
   onResumeSession,
+  onStopSession,
   onRenameSession,
   onDeleteSession,
 }: SessionSidebarProps) {
@@ -117,6 +119,12 @@ export function SessionSidebar({
               key={session.id}
               session={session}
               isActive={state.activeSessionId === session.id}
+              onStop={
+                session.ptyId !== null &&
+                (session.status === "running" || session.status === "needs-input")
+                  ? () => void onStopSession?.(session.id)
+                  : undefined
+              }
               onRename={() => {
                 setRenameTarget(session);
                 setRenameValue(session.label);

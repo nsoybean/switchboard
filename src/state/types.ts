@@ -1,6 +1,6 @@
 export type AgentType = "claude-code" | "codex" | "bash";
 
-export type SessionStatus = "running" | "needs-input" | "done" | "error";
+export type SessionStatus = "running" | "needs-input" | "done" | "error" | "stopped";
 
 export interface Session {
   id: string;

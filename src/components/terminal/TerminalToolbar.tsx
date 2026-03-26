@@ -1,5 +1,6 @@
-import { GitBranch, FolderOpen, Coins } from "lucide-react";
+import { GitBranch, FolderOpen, Coins, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useTokenUsage } from "../../hooks/useTokenUsage";
 import { useAppState } from "../../state/context";
 import { formatTokens, formatCost } from "../../lib/pricing";
@@ -13,12 +14,14 @@ const AGENT_LABELS: Record<string, string> = {
 
 interface TerminalToolbarProps {
   session: Session | null;
+  onStopSession?: (sessionId: string) => Promise<void>;
   gitPanelOpen?: boolean;
   onToggleGitPanel?: () => void;
 }
 
 export function TerminalToolbar({
   session,
+  onStopSession,
 }: TerminalToolbarProps) {
   const state = useAppState();
   const usage = useTokenUsage(
@@ -33,6 +36,9 @@ export function TerminalToolbar({
       </div>
     );
   }
+  const canStop =
+    session.ptyId !== null &&
+    (session.status === "running" || session.status === "needs-input");
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b bg-background text-sm shrink-0">
@@ -49,6 +55,16 @@ export function TerminalToolbar({
         </span>
       )}
       <div className="ml-auto flex items-center gap-3">
+        {session && canStop && onStopSession && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void onStopSession(session.id)}
+          >
+            <Square data-icon="inline-start" />
+            Stop
+          </Button>
+        )}
         {usage && (usage.inputTokens > 0 || usage.outputTokens > 0) && (
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <Coins className="size-3" />

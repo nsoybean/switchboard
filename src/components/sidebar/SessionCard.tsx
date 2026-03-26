@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { CircleDot, Ellipsis, PencilLine, Trash2 } from "lucide-react";
+import { CircleDot, Ellipsis, PencilLine, Square, Trash2 } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { formatTokens, formatCost, estimateCost } from "../../lib/pricing";
 import type { Session } from "../../state/types";
@@ -18,6 +18,7 @@ const STATUS_LABELS: Record<string, string> = {
   "needs-input": "Needs Input",
   done: "Done",
   error: "Error",
+  stopped: "Stopped",
 };
 
 interface TokenInfo {
@@ -32,6 +33,7 @@ interface SessionCardProps {
   isPast?: boolean;
   tokenInfo?: TokenInfo;
   onClick: () => void;
+  onStop?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
 }
@@ -42,11 +44,15 @@ export function SessionCard({
   isPast,
   tokenInfo,
   onClick,
+  onStop,
   onRename,
   onDelete,
 }: SessionCardProps) {
-  const isDone = session.status === "done" || session.status === "error";
-  const canManage = !isPast && (onRename || onDelete);
+  const isDone =
+    session.status === "done" ||
+    session.status === "error" ||
+    session.status === "stopped";
+  const canManage = !isPast && (onStop || onRename || onDelete);
 
   return (
     <div
@@ -78,6 +84,7 @@ export function SessionCard({
                 session.status === "running" && "text-[var(--sb-status-running)]",
                 session.status === "needs-input" && "text-[var(--sb-status-warning)] animate-pulse",
                 session.status === "done" && "text-[var(--sb-status-done)]",
+                session.status === "stopped" && "text-muted-foreground",
                 session.status === "error" && "text-destructive",
               )}
             />
@@ -117,6 +124,12 @@ export function SessionCard({
             onClick={(event) => event.stopPropagation()}
           >
             <DropdownMenuGroup>
+              {onStop && (
+                <DropdownMenuItem onSelect={onStop}>
+                  <Square />
+                  Stop
+                </DropdownMenuItem>
+              )}
               {onRename && (
                 <DropdownMenuItem onSelect={onRename}>
                   <PencilLine />
