@@ -107,18 +107,49 @@ export function XTermContainer({
       // Canvas renderer fallback
     }
 
-    fitAddon.fit();
+    // Use requestAnimationFrame to ensure layout is settled before first fit
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+    });
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
     setTerminal(term);
 
+    // Debounced resize to avoid rapid pty_resize calls during panel drags
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const observer = new ResizeObserver(() => {
-      fitAddon.fit();
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        try {
+          fitAddon.fit();
+        } catch {
+          // Terminal may not be visible
+        }
+      }, 50);
     });
     observer.observe(containerRef.current);
 
+    // Re-fit when terminal becomes visible (e.g., session switch)
+    const visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          requestAnimationFrame(() => {
+            try {
+              fitAddon.fit();
+            } catch {
+              // ignore
+            }
+          });
+        }
+      },
+      { threshold: 0.1 },
+    );
+    visibilityObserver.observe(containerRef.current);
+
     return () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
       observer.disconnect();
+      visibilityObserver.disconnect();
       term.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
