@@ -1,6 +1,7 @@
-import { Bot, Terminal, CircleDot } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { CircleDot } from "lucide-react";
+import { AgentIcon } from "@/components/agents/AgentIcon";
 import { formatTokens, formatCost, estimateCost } from "../../lib/pricing";
 import type { Session } from "../../state/types";
 
@@ -9,12 +10,6 @@ const STATUS_LABELS: Record<string, string> = {
   "needs-input": "Needs Input",
   done: "Done",
   error: "Error",
-};
-
-const AGENT_ICONS: Record<string, typeof Bot> = {
-  "claude-code": Bot,
-  codex: Bot,
-  bash: Terminal,
 };
 
 interface TokenInfo {
@@ -33,7 +28,6 @@ interface SessionCardProps {
 
 export function SessionCard({ session, isActive, tokenInfo, onClick }: SessionCardProps) {
   const isDone = session.status === "done" || session.status === "error";
-  const AgentIcon = AGENT_ICONS[session.agent] ?? Terminal;
 
   return (
     <button
@@ -46,7 +40,7 @@ export function SessionCard({ session, isActive, tokenInfo, onClick }: SessionCa
         isDone && !isActive && "opacity-60",
       )}
     >
-      <AgentIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <AgentIcon agent={session.agent} className="mt-0.5 size-4" />
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium text-[13px]">{session.label}</div>
         {session.branch && (
