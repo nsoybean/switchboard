@@ -91,9 +91,10 @@ export function SessionSidebar({
               key={session.id}
               session={session}
               isActive={state.activeSessionId === session.id}
-              onClick={() =>
-                dispatch({ type: "SET_ACTIVE", id: session.id })
-              }
+              onClick={() => {
+                dispatch({ type: "SET_ACTIVE", id: session.id });
+                dispatch({ type: "SET_PREVIEW_FILE", path: null });
+              }}
             />
           ))}
 

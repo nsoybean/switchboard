@@ -64,6 +64,22 @@ pub fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
     Ok(entries)
 }
 
+/// Read file contents as a string. Returns error for binary or very large files.
+#[tauri::command]
+pub fn read_file_contents(path: String) -> Result<String, String> {
+    let p = Path::new(&path);
+    if !p.is_file() {
+        return Err(format!("'{}' is not a file", path));
+    }
+    let metadata = fs::metadata(p).map_err(|e| format!("Failed to read metadata: {}", e))?;
+    // Limit to 1MB to avoid loading huge files
+    if metadata.len() > 1_048_576 {
+        return Err("File too large to preview (>1MB)".to_string());
+    }
+    let contents = fs::read_to_string(p).map_err(|_| "File appears to be binary".to_string())?;
+    Ok(contents)
+}
+
 /// Use `git check-ignore` to filter out ignored paths
 fn get_git_ignored(cwd: &str, entries: &[FileEntry]) -> std::collections::HashSet<String> {
     let mut ignored = std::collections::HashSet::new();

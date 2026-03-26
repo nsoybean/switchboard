@@ -25,6 +25,7 @@ export interface AppState {
   gitPanelOpen: boolean;
   projectPath: string | null;
   viewMode: "focused" | "scroll";
+  previewFilePath: string | null;
 }
 
 export type AppAction =
@@ -35,4 +36,5 @@ export type AppAction =
   | { type: "SET_PTY_ID"; id: string; ptyId: number }
   | { type: "TOGGLE_GIT_PANEL" }
   | { type: "SET_PROJECT_PATH"; path: string | null }
-  | { type: "SET_VIEW_MODE"; mode: "focused" | "scroll" };
+  | { type: "SET_VIEW_MODE"; mode: "focused" | "scroll" }
+  | { type: "SET_PREVIEW_FILE"; path: string | null };

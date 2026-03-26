@@ -55,6 +55,8 @@ export interface FileEntry {
 export const fileCommands = {
   listDirectory: (path: string) =>
     invoke<FileEntry[]>("list_directory", { path }),
+  readFile: (path: string) =>
+    invoke<string>("read_file_contents", { path }),
 };
 
 export const projectCommands = {

@@ -6,15 +6,20 @@ import { fileCommands, type FileEntry } from "../../lib/tauri-commands";
 interface FileTreeNodeProps {
   entry: FileEntry;
   depth: number;
+  selectedPath?: string | null;
+  onFileSelect?: (path: string) => void;
 }
 
-function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
+function FileTreeNode({ entry, depth, selectedPath, onFileSelect }: FileTreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<FileEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleToggle = useCallback(async () => {
-    if (!entry.is_dir) return;
+  const handleClick = useCallback(async () => {
+    if (!entry.is_dir) {
+      onFileSelect?.(entry.path);
+      return;
+    }
     if (expanded) {
       setExpanded(false);
       return;
@@ -31,17 +36,17 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
       }
     }
     setExpanded(true);
-  }, [entry, expanded, children]);
+  }, [entry, expanded, children, onFileSelect]);
 
   const FolderIcon = expanded ? FolderOpen : Folder;
 
   return (
     <div>
       <button
-        onClick={handleToggle}
+        onClick={handleClick}
         className={cn(
-          "flex items-center gap-1.5 w-full text-left py-1 pr-2 text-xs hover:bg-accent/50 transition-colors",
-          entry.is_dir ? "cursor-pointer" : "cursor-default",
+          "flex items-center gap-1.5 w-full text-left py-1 pr-2 text-xs hover:bg-accent/50 transition-colors cursor-pointer",
+          !entry.is_dir && selectedPath === entry.path && "bg-accent text-accent-foreground",
         )}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
@@ -83,6 +88,8 @@ function FileTreeNode({ entry, depth }: FileTreeNodeProps) {
             key={child.path}
             entry={child}
             depth={depth + 1}
+            selectedPath={selectedPath}
+            onFileSelect={onFileSelect}
           />
         ))}
     </div>
@@ -97,9 +104,11 @@ function formatSize(bytes: number): string {
 
 interface FileTreeProps {
   rootPath: string;
+  selectedPath?: string | null;
+  onFileSelect?: (path: string) => void;
 }
 
-export function FileTree({ rootPath }: FileTreeProps) {
+export function FileTree({ rootPath, selectedPath, onFileSelect }: FileTreeProps) {
   const [entries, setEntries] = useState<FileEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +150,13 @@ export function FileTree({ rootPath }: FileTreeProps) {
   return (
     <div className="py-1">
       {entries.map((entry) => (
-        <FileTreeNode key={entry.path} entry={entry} depth={0} />
+        <FileTreeNode
+          key={entry.path}
+          entry={entry}
+          depth={0}
+          selectedPath={selectedPath}
+          onFileSelect={onFileSelect}
+        />
       ))}
     </div>
   );

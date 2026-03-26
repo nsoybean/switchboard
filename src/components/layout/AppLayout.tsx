@@ -9,6 +9,7 @@ import { ScrollView } from "../terminal/ScrollView";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
 import { GitPanel } from "../git/GitPanel";
+import { FilePreview } from "../files/FilePreview";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildSpawnArgs } from "../../lib/agents";
 import { worktreeCommands } from "../../lib/tauri-commands";
@@ -321,6 +322,18 @@ export function AppLayout() {
                     </div>
                   );
                 })
+              )}
+
+              {/* File preview overlay */}
+              {state.previewFilePath && (
+                <div className="absolute inset-0 z-10">
+                  <FilePreview
+                    filePath={state.previewFilePath}
+                    onClose={() =>
+                      dispatch({ type: "SET_PREVIEW_FILE", path: null })
+                    }
+                  />
+                </div>
               )}
             </div>
           </div>
