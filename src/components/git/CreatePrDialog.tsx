@@ -18,12 +18,14 @@ interface CreatePrDialogProps {
   open: boolean;
   onClose: () => void;
   cwd: string;
+  githubToken: string;
 }
 
 export function CreatePrDialog({
   open: isOpen,
   onClose,
   cwd,
+  githubToken,
 }: CreatePrDialogProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -46,6 +48,7 @@ export function CreatePrDialog({
         title.trim(),
         body.trim(),
         base.trim(),
+        githubToken,
       );
       setPrUrl(url.trim());
     } catch (err) {

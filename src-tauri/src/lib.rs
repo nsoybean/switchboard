@@ -46,6 +46,9 @@ pub fn run() {
             commands::session::detect_agents,
             commands::session::get_project_path,
             commands::session::set_project_path,
+            commands::session::get_github_token,
+            commands::session::set_github_token,
+            commands::session::validate_github_token,
             commands::files::list_directory,
             commands::files::read_file_contents,
         ])

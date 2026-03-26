@@ -26,6 +26,7 @@ export interface AppState {
   projectPath: string | null;
   viewMode: "focused" | "scroll";
   previewFilePath: string | null;
+  githubToken: string | null;
 }
 
 export type AppAction =
@@ -37,4 +38,5 @@ export type AppAction =
   | { type: "TOGGLE_GIT_PANEL" }
   | { type: "SET_PROJECT_PATH"; path: string | null }
   | { type: "SET_VIEW_MODE"; mode: "focused" | "scroll" }
-  | { type: "SET_PREVIEW_FILE"; path: string | null };
+  | { type: "SET_PREVIEW_FILE"; path: string | null }
+  | { type: "SET_GITHUB_TOKEN"; token: string | null };

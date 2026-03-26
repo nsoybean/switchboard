@@ -7,6 +7,7 @@ export const initialState: AppState = {
   projectPath: null,
   viewMode: "focused",
   previewFilePath: null,
+  githubToken: null,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -95,6 +96,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         previewFilePath: action.path,
+      };
+    }
+
+    case "SET_GITHUB_TOKEN": {
+      return {
+        ...state,
+        githubToken: action.token,
       };
     }
 

@@ -136,6 +136,49 @@ pub fn set_project_path(path: String) -> Result<(), String> {
     write_config(&config)
 }
 
+/// Get the stored GitHub token
+#[tauri::command]
+pub fn get_github_token() -> Result<Option<String>, String> {
+    let config = read_config()?;
+    Ok(config
+        .get("github_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string()))
+}
+
+/// Set the GitHub token (empty string clears it)
+#[tauri::command]
+pub fn set_github_token(token: String) -> Result<(), String> {
+    let mut config = read_config()?;
+    if token.is_empty() {
+        config.as_object_mut().map(|m| m.remove("github_token"));
+    } else {
+        config["github_token"] = serde_json::json!(token);
+    }
+    write_config(&config)
+}
+
+/// Validate a GitHub token by calling the /user endpoint
+#[tauri::command]
+pub fn validate_github_token(token: String) -> Result<String, String> {
+    let response = ureq::get("https://api.github.com/user")
+        .header("Authorization", &format!("Bearer {}", token))
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "switchboard")
+        .call()
+        .map_err(|e| format!("GitHub API error: {}", e))?;
+
+    let body: serde_json::Value = response
+        .into_body()
+        .read_json()
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    body["login"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Could not determine GitHub username".to_string())
+}
+
 /// Detect which agent CLIs are available in PATH
 #[tauri::command]
 pub fn detect_agents() -> Result<Vec<DetectedAgent>, String> {

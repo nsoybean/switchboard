@@ -188,13 +188,15 @@ pub fn git_create_branch(cwd: String, name: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Create a PR via the GitHub API and return the PR URL
+/// Create a PR via the GitHub API and return the PR URL.
+/// The token is passed from the frontend (read from config).
 #[tauri::command]
 pub fn git_create_pr(
     cwd: String,
     title: String,
     body: String,
     base: String,
+    token: String,
 ) -> Result<String, String> {
     // Get current branch
     let branch = run_git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])?
@@ -221,10 +223,6 @@ pub fn git_create_pr(
     let (owner, repo) = parse_github_remote(&remote_url)
         .ok_or_else(|| format!("Could not parse GitHub remote from: {}", remote_url))?;
 
-    // Get a GitHub token from git's credential store
-    let token = get_github_token()
-        .map_err(|e| format!("Could not get GitHub credentials: {}. Make sure you're authenticated with GitHub (e.g. via gh auth login or git credential store).", e))?;
-
     // Create PR via GitHub REST API
     let api_url = format!("https://api.github.com/repos/{}/{}/pulls", owner, repo);
     let payload = serde_json::json!({
@@ -250,37 +248,6 @@ pub fn git_create_pr(
         .as_str()
         .map(|s| s.to_string())
         .ok_or_else(|| "GitHub API did not return a PR URL".to_string())
-}
-
-/// Get a GitHub token from git's credential helper
-fn get_github_token() -> Result<String, String> {
-    let mut child = Command::new("git")
-        .args(["credential", "fill"])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-
-    if let Some(ref mut stdin) = child.stdin {
-        use std::io::Write;
-        let _ = write!(stdin, "protocol=https\nhost=github.com\n\n");
-    }
-
-    let output = child.wait_with_output().map_err(|e| e.to_string())?;
-
-    if !output.status.success() {
-        return Err("git credential fill failed".to_string());
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        if let Some(password) = line.strip_prefix("password=") {
-            return Ok(password.to_string());
-        }
-    }
-
-    Err("No password found in git credentials".to_string())
 }
 
 /// Parse a GitHub remote URL (SSH or HTTPS) into (owner, repo)
