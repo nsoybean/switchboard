@@ -22,18 +22,22 @@ interface GitToolbarProps {
   branch: string;
   stats: DiffStats;
   cwd: string;
+  githubToken: string | null;
   onCommit: (message: string) => Promise<void>;
   onPush: () => Promise<void>;
   onRefresh: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function GitToolbar({
   branch,
   stats,
   cwd,
+  githubToken,
   onCommit,
   onPush,
   onRefresh,
+  onOpenSettings,
 }: GitToolbarProps) {
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
@@ -80,9 +84,33 @@ export function GitToolbar({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => setPrDialogOpen(true)}>
-                Create PR
-              </DropdownMenuItem>
+              {githubToken ? (
+                <DropdownMenuItem onClick={() => setPrDialogOpen(true)}>
+                  Create PR
+                </DropdownMenuItem>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuItem
+                      disabled
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      Create PR
+                    </DropdownMenuItem>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">
+                    <p className="text-xs">Add a GitHub token in Settings to create PRs</p>
+                    {onOpenSettings && (
+                      <button
+                        className="text-xs text-primary underline mt-1"
+                        onClick={onOpenSettings}
+                      >
+                        Open Settings
+                      </button>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -132,11 +160,14 @@ export function GitToolbar({
       )}
 
       {/* Create PR dialog */}
-      <CreatePrDialog
-        open={prDialogOpen}
-        onClose={() => setPrDialogOpen(false)}
-        cwd={cwd}
-      />
+      {githubToken && (
+        <CreatePrDialog
+          open={prDialogOpen}
+          onClose={() => setPrDialogOpen(false)}
+          cwd={cwd}
+          githubToken={githubToken}
+        />
+      )}
     </div>
   );
 }

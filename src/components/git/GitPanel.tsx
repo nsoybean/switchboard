@@ -16,9 +16,11 @@ import {
 interface GitPanelProps {
   cwd: string;
   visible: boolean;
+  githubToken?: string | null;
+  onOpenSettings?: () => void;
 }
 
-export function GitPanel({ cwd, visible }: GitPanelProps) {
+export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanelProps) {
   const [branch, setBranch] = useState("");
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [stats, setStats] = useState<DiffStats>({ additions: 0, deletions: 0, files_changed: 0 });
@@ -126,9 +128,11 @@ export function GitPanel({ cwd, visible }: GitPanelProps) {
         branch={branch}
         stats={stats}
         cwd={cwd}
+        githubToken={githubToken ?? null}
         onCommit={handleCommit}
         onPush={handlePush}
         onRefresh={refresh}
+        onOpenSettings={onOpenSettings}
       />
 
       {/* Staged/Unstaged toggle */}

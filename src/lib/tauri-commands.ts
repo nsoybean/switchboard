@@ -41,8 +41,8 @@ export const gitCommands = {
     invoke<string>("git_push", { cwd }),
   createBranch: (cwd: string, name: string) =>
     invoke<void>("git_create_branch", { cwd, name }),
-  createPr: (cwd: string, title: string, body: string, base: string) =>
-    invoke<string>("git_create_pr", { cwd, title, body, base }),
+  createPr: (cwd: string, title: string, body: string, base: string, token: string) =>
+    invoke<string>("git_create_pr", { cwd, title, body, base, token }),
 };
 
 export interface FileEntry {
@@ -62,6 +62,12 @@ export const fileCommands = {
 export const projectCommands = {
   getPath: () => invoke<string | null>("get_project_path"),
   setPath: (path: string) => invoke<void>("set_project_path", { path }),
+};
+
+export const settingsCommands = {
+  getGitHubToken: () => invoke<string | null>("get_github_token"),
+  setGitHubToken: (token: string) => invoke<void>("set_github_token", { token }),
+  validateGitHubToken: (token: string) => invoke<string>("validate_github_token", { token }),
 };
 
 export const worktreeCommands = {

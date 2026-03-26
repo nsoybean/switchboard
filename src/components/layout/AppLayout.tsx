@@ -10,6 +10,7 @@ import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
 import { GitPanel } from "../git/GitPanel";
 import { FilePreview } from "../files/FilePreview";
+import { SettingsPage } from "../settings/SettingsPage";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildSpawnArgs } from "../../lib/agents";
 import { worktreeCommands } from "../../lib/tauri-commands";
@@ -32,6 +33,7 @@ export function AppLayout() {
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [gitPanelOpen, setGitPanelOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const sessions = Object.values(state.sessions);
   const sortedSessionIds = useMemo(
@@ -232,9 +234,16 @@ export function AppLayout() {
             mode: state.viewMode === "focused" ? "scroll" : "focused",
           })
         }
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
-      {/* Main content below titlebar */}
+      {/* Settings page (full overlay) */}
+      {settingsOpen ? (
+        <div className="flex-1 min-h-0">
+          <SettingsPage onBack={() => setSettingsOpen(false)} />
+        </div>
+      ) : (
+      /* Main content below titlebar */
       <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
         {/* Sidebar */}
         {sidebarOpen && (
@@ -347,11 +356,14 @@ export function AppLayout() {
               <GitPanel
                 cwd={activeSession?.cwd ?? state.projectPath ?? ""}
                 visible
+                githubToken={state.githubToken}
+                onOpenSettings={() => setSettingsOpen(true)}
               />
             </ResizablePanel>
           </>
         )}
       </ResizablePanelGroup>
+      )}
 
       {/* New Session Dialog */}
       <NewSessionDialog

@@ -24,6 +24,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         console.error("Failed to load project path:", err);
       });
+
+    invoke<string | null>("get_github_token")
+      .then((token) => {
+        dispatch({ type: "SET_GITHUB_TOKEN", token });
+      })
+      .catch((err) => {
+        console.error("Failed to load GitHub token:", err);
+      });
   }, []);
 
   return (

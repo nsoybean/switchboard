@@ -6,6 +6,7 @@ import {
   GitBranch,
   PanelLeft,
   PanelRight,
+  Settings,
   Square,
   Sun,
   Moon,
@@ -29,6 +30,7 @@ interface TitlebarProps {
   onProjectClick?: () => void;
   viewMode?: "focused" | "scroll";
   onToggleViewMode?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function Titlebar({
@@ -41,6 +43,7 @@ export function Titlebar({
   onProjectClick,
   viewMode = "focused",
   onToggleViewMode,
+  onOpenSettings,
 }: TitlebarProps) {
   const { theme, setTheme } = useTheme();
   const appWindow = getCurrentWindow();
@@ -169,6 +172,19 @@ export function Titlebar({
 
         <Separator orientation="vertical" className="h-4 mx-1" />
 
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={onOpenSettings}
+            >
+              <Settings className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Settings</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
