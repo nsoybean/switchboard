@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -57,6 +57,8 @@ interface XTermContainerProps {
   command?: string;
   args?: string[];
   cwd?: string;
+  isActive?: boolean;
+  onSpawn?: (ptyId: number) => void;
   onExit?: (code: number | null) => void;
 }
 
@@ -64,12 +66,20 @@ export function XTermContainer({
   command = "/bin/bash",
   args = [],
   cwd,
+  isActive,
+  onSpawn,
   onExit,
 }: XTermContainerProps) {
+  const shouldFit = isActive ?? true;
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const fitFrameRef = useRef<number | null>(null);
+  const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSizeRef = useRef<string | null>(null);
+  const shouldFitRef = useRef(shouldFit);
   const [terminal, setTerminal] = useState<Terminal | null>(null);
+  const [ready, setReady] = useState(false);
   const { spawn, resize } = usePty(terminal, onExit);
   const spawnedRef = useRef(false);
   const { theme } = useTheme();
@@ -78,6 +88,87 @@ export function XTermContainer({
     theme === "dark" ||
     (theme === "system" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  useEffect(() => {
+    shouldFitRef.current = shouldFit;
+  }, [shouldFit]);
+
+  const cancelScheduledFit = useCallback(() => {
+    if (fitFrameRef.current !== null) {
+      cancelAnimationFrame(fitFrameRef.current);
+      fitFrameRef.current = null;
+    }
+    if (readyTimerRef.current) {
+      clearTimeout(readyTimerRef.current);
+      readyTimerRef.current = null;
+    }
+  }, []);
+
+  const fitTerminal = useCallback(
+    (syncPty: boolean) => {
+      const element = containerRef.current;
+      const term = terminalRef.current;
+      const fitAddon = fitAddonRef.current;
+
+      if (!shouldFitRef.current || !element || !term || !fitAddon) return false;
+      if (element.clientWidth === 0 || element.clientHeight === 0) return false;
+
+      try {
+        fitAddon.fit();
+      } catch {
+        return false;
+      }
+
+      if (term.cols === 0 || term.rows === 0) return false;
+
+      term.refresh(0, Math.max(term.rows - 1, 0));
+
+      const sizeKey = `${element.clientWidth}x${element.clientHeight}:${term.cols}x${term.rows}`;
+
+      if (spawnedRef.current) {
+        if (syncPty && lastSizeRef.current !== sizeKey) {
+          lastSizeRef.current = sizeKey;
+          resize(term.cols, term.rows).catch(console.error);
+        }
+        return true;
+      }
+
+      lastSizeRef.current = sizeKey;
+      if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
+      readyTimerRef.current = setTimeout(() => {
+        const liveElement = containerRef.current;
+        const liveTerminal = terminalRef.current;
+
+        if (!shouldFitRef.current || !liveElement || !liveTerminal) return;
+
+        const stableSizeKey = `${liveElement.clientWidth}x${liveElement.clientHeight}:${liveTerminal.cols}x${liveTerminal.rows}`;
+        if (stableSizeKey === sizeKey) {
+          setReady(true);
+        }
+      }, 80);
+
+      return true;
+    },
+    [resize],
+  );
+
+  const scheduleFit = useCallback(
+    (syncPty: boolean, attempts = 8) => {
+      cancelScheduledFit();
+
+      const run = (remainingAttempts: number) => {
+        fitFrameRef.current = requestAnimationFrame(() => {
+          fitFrameRef.current = null;
+
+          if (fitTerminal(syncPty)) return;
+          if (remainingAttempts > 0) run(remainingAttempts - 1);
+        });
+      };
+
+      run(attempts);
+    },
+    [cancelScheduledFit, fitTerminal],
+  );
 
   // Initialize xterm.js
   useEffect(() => {
@@ -107,54 +198,36 @@ export function XTermContainer({
       // Canvas renderer fallback
     }
 
-    // Use requestAnimationFrame to ensure layout is settled before first fit
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-    });
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
     setTerminal(term);
+    scheduleFit(false);
 
     // Debounced resize to avoid rapid pty_resize calls during panel drags
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const observer = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        try {
-          fitAddon.fit();
-        } catch {
-          // Terminal may not be visible
-        }
+        scheduleFit(true, 2);
       }, 50);
     });
     observer.observe(containerRef.current);
 
-    // Re-fit when terminal becomes visible (e.g., session switch)
-    const visibilityObserver = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          requestAnimationFrame(() => {
-            try {
-              fitAddon.fit();
-            } catch {
-              // ignore
-            }
-          });
-        }
-      },
-      { threshold: 0.1 },
-    );
-    visibilityObserver.observe(containerRef.current);
+    if ("fonts" in document) {
+      document.fonts.ready.then(() => {
+        scheduleFit(true);
+      });
+    }
 
     return () => {
+      cancelScheduledFit();
       if (resizeTimer) clearTimeout(resizeTimer);
       observer.disconnect();
-      visibilityObserver.disconnect();
       term.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, []);
+  }, [cancelScheduledFit, scheduleFit]);
 
   // Update theme dynamically
   useEffect(() => {
@@ -163,26 +236,34 @@ export function XTermContainer({
     }
   }, [isDark]);
 
-  // Spawn PTY when terminal is ready
+  // Hidden focused sessions are mounted with display:none, so we wait until
+  // the terminal is actually visible and measured before first spawn.
   useEffect(() => {
-    if (!terminal || spawnedRef.current) return;
+    if (!terminal || !shouldFit) return;
+    scheduleFit(true);
+  }, [terminal, shouldFit, scheduleFit]);
+
+  // Spawn PTY only after terminal is fitted with correct dimensions
+  useEffect(() => {
+    if (!terminal || !ready || spawnedRef.current) return;
     spawnedRef.current = true;
 
     const doSpawn = async () => {
       try {
-        await spawn({
+        const ptyId = await spawn({
           command,
           args,
           cwd: cwd ?? undefined,
           cols: terminal.cols,
           rows: terminal.rows,
         });
+        onSpawn?.(ptyId);
       } catch (err) {
         terminal.write(`\r\nError: ${err}\r\n`);
       }
     };
     doSpawn();
-  }, [terminal, command, args, cwd, spawn]);
+  }, [terminal, ready, command, args, cwd, spawn, onSpawn]);
 
   // Forward resize events to PTY
   useEffect(() => {

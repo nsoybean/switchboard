@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { Titlebar } from "./Titlebar";
@@ -34,6 +34,7 @@ export function AppLayout() {
   const [gitPanelOpen, setGitPanelOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const sessionsRef = useRef(state.sessions);
 
   const sessions = Object.values(state.sessions);
   const sortedSessionIds = useMemo(
@@ -51,6 +52,10 @@ export function AppLayout() {
     : null;
 
   const aliveSessionIds = new Set(sortedSessionIds.slice(0, MAX_ALIVE_TERMINALS));
+
+  useEffect(() => {
+    sessionsRef.current = state.sessions;
+  }, [state.sessions]);
 
   const persistSession = useCallback(async (session: Session) => {
     try {
@@ -134,7 +139,7 @@ export function AppLayout() {
   );
 
   const handleResumeSession = useCallback(
-    (sessionId: string, projectPath: string) => {
+    (sessionId: string, projectPath: string, label: string) => {
       if (state.sessions[sessionId]) {
         dispatch({ type: "SET_ACTIVE", id: sessionId });
         return;
@@ -143,7 +148,7 @@ export function AppLayout() {
       const session: Session = {
         id: sessionId,
         agent: "claude-code",
-        label: `resumed-${sessionId.slice(0, 8)}`,
+        label,
         status: "running",
         ptyId: null,
         worktreePath: null,
@@ -162,8 +167,14 @@ export function AppLayout() {
 
   const handleSessionExit = useCallback(
     (sessionId: string) => (code: number | null) => {
+      const currentStatus = sessionsRef.current[sessionId]?.status;
       const status: SessionStatus =
-        code === 0 || code === null ? "done" : "error";
+        currentStatus === "stopped"
+          ? "stopped"
+          : code === 0 || code === null
+            ? "done"
+            : "error";
+      dispatch({ type: "SET_PTY_ID", id: sessionId, ptyId: null });
       dispatch({
         type: "UPDATE_STATUS",
         id: sessionId,
@@ -172,6 +183,82 @@ export function AppLayout() {
       });
     },
     [dispatch],
+  );
+
+  const handleSessionSpawn = useCallback(
+    (sessionId: string, ptyId: number) => {
+      dispatch({ type: "SET_PTY_ID", id: sessionId, ptyId });
+    },
+    [dispatch],
+  );
+
+  const handleStopSession = useCallback(
+    async (sessionId: string) => {
+      const session = sessionsRef.current[sessionId];
+      if (!session || session.ptyId === null) return;
+
+      try {
+        await invoke("pty_kill", { id: session.ptyId });
+        dispatch({ type: "SET_PTY_ID", id: sessionId, ptyId: null });
+        dispatch({
+          type: "UPDATE_STATUS",
+          id: sessionId,
+          status: "stopped",
+          exitCode: session.exitCode,
+        });
+      } catch (err) {
+        toast.error("Failed to stop session", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch],
+  );
+
+  const handleRenameSession = useCallback(
+    async (sessionId: string, label: string) => {
+      const session = state.sessions[sessionId];
+      if (!session) return;
+
+      const nextLabel = label.trim();
+      if (!nextLabel || nextLabel === session.label) return;
+
+      const updatedSession: Session = { ...session, label: nextLabel };
+
+      try {
+        await persistSession(updatedSession);
+        dispatch({ type: "RENAME_SESSION", id: sessionId, label: nextLabel });
+      } catch (err) {
+        toast.error("Failed to rename session", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch, persistSession, state.sessions],
+  );
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: string) => {
+      const session = state.sessions[sessionId];
+      if (!session) return;
+
+      if (session.ptyId !== null) {
+        await invoke("pty_kill", { id: session.ptyId }).catch((err) => {
+          console.warn("Failed to kill PTY during session deletion:", err);
+        });
+      }
+
+      try {
+        await invoke("delete_session", { id: sessionId });
+        dispatch({ type: "REMOVE_SESSION", id: sessionId });
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      } catch (err) {
+        toast.error("Failed to delete session", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch, state.sessions],
   );
 
   const shortcutHandlers = useMemo(
@@ -252,6 +339,9 @@ export function AppLayout() {
               <SessionSidebar
                 onNewSession={() => setDialogOpen(true)}
                 onResumeSession={handleResumeSession}
+                onStopSession={handleStopSession}
+                onRenameSession={handleRenameSession}
+                onDeleteSession={handleDeleteSession}
               />
             </ResizablePanel>
             <ResizableHandle />
@@ -263,6 +353,7 @@ export function AppLayout() {
           <div className="flex flex-col h-full min-w-0 overflow-hidden">
             <TerminalToolbar
               session={activeSession}
+              onStopSession={handleStopSession}
               gitPanelOpen={gitPanelOpen}
               onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
             />
@@ -309,6 +400,7 @@ export function AppLayout() {
                     dispatch({ type: "SET_ACTIVE", id });
                     dispatch({ type: "SET_VIEW_MODE", mode: "focused" });
                   }}
+                  onSessionSpawn={handleSessionSpawn}
                   onSessionExit={handleSessionExit}
                 />
               ) : (
@@ -326,6 +418,8 @@ export function AppLayout() {
                         command={session.command}
                         args={session.args}
                         cwd={session.cwd}
+                        isActive={isActive}
+                        onSpawn={(ptyId) => handleSessionSpawn(session.id, ptyId)}
                         onExit={handleSessionExit(session.id)}
                       />
                     </div>
