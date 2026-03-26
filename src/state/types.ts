@@ -33,8 +33,9 @@ export type AppAction =
   | { type: "ADD_SESSION"; session: Session }
   | { type: "REMOVE_SESSION"; id: string }
   | { type: "SET_ACTIVE"; id: string | null }
+  | { type: "RENAME_SESSION"; id: string; label: string }
   | { type: "UPDATE_STATUS"; id: string; status: SessionStatus; exitCode?: number | null }
-  | { type: "SET_PTY_ID"; id: string; ptyId: number }
+  | { type: "SET_PTY_ID"; id: string; ptyId: number | null }
   | { type: "TOGGLE_GIT_PANEL" }
   | { type: "SET_PROJECT_PATH"; path: string | null }
   | { type: "SET_VIEW_MODE"; mode: "focused" | "scroll" }

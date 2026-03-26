@@ -14,12 +14,14 @@ const AGENT_LABELS: Record<string, string> = {
 interface ScrollViewProps {
   sessions: Session[];
   onSessionClick: (id: string) => void;
+  onSessionSpawn: (id: string, ptyId: number) => void;
   onSessionExit: (id: string) => (code: number | null) => void;
 }
 
 export function ScrollView({
   sessions,
   onSessionClick,
+  onSessionSpawn,
   onSessionExit,
 }: ScrollViewProps) {
   if (sessions.length === 0) {
@@ -71,6 +73,7 @@ export function ScrollView({
                   command={session.command}
                   args={session.args}
                   cwd={session.cwd}
+                  onSpawn={(ptyId) => onSessionSpawn(session.id, ptyId)}
                   onExit={onSessionExit(session.id)}
                 />
               </div>

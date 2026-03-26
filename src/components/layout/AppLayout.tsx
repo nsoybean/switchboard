@@ -164,6 +164,7 @@ export function AppLayout() {
     (sessionId: string) => (code: number | null) => {
       const status: SessionStatus =
         code === 0 || code === null ? "done" : "error";
+      dispatch({ type: "SET_PTY_ID", id: sessionId, ptyId: null });
       dispatch({
         type: "UPDATE_STATUS",
         id: sessionId,
@@ -172,6 +173,59 @@ export function AppLayout() {
       });
     },
     [dispatch],
+  );
+
+  const handleSessionSpawn = useCallback(
+    (sessionId: string, ptyId: number) => {
+      dispatch({ type: "SET_PTY_ID", id: sessionId, ptyId });
+    },
+    [dispatch],
+  );
+
+  const handleRenameSession = useCallback(
+    async (sessionId: string, label: string) => {
+      const session = state.sessions[sessionId];
+      if (!session) return;
+
+      const nextLabel = label.trim();
+      if (!nextLabel || nextLabel === session.label) return;
+
+      const updatedSession: Session = { ...session, label: nextLabel };
+
+      try {
+        await persistSession(updatedSession);
+        dispatch({ type: "RENAME_SESSION", id: sessionId, label: nextLabel });
+      } catch (err) {
+        toast.error("Failed to rename session", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch, persistSession, state.sessions],
+  );
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: string) => {
+      const session = state.sessions[sessionId];
+      if (!session) return;
+
+      if (session.ptyId !== null) {
+        await invoke("pty_kill", { id: session.ptyId }).catch((err) => {
+          console.warn("Failed to kill PTY during session deletion:", err);
+        });
+      }
+
+      try {
+        await invoke("delete_session", { id: sessionId });
+        dispatch({ type: "REMOVE_SESSION", id: sessionId });
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      } catch (err) {
+        toast.error("Failed to delete session", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch, state.sessions],
   );
 
   const shortcutHandlers = useMemo(
@@ -252,6 +306,8 @@ export function AppLayout() {
               <SessionSidebar
                 onNewSession={() => setDialogOpen(true)}
                 onResumeSession={handleResumeSession}
+                onRenameSession={handleRenameSession}
+                onDeleteSession={handleDeleteSession}
               />
             </ResizablePanel>
             <ResizableHandle />
@@ -309,6 +365,7 @@ export function AppLayout() {
                     dispatch({ type: "SET_ACTIVE", id });
                     dispatch({ type: "SET_VIEW_MODE", mode: "focused" });
                   }}
+                  onSessionSpawn={handleSessionSpawn}
                   onSessionExit={handleSessionExit}
                 />
               ) : (
@@ -326,6 +383,8 @@ export function AppLayout() {
                         command={session.command}
                         args={session.args}
                         cwd={session.cwd}
+                        isActive={isActive}
+                        onSpawn={(ptyId) => handleSessionSpawn(session.id, ptyId)}
                         onExit={handleSessionExit(session.id)}
                       />
                     </div>

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Plus } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { useClaudeSessions } from "../../hooks/useSessions";
@@ -12,15 +14,22 @@ import type { Session } from "../../state/types";
 interface SessionSidebarProps {
   onNewSession: () => void;
   onResumeSession?: (sessionId: string, projectPath: string) => void;
+  onRenameSession?: (sessionId: string, label: string) => Promise<void>;
+  onDeleteSession?: (sessionId: string) => Promise<void>;
 }
 
 export function SessionSidebar({
   onNewSession,
   onResumeSession,
+  onRenameSession,
+  onDeleteSession,
 }: SessionSidebarProps) {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [activeTab, setActiveTab] = useState<"sessions" | "files">("sessions");
+  const [renameTarget, setRenameTarget] = useState<Session | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
 
   const { sessions: claudeSessions, loading } =
     useClaudeSessions(state.projectPath);
@@ -34,6 +43,23 @@ export function SessionSidebar({
   const pastSessions = claudeSessions.filter(
     (cs) => !activeSessionIds.has(cs.session_id),
   );
+
+  const closeRenameDialog = () => {
+    setRenameTarget(null);
+    setRenameValue("");
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renameTarget || !onRenameSession) return;
+    await onRenameSession(renameTarget.id, renameValue);
+    closeRenameDialog();
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget || !onDeleteSession) return;
+    await onDeleteSession(deleteTarget.id);
+    setDeleteTarget(null);
+  };
 
   return (
     <div className="flex flex-col h-full w-full bg-card overflow-hidden">
@@ -91,6 +117,11 @@ export function SessionSidebar({
               key={session.id}
               session={session}
               isActive={state.activeSessionId === session.id}
+              onRename={() => {
+                setRenameTarget(session);
+                setRenameValue(session.label);
+              }}
+              onDelete={() => setDeleteTarget(session)}
               onClick={() => {
                 dispatch({ type: "SET_ACTIVE", id: session.id });
                 dispatch({ type: "SET_PREVIEW_FILE", path: null });
@@ -158,6 +189,67 @@ export function SessionSidebar({
         </div>
       </div>
       )}
+
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && closeRenameDialog()}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>Rename Session</DialogTitle>
+            <DialogDescription>
+              Update the label shown in the session list and toolbar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Session Label
+            </label>
+            <Input
+              autoFocus
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void handleRenameSubmit();
+                }
+              }}
+              placeholder="e.g. auth-refactor"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeRenameDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleRenameSubmit()}
+              disabled={!renameValue.trim() || renameValue.trim() === renameTarget?.label}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>Delete Session</DialogTitle>
+            <DialogDescription>
+              This removes the session from Switchboard and stops its terminal process if it is still running.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-foreground">
+            Delete <span className="font-medium">{deleteTarget?.label}</span>?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void handleDeleteConfirm()}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

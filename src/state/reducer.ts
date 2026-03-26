@@ -43,6 +43,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "RENAME_SESSION": {
+      const session = state.sessions[action.id];
+      if (!session) return state;
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [action.id]: { ...session, label: action.label },
+        },
+      };
+    }
+
     case "UPDATE_STATUS": {
       const session = state.sessions[action.id];
       if (!session) return state;

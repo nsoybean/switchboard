@@ -58,6 +58,7 @@ interface XTermContainerProps {
   args?: string[];
   cwd?: string;
   isActive?: boolean;
+  onSpawn?: (ptyId: number) => void;
   onExit?: (code: number | null) => void;
 }
 
@@ -66,6 +67,7 @@ export function XTermContainer({
   args = [],
   cwd,
   isActive,
+  onSpawn,
   onExit,
 }: XTermContainerProps) {
   const shouldFit = isActive ?? true;
@@ -248,19 +250,20 @@ export function XTermContainer({
 
     const doSpawn = async () => {
       try {
-        await spawn({
+        const ptyId = await spawn({
           command,
           args,
           cwd: cwd ?? undefined,
           cols: terminal.cols,
           rows: terminal.rows,
         });
+        onSpawn?.(ptyId);
       } catch (err) {
         terminal.write(`\r\nError: ${err}\r\n`);
       }
     };
     doSpawn();
-  }, [terminal, ready, command, args, cwd, spawn]);
+  }, [terminal, ready, command, args, cwd, spawn, onSpawn]);
 
   // Forward resize events to PTY
   useEffect(() => {
