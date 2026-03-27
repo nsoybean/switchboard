@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import type { AgentType } from "../../state/types";
 import { gitCommands, type GitBranchInfo } from "../../lib/tauri-commands";
 
@@ -46,6 +46,12 @@ const AGENTS: { id: AgentType; name: string }[] = [
   { id: "bash", name: "Bash" },
 ];
 
+function getBranchPrefix(agent: AgentType): string {
+  if (agent === "codex") return "codex/";
+  if (agent === "claude-code") return "claude/";
+  return "";
+}
+
 export function NewSessionDialog({
   open,
   projectPath,
@@ -57,10 +63,14 @@ export function NewSessionDialog({
   const [task, setTask] = useState("");
   const [useWorktree, setUseWorktree] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
+  const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [branches, setBranches] = useState<GitBranchInfo[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [baseBranch, setBaseBranch] = useState("");
   const [branchQuery, setBranchQuery] = useState("");
+  const [newBranchName, setNewBranchName] = useState(getBranchPrefix("claude-code"));
+  const [createBranchPending, setCreateBranchPending] = useState(false);
+  const defaultBranchPrefix = getBranchPrefix(agent);
 
   useEffect(() => {
     if (!open || !projectPath || !useWorktree) {
@@ -115,6 +125,12 @@ export function NewSessionDialog({
     }
   }, [branchMenuOpen]);
 
+  useEffect(() => {
+    if (!createBranchOpen) {
+      setNewBranchName(defaultBranchPrefix);
+    }
+  }, [createBranchOpen, defaultBranchPrefix]);
+
   const normalizedBranchQuery = branchQuery.trim().toLowerCase();
   const localBranches = branches.filter(
     (branch) =>
@@ -126,6 +142,55 @@ export function NewSessionDialog({
   );
   const selectedBranch = branches.find((branch) => branch.name === baseBranch);
   const disableSubmit = useWorktree && (branchesLoading || !baseBranch);
+
+  const refreshBranches = async (nextSelectedBranch?: string) => {
+    if (!projectPath) return;
+
+    const nextBranches = await gitCommands.listBranches(projectPath);
+    setBranches(nextBranches);
+    setBaseBranch((currentValue) => {
+      if (
+        nextSelectedBranch &&
+        nextBranches.some((branch) => branch.name === nextSelectedBranch)
+      ) {
+        return nextSelectedBranch;
+      }
+
+      if (
+        currentValue &&
+        nextBranches.some((branch) => branch.name === currentValue)
+      ) {
+        return currentValue;
+      }
+
+      return (
+        nextBranches.find((branch) => branch.is_current)?.name ??
+        nextBranches[0]?.name ??
+        ""
+      );
+    });
+  };
+
+  const handleCreateBranch = async () => {
+    if (!projectPath) return;
+    const branchName = newBranchName.trim();
+    if (!branchName || branchName.endsWith("/")) return;
+
+    try {
+      setCreateBranchPending(true);
+      await gitCommands.createBranch(projectPath, branchName);
+      await refreshBranches(branchName);
+      setCreateBranchOpen(false);
+      setBranchMenuOpen(false);
+      setNewBranchName(defaultBranchPrefix);
+    } catch (error) {
+      toast.error("Failed to create branch", {
+        description: String(error),
+      });
+    } finally {
+      setCreateBranchPending(false);
+    }
+  };
 
   const handleSubmit = () => {
     onSubmit({
@@ -319,6 +384,19 @@ export function NewSessionDialog({
                             )}
                           </div>
                         </ScrollArea>
+                        <DropdownMenuSeparator className="my-0" />
+                        <div className="p-1">
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setBranchMenuOpen(false);
+                              setCreateBranchOpen(true);
+                            }}
+                            className="px-2 py-1.5 text-xs font-medium"
+                          >
+                            <PlusIcon />
+                            Create and checkout new branch...
+                          </DropdownMenuItem>
+                        </div>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )}
@@ -338,6 +416,71 @@ export function NewSessionDialog({
           </div>
         </div>
       </DialogContent>
+
+      <Dialog open={createBranchOpen} onOpenChange={setCreateBranchOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Create and checkout branch</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Branch name
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNewBranchName((currentValue) => {
+                      const trimmed = currentValue.trim();
+                      if (!defaultBranchPrefix) return trimmed;
+                      if (!trimmed) return defaultBranchPrefix;
+                      return trimmed.startsWith(defaultBranchPrefix)
+                        ? trimmed
+                        : `${defaultBranchPrefix}${trimmed}`;
+                    })
+                  }
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Set prefix
+                </button>
+              </div>
+              <Input
+                value={newBranchName}
+                onChange={(e) => setNewBranchName(e.target.value)}
+                placeholder={defaultBranchPrefix ? `${defaultBranchPrefix}my-branch` : "my-branch"}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void handleCreateBranch();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setCreateBranchOpen(false)}
+                disabled={createBranchPending}
+              >
+                Close
+              </Button>
+              <Button
+                onClick={() => void handleCreateBranch()}
+                disabled={
+                  createBranchPending ||
+                  !newBranchName.trim() ||
+                  newBranchName.trim().endsWith("/")
+                }
+              >
+                Create and checkout
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
