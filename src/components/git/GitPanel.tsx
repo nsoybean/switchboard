@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Minus, Undo2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getBranchPrefix } from "@/lib/branches";
 import {
   fileCommands,
   gitCommands,
   type ChangedFile,
   type DiffStats,
+  type GitBranchInfo,
 } from "../../lib/tauri-commands";
 import { GitToolbar } from "./GitToolbar";
 import { DiffView } from "./DiffView";
@@ -18,16 +20,27 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { Session } from "../../state/types";
 
 interface GitPanelProps {
   cwd: string;
   visible: boolean;
+  session?: Session | null;
   githubToken?: string | null;
   onOpenSettings?: () => void;
+  onSessionBranchChange?: (sessionId: string, branch: string | null) => Promise<void> | void;
 }
 
-export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanelProps) {
+export function GitPanel({
+  cwd,
+  visible,
+  session,
+  githubToken,
+  onOpenSettings,
+  onSessionBranchChange,
+}: GitPanelProps) {
   const [branch, setBranch] = useState("");
+  const [branches, setBranches] = useState<GitBranchInfo[]>([]);
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [stats, setStats] = useState<DiffStats>({ additions: 0, deletions: 0, files_changed: 0 });
   const [activeTab, setActiveTab] = useState("unstaged");
@@ -35,34 +48,51 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
   const [error, setError] = useState<string | null>(null);
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [fileDiff, setFileDiff] = useState<string>("");
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchActionPending, setBranchActionPending] = useState(false);
 
   const showStaged = activeTab === "staged";
 
   useEffect(() => {
     setBranch("");
+    setBranches([]);
     setFiles([]);
     setStats({ additions: 0, deletions: 0, files_changed: 0 });
     setActiveTab("unstaged");
     setError(null);
     setExpandedFile(null);
     setFileDiff("");
+    setBranchesLoading(true);
     setLoading(true);
   }, [cwd]);
 
   const refresh = useCallback(async () => {
+    const shouldShowBranchLoading = branches.length === 0;
+
     try {
       setLoading(true);
+      if (shouldShowBranchLoading) {
+        setBranchesLoading(true);
+      }
       setError(null);
       const status = await gitCommands.status(cwd);
+      const nextBranches = await gitCommands.listBranches(cwd).catch(() => []);
       setBranch(status.branch);
+      setBranches(nextBranches);
       setFiles(status.files);
       setStats(status.stats);
+      return status;
     } catch (err) {
+      setBranches([]);
       setError(String(err));
+      return null;
     } finally {
+      if (shouldShowBranchLoading) {
+        setBranchesLoading(false);
+      }
       setLoading(false);
     }
-  }, [cwd]);
+  }, [branches.length, cwd]);
 
   useEffect(() => {
     if (!visible) return;
@@ -174,6 +204,54 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
     );
   };
 
+  const handleSwitchBranch = async (branchName: string) => {
+    if (branchName === branch || branchActionPending) return;
+
+    setBranchActionPending(true);
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.checkoutBranch(cwd, branchName);
+          const status = await refresh();
+          if (session?.id) {
+            await onSessionBranchChange?.(session.id, status?.branch ?? branchName);
+          }
+        })(),
+        {
+          loading: `Switching to ${branchName}...`,
+          success: `Switched to ${branchName}`,
+          error: (err) => `Failed to switch branch: ${String(err)}`,
+        },
+      );
+    } finally {
+      setBranchActionPending(false);
+    }
+  };
+
+  const handleCreateBranch = async (branchName: string) => {
+    if (branchActionPending) return;
+
+    setBranchActionPending(true);
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.createBranch(cwd, branchName);
+          const status = await refresh();
+          if (session?.id) {
+            await onSessionBranchChange?.(session.id, status?.branch ?? branchName);
+          }
+        })(),
+        {
+          loading: `Creating ${branchName}...`,
+          success: `Created and checked out ${branchName}`,
+          error: (err) => `Failed to create branch: ${String(err)}`,
+        },
+      );
+    } finally {
+      setBranchActionPending(false);
+    }
+  };
+
   if (!visible) return null;
 
   const filteredFiles = showStaged
@@ -192,10 +270,17 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
     <div className="flex flex-col h-full overflow-hidden">
       <GitToolbar
         branch={branch}
+        branches={branches}
+        branchesLoading={branchesLoading && branches.length === 0}
+        branchActionsEnabled={Boolean(session)}
+        branchActionPending={branchActionPending}
+        branchPrefix={session ? getBranchPrefix(session.agent) : undefined}
         stats={stats}
         cwd={cwd}
         githubToken={githubToken ?? null}
         onCommit={handleCommit}
+        onSwitchBranch={handleSwitchBranch}
+        onCreateBranch={handleCreateBranch}
         onStageAll={handleStageAll}
         onPush={handlePush}
         onRefresh={refresh}

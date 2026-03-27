@@ -11,19 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { ChevronDownIcon, PlusIcon } from "lucide-react";
+import { BranchPicker } from "@/components/git/BranchPicker";
+import { CreateBranchDialog } from "@/components/git/CreateBranchDialog";
+import { getBranchPrefix } from "@/lib/branches";
 import type { AgentType } from "../../state/types";
 import { gitCommands, type GitBranchInfo } from "../../lib/tauri-commands";
 
@@ -46,12 +37,6 @@ const AGENTS: { id: AgentType; name: string }[] = [
   { id: "bash", name: "Bash" },
 ];
 
-function getBranchPrefix(agent: AgentType): string {
-  if (agent === "codex") return "codex/";
-  if (agent === "claude-code") return "claude/";
-  return "";
-}
-
 export function NewSessionDialog({
   open,
   projectPath,
@@ -62,13 +47,10 @@ export function NewSessionDialog({
   const [label, setLabel] = useState("");
   const [task, setTask] = useState("");
   const [useWorktree, setUseWorktree] = useState(false);
-  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [branches, setBranches] = useState<GitBranchInfo[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [baseBranch, setBaseBranch] = useState("");
-  const [branchQuery, setBranchQuery] = useState("");
-  const [newBranchName, setNewBranchName] = useState(getBranchPrefix("claude-code"));
   const [createBranchPending, setCreateBranchPending] = useState(false);
   const defaultBranchPrefix = getBranchPrefix(agent);
 
@@ -119,28 +101,6 @@ export function NewSessionDialog({
     };
   }, [open, projectPath, useWorktree]);
 
-  useEffect(() => {
-    if (!branchMenuOpen) {
-      setBranchQuery("");
-    }
-  }, [branchMenuOpen]);
-
-  useEffect(() => {
-    if (!createBranchOpen) {
-      setNewBranchName(defaultBranchPrefix);
-    }
-  }, [createBranchOpen, defaultBranchPrefix]);
-
-  const normalizedBranchQuery = branchQuery.trim().toLowerCase();
-  const localBranches = branches.filter(
-    (branch) =>
-      (normalizedBranchQuery.length === 0 ||
-        branch.name.toLowerCase().includes(normalizedBranchQuery)),
-  );
-  const branchSections = [{ title: "Branches", branches: localBranches }].filter(
-    (section) => section.branches.length > 0,
-  );
-  const selectedBranch = branches.find((branch) => branch.name === baseBranch);
   const disableSubmit = useWorktree && (branchesLoading || !baseBranch);
 
   const refreshBranches = async (nextSelectedBranch?: string) => {
@@ -171,18 +131,14 @@ export function NewSessionDialog({
     });
   };
 
-  const handleCreateBranch = async () => {
+  const handleCreateBranch = async (branchName: string) => {
     if (!projectPath) return;
-    const branchName = newBranchName.trim();
-    if (!branchName || branchName.endsWith("/")) return;
 
     try {
       setCreateBranchPending(true);
       await gitCommands.createBranch(projectPath, branchName);
       await refreshBranches(branchName);
       setCreateBranchOpen(false);
-      setBranchMenuOpen(false);
-      setNewBranchName(defaultBranchPrefix);
     } catch (error) {
       toast.error("Failed to create branch", {
         description: String(error),
@@ -296,109 +252,19 @@ export function NewSessionDialog({
                     From Branch
                   </label>
                   {branchesLoading ? (
-                    <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
-                      Loading branches...
-                    </div>
-                  ) : branches.length === 0 ? (
-                    <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
-                      No branches available.
-                    </div>
+                    <BranchPicker
+                      branches={branches}
+                      loading
+                      value={baseBranch}
+                      onSelect={setBaseBranch}
+                    />
                   ) : (
-                    <DropdownMenu
-                      open={branchMenuOpen}
-                      onOpenChange={setBranchMenuOpen}
-                    >
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-10 w-full justify-between px-3 text-sm font-normal"
-                        >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <span className="truncate">
-                              {selectedBranch?.name ?? baseBranch}
-                            </span>
-                            {selectedBranch?.is_current ? (
-                              <Badge
-                                variant="outline"
-                                className="shrink-0 text-[10px]"
-                              >
-                                current
-                              </Badge>
-                            ) : null}
-                          </span>
-                          <ChevronDownIcon />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] p-0">
-                        <div className="border-b p-1">
-                          <Input
-                            value={branchQuery}
-                            onChange={(e) => setBranchQuery(e.target.value)}
-                            onKeyDown={(e) => e.stopPropagation()}
-                            placeholder="Search branches..."
-                            className="h-8 w-full border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
-                          />
-                        </div>
-                        <ScrollArea className="h-48">
-                          <div className="flex flex-col p-1">
-                            {branchSections.length > 0 ? (
-                              branchSections.map((section, sectionIndex) => (
-                                <div key={section.title} className="flex flex-col">
-                                  <DropdownMenuLabel className="text-[11px] uppercase tracking-wider">
-                                    {section.title}
-                                  </DropdownMenuLabel>
-                                  {section.branches.map((branch) => (
-                                    <DropdownMenuItem
-                                      key={branch.name}
-                                      onSelect={() => {
-                                        setBaseBranch(branch.name);
-                                        setBranchMenuOpen(false);
-                                      }}
-                                      className={cn(
-                                        "flex items-center justify-between gap-3 px-2 py-2 text-sm",
-                                        baseBranch === branch.name &&
-                                          "bg-muted text-foreground",
-                                      )}
-                                    >
-                                      <span className="truncate">{branch.name}</span>
-                                      {branch.is_current ? (
-                                        <Badge
-                                          variant="outline"
-                                          className="shrink-0 text-[10px]"
-                                        >
-                                          current
-                                        </Badge>
-                                      ) : null}
-                                    </DropdownMenuItem>
-                                  ))}
-                                  {sectionIndex < branchSections.length - 1 ? (
-                                    <DropdownMenuSeparator />
-                                  ) : null}
-                                </div>
-                              ))
-                            ) : (
-                              <div className="px-2 py-3 text-sm text-muted-foreground">
-                                No matching branches.
-                              </div>
-                            )}
-                          </div>
-                        </ScrollArea>
-                        <DropdownMenuSeparator className="my-0" />
-                        <div className="p-1">
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setBranchMenuOpen(false);
-                              setCreateBranchOpen(true);
-                            }}
-                            className="px-2 py-1.5 text-xs font-medium"
-                          >
-                            <PlusIcon />
-                            Create and checkout new branch...
-                          </DropdownMenuItem>
-                        </div>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <BranchPicker
+                      branches={branches}
+                      value={baseBranch}
+                      onSelect={setBaseBranch}
+                      onCreateBranch={() => setCreateBranchOpen(true)}
+                    />
                   )}
                 </div>
               </div>
@@ -417,70 +283,13 @@ export function NewSessionDialog({
         </div>
       </DialogContent>
 
-      <Dialog open={createBranchOpen} onOpenChange={setCreateBranchOpen}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>Create and checkout branch</DialogTitle>
-          </DialogHeader>
-
-          <div className="flex flex-col gap-4 pt-2">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Branch name
-                </label>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setNewBranchName((currentValue) => {
-                      const trimmed = currentValue.trim();
-                      if (!defaultBranchPrefix) return trimmed;
-                      if (!trimmed) return defaultBranchPrefix;
-                      return trimmed.startsWith(defaultBranchPrefix)
-                        ? trimmed
-                        : `${defaultBranchPrefix}${trimmed}`;
-                    })
-                  }
-                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Set prefix
-                </button>
-              </div>
-              <Input
-                value={newBranchName}
-                onChange={(e) => setNewBranchName(e.target.value)}
-                placeholder={defaultBranchPrefix ? `${defaultBranchPrefix}my-branch` : "my-branch"}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    void handleCreateBranch();
-                  }
-                }}
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setCreateBranchOpen(false)}
-                disabled={createBranchPending}
-              >
-                Close
-              </Button>
-              <Button
-                onClick={() => void handleCreateBranch()}
-                disabled={
-                  createBranchPending ||
-                  !newBranchName.trim() ||
-                  newBranchName.trim().endsWith("/")
-                }
-              >
-                Create and checkout
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CreateBranchDialog
+        open={createBranchOpen}
+        onOpenChange={setCreateBranchOpen}
+        defaultBranchPrefix={defaultBranchPrefix}
+        pending={createBranchPending}
+        onCreate={handleCreateBranch}
+      />
     </Dialog>
   );
 }

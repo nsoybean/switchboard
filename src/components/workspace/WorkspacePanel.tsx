@@ -2,6 +2,7 @@ import { FolderTree } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
+import type { Session } from "../../state/types";
 
 export type WorkspaceTab = "files" | "changes";
 
@@ -18,8 +19,10 @@ export interface WorkspaceContext {
 interface WorkspacePanelProps {
   activeTab: WorkspaceTab;
   context: WorkspaceContext | null;
+  session?: Session | null;
   githubToken?: string | null;
   onOpenSettings?: () => void;
+  onSessionBranchChange?: (sessionId: string, branch: string | null) => Promise<void> | void;
   onTabChange: (tab: WorkspaceTab) => void;
 }
 
@@ -46,8 +49,10 @@ function EmptyWorkspaceState({
 export function WorkspacePanel({
   activeTab,
   context,
+  session,
   githubToken,
   onOpenSettings,
+  onSessionBranchChange,
   onTabChange,
 }: WorkspacePanelProps) {
   if (!context) return null;
@@ -94,8 +99,10 @@ export function WorkspacePanel({
         key={`changes:${rootKey}`}
         cwd={context.rootPath}
         visible
+        session={context.kind === "session" ? session : null}
         githubToken={githubToken}
         onOpenSettings={onOpenSettings}
+        onSessionBranchChange={onSessionBranchChange}
       />
     );
   };

@@ -64,6 +64,7 @@ export type AppAction =
       status: SessionStatus;
       exitCode?: number | null;
     }
+  | { type: "SET_SESSION_BRANCH"; id: string; branch: string | null }
   | { type: "SET_PTY_ID"; id: string; ptyId: number | null }
   | { type: "SET_RESUME_TARGET"; id: string; resumeTargetId: string | null }
   | { type: "TOGGLE_GIT_PANEL" }

@@ -18,6 +18,7 @@ import {
 import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
+import { getBranchPrefix } from "../../lib/branches";
 import {
   fileCommands,
   projectCommands,
@@ -83,12 +84,6 @@ function slugifyLabel(label: string): string {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "untitled"
   );
-}
-
-function getBranchPrefix(agent: AgentType): string {
-  if (agent === "codex") return "codex/";
-  if (agent === "claude-code") return "claude/";
-  return "";
 }
 
 function getWorkspaceDisplayPath(path: string, repoRoot: string | null): string {
@@ -184,7 +179,12 @@ export function AppLayout() {
     sessionBelongsToProject(viewingSession, state.projectPath)
       ? viewingSession
       : null;
-  const selectedSession = viewingSessionInProject ?? activeSession;
+  const selectedSession = viewingSessionInProject
+    ? (state.sessions[viewingSessionInProject.id] ?? viewingSessionInProject)
+    : activeSession;
+  const selectedLiveSession = selectedSession
+    ? (state.sessions[selectedSession.id] ?? null)
+    : null;
   const selectedSessionId = viewingSessionInProject?.id ?? activeSession?.id ?? null;
   const projectLabel = state.projectPath
     ? (state.projectPath.split("/").pop() ?? "Project")
@@ -583,6 +583,27 @@ export function AppLayout() {
     [dispatch, persistSession, state.sessions, syncCodexResumeTarget],
   );
 
+  const handleSessionBranchChange = useCallback(
+    async (sessionId: string, branch: string | null) => {
+      const session = state.sessions[sessionId];
+      if (!session) return;
+
+      const updatedSession: Session = {
+        ...session,
+        branch,
+        workspace: {
+          ...session.workspace,
+          branchName: branch,
+          headKind: branch ? "branch" : "unknown",
+        },
+      };
+
+      dispatch({ type: "SET_SESSION_BRANCH", id: sessionId, branch });
+      await persistSession(updatedSession);
+    },
+    [dispatch, persistSession, state.sessions],
+  );
+
   const handleSessionExit = useCallback(
     (sessionId: string) => (code: number | null) => {
       const session = sessionsRef.current[sessionId];
@@ -968,8 +989,10 @@ export function AppLayout() {
                   <WorkspacePanel
                     activeTab={workspaceTab}
                     context={workspaceContext}
+                    session={selectedLiveSession}
                     githubToken={state.githubToken}
                     onOpenSettings={() => setSettingsOpen(true)}
+                    onSessionBranchChange={handleSessionBranchChange}
                     onTabChange={setWorkspaceTab}
                   />
                 </ResizablePanel>

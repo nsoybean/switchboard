@@ -72,6 +72,26 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "SET_SESSION_BRANCH": {
+      const session = state.sessions[action.id];
+      if (!session) return state;
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [action.id]: {
+            ...session,
+            branch: action.branch,
+            workspace: {
+              ...session.workspace,
+              branchName: action.branch,
+              headKind: action.branch ? "branch" : "unknown",
+            },
+          },
+        },
+      };
+    }
+
     case "SET_PTY_ID": {
       const session = state.sessions[action.id];
       if (!session) return state;

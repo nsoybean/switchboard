@@ -51,6 +51,7 @@ pub fn run() {
             commands::git::git_commit,
             commands::git::git_push,
             commands::git::git_create_branch,
+            commands::git::git_checkout_branch,
             commands::git::git_create_pr,
             commands::session::load_sessions,
             commands::session::save_session,

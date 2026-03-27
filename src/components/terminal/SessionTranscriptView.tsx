@@ -96,7 +96,7 @@ export function SessionTranscriptView({
         </Badge>
         <Badge variant="outline" className="text-[11px]">
           <Eye data-icon="inline-start" />
-          View
+          view only
         </Badge>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {onResume && (

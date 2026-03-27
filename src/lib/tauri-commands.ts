@@ -49,6 +49,8 @@ export const gitCommands = {
     invoke<string>("git_push", { cwd }),
   createBranch: (cwd: string, name: string) =>
     invoke<void>("git_create_branch", { cwd, name }),
+  checkoutBranch: (cwd: string, name: string) =>
+    invoke<void>("git_checkout_branch", { cwd, name }),
   createPr: (cwd: string, title: string, body: string, base: string, token: string) =>
     invoke<string>("git_create_pr", { cwd, title, body, base, token }),
 };

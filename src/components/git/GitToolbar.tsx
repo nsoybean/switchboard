@@ -18,15 +18,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { BranchPicker } from "./BranchPicker";
+import { CreateBranchDialog } from "./CreateBranchDialog";
 import { CreatePrDialog } from "./CreatePrDialog";
-import type { DiffStats } from "../../lib/tauri-commands";
+import type { DiffStats, GitBranchInfo } from "../../lib/tauri-commands";
 
 interface GitToolbarProps {
   branch: string;
+  branches: GitBranchInfo[];
+  branchesLoading: boolean;
+  branchActionsEnabled: boolean;
+  branchActionPending: boolean;
+  branchPrefix?: string;
   stats: DiffStats;
   cwd: string;
   githubToken: string | null;
   onCommit: (message: string) => Promise<void>;
+  onSwitchBranch: (branchName: string) => Promise<void>;
+  onCreateBranch: (branchName: string) => Promise<void>;
   onStageAll: () => Promise<void>;
   onPush: () => Promise<void>;
   onRefresh: () => void;
@@ -35,10 +44,17 @@ interface GitToolbarProps {
 
 export function GitToolbar({
   branch,
+  branches,
+  branchesLoading,
+  branchActionsEnabled,
+  branchActionPending,
+  branchPrefix,
   stats,
   cwd,
   githubToken,
   onCommit,
+  onSwitchBranch,
+  onCreateBranch,
   onStageAll,
   onPush,
   onRefresh,
@@ -47,6 +63,7 @@ export function GitToolbar({
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
   const [stageAllFirst, setStageAllFirst] = useState(true);
+  const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [prDialogOpen, setPrDialogOpen] = useState(false);
   const [commitPending, setCommitPending] = useState(false);
   const [pushPending, setPushPending] = useState(false);
@@ -96,10 +113,25 @@ export function GitToolbar({
     <div className="flex flex-col gap-2 p-3 border-b overflow-hidden">
       {/* Branch + stats */}
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
-          <GitBranch className="size-3 shrink-0" />
-          <span className="truncate">{branch || "\u2014"}</span>
-        </span>
+        {branchActionsEnabled ? (
+          <div className="min-w-0 max-w-full">
+            <BranchPicker
+              branches={branches}
+              loading={branchesLoading}
+              value={branch}
+              disabled={branchActionPending || commitPending || pushPending}
+              triggerClassName="h-7 min-w-[12rem] max-w-full justify-between gap-2 px-2 text-xs"
+              createLabel="Create and checkout new branch..."
+              onSelect={(branchName) => void onSwitchBranch(branchName)}
+              onCreateBranch={() => setCreateBranchOpen(true)}
+            />
+          </div>
+        ) : (
+          <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
+            <GitBranch className="size-3 shrink-0" />
+            <span className="truncate">{branch || "\u2014"}</span>
+          </span>
+        )}
         <span className="flex shrink-0 items-center gap-1.5 text-[11px]">
           <span className="text-[var(--sb-diff-add-fg)]">+{stats.additions}</span>
           <span className="text-[var(--sb-diff-del-fg)]">-{stats.deletions}</span>
@@ -114,7 +146,7 @@ export function GitToolbar({
             <Button
               size="sm"
               className="flex-1 text-xs"
-              disabled={commitPending || pushPending}
+              disabled={commitPending || pushPending || branchActionPending}
             >
               {commitPending || pushPending ? (
                 <>
@@ -132,7 +164,7 @@ export function GitToolbar({
                 Commit
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={pushPending || commitPending}
+                disabled={pushPending || commitPending || branchActionPending}
                 onSelect={handlePushSelect}
               >
                 Push
@@ -172,7 +204,12 @@ export function GitToolbar({
         </DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="outline" size="sm" onClick={onRefresh}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={branchActionPending || commitPending || pushPending}
+            >
               <RefreshCw data-icon="inline-start" />
             </Button>
           </TooltipTrigger>
@@ -237,6 +274,19 @@ export function GitToolbar({
           </div>
         </div>
       )}
+
+      {branchActionsEnabled ? (
+        <CreateBranchDialog
+          open={createBranchOpen}
+          onOpenChange={setCreateBranchOpen}
+          defaultBranchPrefix={branchPrefix}
+          pending={branchActionPending}
+          onCreate={async (branchName) => {
+            await onCreateBranch(branchName);
+            setCreateBranchOpen(false);
+          }}
+        />
+      ) : null}
 
       {/* Create PR dialog */}
       {githubToken && (

@@ -269,6 +269,13 @@ pub fn git_create_branch(cwd: String, name: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Switch to an existing branch
+#[tauri::command]
+pub fn git_checkout_branch(cwd: String, name: String) -> Result<(), String> {
+    run_git(&cwd, &["checkout", &name])?;
+    Ok(())
+}
+
 /// Create a PR via the GitHub API and return the PR URL.
 /// The token is passed from the frontend (read from config).
 #[tauri::command]
