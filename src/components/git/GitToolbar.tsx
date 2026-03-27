@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type MouseEvent, useState } from "react";
 import { flushSync } from "react-dom";
 import { GitBranch, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,7 +84,7 @@ export function GitToolbar({
     }
   };
 
-  const handlePushClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+  const handlePushClick = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     if (pushPending || commitPending) return;
 
@@ -132,15 +132,11 @@ export function GitToolbar({
               <DropdownMenuItem onSelect={() => setCommitOpen(true)}>
                 Commit
               </DropdownMenuItem>
-              <a
-                href="#"
-                className={pushPending || commitPending ? "pointer-events-none" : ""}
-                onClick={handlePushClick}
-              >
-                <DropdownMenuItem disabled={pushPending || commitPending}>
+              <DropdownMenuItem asChild disabled={pushPending || commitPending}>
+                <a href="#" onClick={handlePushClick}>
                   Push
-                </DropdownMenuItem>
-              </a>
+                </a>
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
