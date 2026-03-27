@@ -76,6 +76,8 @@ export function AppLayout() {
   const activeSession = state.activeSessionId
     ? state.sessions[state.activeSessionId]
     : null;
+  const selectedSession = viewingSession ?? activeSession;
+  const selectedSessionId = viewingSession?.id ?? state.activeSessionId;
 
   const aliveSessionIds = new Set(
     sortedSessionIds.slice(0, MAX_ALIVE_TERMINALS),
@@ -478,11 +480,19 @@ export function AppLayout() {
               <ResizablePanel defaultSize="20%" minSize="15%" maxSize="35%">
                 <SessionSidebar
                   onNewSession={() => setDialogOpen(true)}
-                  onViewSession={(session) => setViewingSession(session)}
+                  onViewSession={(session) => {
+                    dispatch({ type: "SET_PREVIEW_FILE", path: null });
+                    if (state.sessions[session.id]) {
+                      dispatch({ type: "SET_ACTIVE", id: session.id });
+                    }
+                    setViewingSession(session);
+                  }}
+                  onSelectActiveSession={() => setViewingSession(null)}
                   onResumeSession={handleResumeSession}
                   onStopSession={handleStopSession}
                   onRenameSession={handleRenameSession}
                   onDeleteSession={handleDeleteSession}
+                  selectedSessionId={selectedSessionId}
                 />
               </ResizablePanel>
               <ResizableHandle />
@@ -493,7 +503,7 @@ export function AppLayout() {
           <ResizablePanel defaultSize="55%">
             <div className="flex flex-col h-full min-w-0 overflow-hidden">
               <TerminalToolbar
-                session={viewingSession ? null : activeSession}
+                session={selectedSession}
                 onStopSession={handleStopSession}
                 gitPanelOpen={gitPanelOpen}
                 onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
@@ -576,6 +586,7 @@ export function AppLayout() {
                 {viewingSession && (
                   <div className="absolute inset-0 z-10">
                     <SessionTranscriptView
+                      key={`${viewingSession.agent}:${viewingSession.resumeTargetId ?? viewingSession.id}`}
                       session={viewingSession}
                       onClose={() => setViewingSession(null)}
                       onResume={() => {
@@ -609,7 +620,8 @@ export function AppLayout() {
                 <ResizableHandle />
                 <ResizablePanel defaultSize="25%" minSize="15%" maxSize="40%">
                   <GitPanel
-                    cwd={activeSession?.cwd ?? state.projectPath ?? ""}
+                    key={selectedSession?.cwd ?? state.projectPath ?? "project-root"}
+                    cwd={selectedSession?.cwd ?? state.projectPath ?? ""}
                     visible
                     githubToken={state.githubToken}
                     onOpenSettings={() => setSettingsOpen(true)}
