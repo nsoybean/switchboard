@@ -18,6 +18,12 @@ export interface GitStatusResult {
   stats: DiffStats;
 }
 
+export interface GitBranchInfo {
+  name: string;
+  is_current: boolean;
+  is_remote: boolean;
+}
+
 export interface WorktreeInfo {
   path: string;
   branch: string;
@@ -27,6 +33,8 @@ export interface WorktreeInfo {
 export const gitCommands = {
   status: (cwd: string) =>
     invoke<GitStatusResult>("git_status", { cwd }),
+  listBranches: (cwd: string) =>
+    invoke<GitBranchInfo[]>("git_list_branches", { cwd }),
   diff: (cwd: string, file?: string, staged = false) =>
     invoke<string>("git_diff", { cwd, file, staged }),
   stage: (cwd: string, files: string[]) =>
@@ -80,8 +88,18 @@ export const settingsCommands = {
 };
 
 export const worktreeCommands = {
-  create: (repoPath: string, branchName: string, label: string) =>
-    invoke<WorktreeInfo>("create_worktree", { repoPath, branchName, label }),
+  create: (
+    repoPath: string,
+    branchName: string,
+    label: string,
+    baseBranch?: string | null,
+  ) =>
+    invoke<WorktreeInfo>("create_worktree", {
+      repoPath,
+      branchName,
+      label,
+      baseBranch,
+    }),
   remove: (repoPath: string, worktreePath: string) =>
     invoke<void>("remove_worktree", { repoPath, worktreePath }),
   list: (repoPath: string) =>

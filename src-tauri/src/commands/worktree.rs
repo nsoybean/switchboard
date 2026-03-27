@@ -44,6 +44,7 @@ pub fn create_worktree(
     repo_path: String,
     branch_name: String,
     label: String,
+    base_branch: Option<String>,
 ) -> Result<WorktreeInfo, String> {
     let slug = label_to_slug(&label);
     let worktree_path = Path::new(&repo_path)
@@ -57,8 +58,19 @@ pub fn create_worktree(
             .map_err(|e| format!("Failed to create directory: {}", e))?;
     }
 
-    let output = Command::new("git")
-        .args(["worktree", "add", "-b", &branch_name, &worktree_str])
+    let mut command = Command::new("git");
+    command
+        .arg("worktree")
+        .arg("add")
+        .arg("-b")
+        .arg(&branch_name)
+        .arg(&worktree_str);
+
+    if let Some(base_branch) = base_branch.as_deref() {
+        command.arg(base_branch);
+    }
+
+    let output = command
         .current_dir(&repo_path)
         .output()
         .map_err(|e| format!("Failed to run git: {}", e))?;

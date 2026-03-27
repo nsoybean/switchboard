@@ -315,6 +315,7 @@ export function AppLayout() {
       label: string;
       task: string;
       useWorktree: boolean;
+      baseBranch: string | null;
     }) => {
       if (!state.projectPath) return;
       const id = crypto.randomUUID();
@@ -334,6 +335,7 @@ export function AppLayout() {
             state.projectPath,
             branchName,
             config.label,
+            config.baseBranch,
           );
           cwd = info.path;
           worktreePath = info.path;
@@ -851,6 +853,7 @@ export function AppLayout() {
       {/* New Session Dialog */}
       <NewSessionDialog
         open={dialogOpen}
+        projectPath={state.projectPath}
         onClose={() => setDialogOpen(false)}
         onSubmit={handleNewSession}
       />
