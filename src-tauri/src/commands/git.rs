@@ -65,6 +65,25 @@ fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+fn push_branch(
+    branches: &mut Vec<GitBranchInfo>,
+    seen: &mut HashSet<String>,
+    name: &str,
+    is_current: bool,
+    is_remote: bool,
+) {
+    let name = name.trim();
+    if name.is_empty() || name.ends_with("/HEAD") || !seen.insert(name.to_string()) {
+        return;
+    }
+
+    branches.push(GitBranchInfo {
+        name: name.to_string(),
+        is_current,
+        is_remote,
+    });
+}
+
 /// Get git status for a directory
 #[tauri::command]
 pub fn git_status(cwd: String) -> Result<GitStatusResult, String> {
@@ -120,7 +139,7 @@ pub fn git_status(cwd: String) -> Result<GitStatusResult, String> {
     })
 }
 
-/// List local and remote branches for a directory
+/// List local branches for a directory.
 #[tauri::command]
 pub fn git_list_branches(cwd: String) -> Result<Vec<GitBranchInfo>, String> {
     let current_branch = run_git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])
@@ -130,21 +149,18 @@ pub fn git_list_branches(cwd: String) -> Result<Vec<GitBranchInfo>, String> {
     let mut seen = HashSet::new();
     let mut branches = Vec::new();
 
-    for (scope, is_remote) in [("refs/heads", false), ("refs/remotes", true)] {
-        let output = run_git(&cwd, &["for-each-ref", "--format=%(refname:short)", scope])?;
-
-        for line in output.lines() {
-            let name = line.trim();
-            if name.is_empty() || name.ends_with("/HEAD") || !seen.insert(name.to_string()) {
-                continue;
-            }
-
-            branches.push(GitBranchInfo {
-                name: name.to_string(),
-                is_current: !is_remote && name == current_branch,
-                is_remote,
-            });
-        }
+    let local_output = run_git(
+        &cwd,
+        &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    )?;
+    for line in local_output.lines() {
+        push_branch(
+            &mut branches,
+            &mut seen,
+            line,
+            line.trim() == current_branch,
+            false,
+        );
     }
 
     branches.sort_by(|a, b| {

@@ -118,20 +118,12 @@ export function NewSessionDialog({
   const normalizedBranchQuery = branchQuery.trim().toLowerCase();
   const localBranches = branches.filter(
     (branch) =>
-      !branch.is_remote &&
       (normalizedBranchQuery.length === 0 ||
         branch.name.toLowerCase().includes(normalizedBranchQuery)),
   );
-  const remoteBranches = branches.filter(
-    (branch) =>
-      branch.is_remote &&
-      (normalizedBranchQuery.length === 0 ||
-        branch.name.toLowerCase().includes(normalizedBranchQuery)),
+  const branchSections = [{ title: "Branches", branches: localBranches }].filter(
+    (section) => section.branches.length > 0,
   );
-  const branchSections = [
-    { title: "Local branches", branches: localBranches },
-    { title: "Remote branches", branches: remoteBranches },
-  ].filter((section) => section.branches.length > 0);
   const selectedBranch = branches.find((branch) => branch.name === baseBranch);
   const disableSubmit = useWorktree && (branchesLoading || !baseBranch);
 
