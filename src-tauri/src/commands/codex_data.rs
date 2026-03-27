@@ -22,6 +22,11 @@ struct CodexThreadRow {
     first_user_message: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct CodexTranscriptRow {
+    rollout_path: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 struct CodexSessionMetadata {
     label: Option<String>,
@@ -126,6 +131,60 @@ fn run_codex_query(query: &str) -> Result<Vec<CodexThreadRow>, String> {
 
 fn escape_sql(value: &str) -> String {
     value.replace('\'', "''")
+}
+
+fn find_codex_transcript_path(session_id: &str) -> Result<PathBuf, String> {
+    let escaped = escape_sql(session_id);
+    let query = format!(
+        "select rollout_path \
+         from threads \
+         where id = '{escaped}' \
+         limit 1"
+    );
+
+    let rows: Vec<CodexTranscriptRow> = {
+        let db_path = codex_state_db_path()
+            .ok_or_else(|| "Could not find Codex state database".to_string())?;
+        let db_str = db_path
+            .to_str()
+            .ok_or_else(|| "Invalid Codex state database path".to_string())?;
+
+        let output = Command::new("sqlite3")
+            .args(["-json", db_str, &query])
+            .output()
+            .map_err(|e| format!("Failed to run sqlite3: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("sqlite3 query failed: {}", stderr.trim()));
+        }
+
+        serde_json::from_slice(&output.stdout)
+            .map_err(|e| format!("Failed to parse sqlite JSON: {}", e))?
+    };
+
+    if let Some(path) = rows
+        .into_iter()
+        .map(|row| PathBuf::from(row.rollout_path))
+        .find(|path| path.exists())
+    {
+        return Ok(path);
+    }
+
+    let archive_dir = codex_archived_sessions_dir()
+        .ok_or_else(|| "Could not find Codex transcript store".to_string())?;
+    let entries = fs::read_dir(&archive_dir).map_err(|e| format!("Read dir failed: {}", e))?;
+
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.contains(session_id))
+                .unwrap_or(false)
+        })
+        .ok_or_else(|| "Could not find Codex transcript file".to_string())
 }
 
 fn seconds_to_iso(seconds: i64) -> String {
@@ -280,19 +339,7 @@ pub fn delete_codex_session(session_id: String) -> Result<(), String> {
 pub fn get_codex_session_transcript(
     session_id: String,
 ) -> Result<Vec<SessionTranscriptEvent>, String> {
-    let archive_dir = codex_archived_sessions_dir()
-        .ok_or_else(|| "Could not find Codex archived sessions".to_string())?;
-    let entries = fs::read_dir(&archive_dir).map_err(|e| format!("Read dir failed: {}", e))?;
-    let file_path = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .find(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| name.contains(&session_id))
-                .unwrap_or(false)
-        })
-        .ok_or_else(|| "Could not find Codex archived session".to_string())?;
+    let file_path = find_codex_transcript_path(&session_id)?;
 
     let data = fs::read_to_string(file_path).map_err(|e| format!("Read failed: {}", e))?;
     let mut events = Vec::new();
