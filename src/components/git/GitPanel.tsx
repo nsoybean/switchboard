@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Minus, Undo2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { gitCommands, type ChangedFile, type DiffStats } from "../../lib/tauri-commands";
+import {
+  fileCommands,
+  gitCommands,
+  type ChangedFile,
+  type DiffStats,
+} from "../../lib/tauri-commands";
 import { GitToolbar } from "./GitToolbar";
 import { DiffView } from "./DiffView";
 import { Button } from "@/components/ui/button";
@@ -32,6 +37,17 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
 
   const showStaged = activeTab === "staged";
 
+  useEffect(() => {
+    setBranch("");
+    setFiles([]);
+    setStats({ additions: 0, deletions: 0, files_changed: 0 });
+    setActiveTab("unstaged");
+    setError(null);
+    setExpandedFile(null);
+    setFileDiff("");
+    setLoading(true);
+  }, [cwd]);
+
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
@@ -60,12 +76,38 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
       setFileDiff("");
       return;
     }
+
+    const expandedFileEntry = files.find(
+      (file) => file.path === expandedFile && file.staged === showStaged,
+    );
     let cancelled = false;
-    gitCommands.diff(cwd, expandedFile, showStaged).then((d) => {
-      if (!cancelled) setFileDiff(d);
-    });
+    const loadDiff = async () => {
+      try {
+        if (expandedFileEntry?.status === "??" && !showStaged) {
+          const filePath = `${cwd.replace(/\/$/, "")}/${expandedFile}`;
+          const contents = await fileCommands.readFile(filePath);
+          if (cancelled) return;
+
+          const lines = contents.split("\n");
+          const syntheticDiff = lines.map((line) => `+${line}`).join("\n");
+
+          setFileDiff(syntheticDiff);
+          return;
+        }
+
+        const diff = await gitCommands.diff(cwd, expandedFile, showStaged);
+        if (!cancelled) setFileDiff(diff);
+      } catch (err) {
+        if (!cancelled) {
+          setFileDiff(`diff --git a/${expandedFile} b/${expandedFile}\nUnable to load diff: ${String(err)}`);
+        }
+      }
+    };
+
+    void loadDiff();
+
     return () => { cancelled = true; };
-  }, [expandedFile, cwd, showStaged]);
+  }, [expandedFile, cwd, files, showStaged]);
 
   const toggleFile = (path: string) => {
     setExpandedFile((prev) => (prev === path ? null : path));
@@ -122,6 +164,11 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
   const unstagedCount = files.filter((f) => !f.staged).length;
   const stagedCount = files.filter((f) => f.staged).length;
 
+  const isNotGitRepo =
+    error !== null &&
+    (error.includes("not a git repository") ||
+      error.includes("needed a single revision"));
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <GitToolbar
@@ -166,10 +213,20 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
 
       {/* File list + per-file diff */}
       <ScrollArea className="flex-1 min-h-0">
-        {error && (
+        {isNotGitRepo && (
+          <div className="flex h-full items-center justify-center p-4">
+            <div className="flex max-w-xs flex-col items-center gap-2 text-center">
+              <p className="text-sm font-medium">No git repository at this workspace</p>
+              <p className="text-xs text-muted-foreground break-all">
+                Switchboard checked <span className="font-mono">{cwd}</span>.
+              </p>
+            </div>
+          </div>
+        )}
+        {error && !isNotGitRepo && (
           <div className="p-3 text-xs text-destructive">{error}</div>
         )}
-        {loading && filteredFiles.length === 0 && (
+        {loading && filteredFiles.length === 0 && !error && (
           <div className="p-3 text-xs text-muted-foreground">Loading...</div>
         )}
         {!loading && filteredFiles.length === 0 && !error && (
@@ -178,7 +235,7 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
           </div>
         )}
 
-        {filteredFiles.map((file) => {
+        {!error && filteredFiles.map((file) => {
           const isExpanded = expandedFile === file.path;
           return (
             <div key={`${file.path}-${file.staged}`}>
@@ -186,11 +243,11 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
               <div
                 onClick={() => toggleFile(file.path)}
                 className={cn(
-                  "flex items-center gap-1.5 px-2 py-1.5 text-xs border-b cursor-pointer min-w-0",
+                  "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 overflow-hidden border-b px-2 py-1.5 text-xs cursor-pointer",
                   isExpanded ? "bg-accent/60" : "hover:bg-accent/50",
                 )}
               >
-                <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                   <ChevronRight
                     className={cn(
                       "size-3 shrink-0 transition-transform text-muted-foreground",

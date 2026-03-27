@@ -1,4 +1,6 @@
 use serde::Serialize;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, Serialize, Clone)]
@@ -22,10 +24,28 @@ pub struct GitStatusResult {
     pub stats: DiffStats,
 }
 
+fn validate_directory(path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Directory path is empty".to_string());
+    }
+
+    let dir = Path::new(trimmed);
+    if !dir.exists() {
+        return Err(format!("Directory does not exist: {}", trimmed));
+    }
+    if !dir.is_dir() {
+        return Err(format!("'{}' is not a directory", trimmed));
+    }
+
+    fs::canonicalize(dir).map_err(|e| format!("Failed to resolve directory '{}': {}", trimmed, e))
+}
+
 fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
+    let cwd = validate_directory(cwd)?;
     let output = Command::new("git")
         .args(args)
-        .current_dir(cwd)
+        .current_dir(&cwd)
         .output()
         .map_err(|e| format!("Failed to run git: {}", e))?;
 
@@ -47,7 +67,7 @@ pub fn git_status(cwd: String) -> Result<GitStatusResult, String> {
         .to_string();
 
     // Get status
-    let status_output = run_git(&cwd, &["status", "--porcelain=v1"])?;
+    let status_output = run_git(&cwd, &["status", "--porcelain=v1", "--untracked-files=all"])?;
     let mut files = Vec::new();
 
     for line in status_output.lines() {

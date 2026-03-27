@@ -24,9 +24,9 @@ import { useTheme } from "@/components/theme-provider";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
-  gitPanelOpen: boolean;
+  inspectorOpen: boolean;
   onToggleSidebar: () => void;
-  onToggleGitPanel: () => void;
+  onToggleInspector: () => void;
   branch?: string;
   projectName?: string;
   onProjectClick?: () => void;
@@ -42,9 +42,9 @@ interface TitlebarProps {
 
 export function Titlebar({
   sidebarOpen,
-  gitPanelOpen,
+  inspectorOpen,
   onToggleSidebar,
-  onToggleGitPanel,
+  onToggleInspector,
   branch,
   projectName = "switchboard",
   onProjectClick,
@@ -197,12 +197,12 @@ export function Titlebar({
               variant="ghost"
               size="icon"
               className="size-7"
-              onClick={onToggleGitPanel}
+              onClick={onToggleInspector}
             >
-              <PanelRight className={gitPanelOpen ? "" : "opacity-40"} />
+              <PanelRight className={inspectorOpen ? "" : "opacity-40"} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Toggle Git Panel (⌘G)</TooltipContent>
+          <TooltipContent>Toggle Inspector (⌘G)</TooltipContent>
         </Tooltip>
 
         <Separator orientation="vertical" className="h-4 mx-1" />

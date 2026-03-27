@@ -63,6 +63,7 @@ pub fn run() {
             commands::session::set_github_token,
             commands::session::validate_github_token,
             commands::files::list_directory,
+            commands::files::inspect_directory,
             commands::files::read_file_contents,
         ])
         .run(tauri::generate_context!())

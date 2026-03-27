@@ -21,7 +21,8 @@ interface ShortcutHandlers {
  * - Ctrl+Shift+Tab: Previous session
  * - Ctrl+N: New session dialog
  * - Ctrl+B: Toggle sidebar
- * - Ctrl+G: Toggle git panel
+ * - Ctrl+G: Toggle workspace inspector
+ * - Ctrl+E: Open inspector on Files tab
  * - Escape: Focus terminal
  */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -59,14 +60,14 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return;
       }
 
-      // Ctrl+G — toggle git panel
+      // Ctrl+G — toggle workspace inspector
       if ((e.ctrlKey || e.metaKey) && e.key === "g") {
         e.preventDefault();
         handlers.onToggleGitPanel();
         return;
       }
 
-      // Ctrl+E — toggle file tree
+      // Ctrl+E — open Files tab in the inspector
       if ((e.ctrlKey || e.metaKey) && e.key === "e") {
         e.preventDefault();
         handlers.onToggleFileTree?.();

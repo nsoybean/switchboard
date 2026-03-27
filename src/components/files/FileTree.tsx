@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fileCommands, type FileEntry } from "../../lib/tauri-commands";
@@ -113,21 +113,36 @@ export function FileTree({ rootPath, selectedPath, onFileSelect }: FileTreeProps
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load root entries on first render
-  useState(() => {
-    if (!rootPath) return;
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!rootPath) {
+      setEntries([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    setEntries(null);
+    setError(null);
     setLoading(true);
     fileCommands
       .listDirectory(rootPath)
       .then((result) => {
+        if (cancelled) return;
         setEntries(result);
         setLoading(false);
       })
       .catch((err) => {
+        if (cancelled) return;
         setError(String(err));
         setLoading(false);
       });
-  });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rootPath]);
 
   if (error) {
     return (

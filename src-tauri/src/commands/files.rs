@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, Serialize, Clone)]
@@ -11,17 +11,70 @@ pub struct FileEntry {
     pub size: Option<u64>,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct DirectoryStatus {
+    pub path: String,
+    pub exists: bool,
+    pub is_dir: bool,
+    pub canonical_path: Option<String>,
+}
+
+fn validate_directory(path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Directory path is empty".to_string());
+    }
+
+    let dir = Path::new(trimmed);
+    if !dir.exists() {
+        return Err(format!("Directory does not exist: {}", trimmed));
+    }
+    if !dir.is_dir() {
+        return Err(format!("'{}' is not a directory", trimmed));
+    }
+
+    fs::canonicalize(dir).map_err(|e| format!("Failed to resolve directory '{}': {}", trimmed, e))
+}
+
+#[tauri::command]
+pub fn inspect_directory(path: String) -> Result<DirectoryStatus, String> {
+    let trimmed = path.trim().to_string();
+    if trimmed.is_empty() {
+        return Ok(DirectoryStatus {
+            path,
+            exists: false,
+            is_dir: false,
+            canonical_path: None,
+        });
+    }
+
+    let dir = Path::new(&trimmed);
+    let exists = dir.exists();
+    let is_dir = exists && dir.is_dir();
+    let canonical_path = if is_dir {
+        fs::canonicalize(dir)
+            .ok()
+            .map(|resolved| resolved.to_string_lossy().to_string())
+    } else {
+        None
+    };
+
+    Ok(DirectoryStatus {
+        path,
+        exists,
+        is_dir,
+        canonical_path,
+    })
+}
+
 /// List directory contents, respecting .gitignore.
 /// Returns sorted entries (directories first, then files, alphabetically).
 #[tauri::command]
 pub fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
-    let dir = Path::new(&path);
-    if !dir.is_dir() {
-        return Err(format!("'{}' is not a directory", path));
-    }
+    let dir = validate_directory(&path)?;
 
     // Collect all entries
-    let read_dir = fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?;
+    let read_dir = fs::read_dir(&dir).map_err(|e| format!("Failed to read directory: {}", e))?;
     let mut entries: Vec<FileEntry> = Vec::new();
 
     for entry in read_dir {
@@ -51,7 +104,7 @@ pub fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
     }
 
     // Check git-ignored status in bulk
-    let ignored = get_git_ignored(&path, &entries);
+    let ignored = get_git_ignored(dir.to_string_lossy().as_ref(), &entries);
     entries.retain(|e| !ignored.contains(&e.path));
 
     // Sort: directories first, then alphabetically

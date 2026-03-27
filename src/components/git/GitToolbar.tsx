@@ -60,12 +60,12 @@ export function GitToolbar({
   return (
     <div className="flex flex-col gap-2 p-3 border-b overflow-hidden">
       {/* Branch + stats */}
-      <div className="flex items-center justify-between min-w-0">
-        <span className="flex items-center gap-1.5 text-xs font-medium min-w-0">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
           <GitBranch className="size-3 shrink-0" />
           <span className="truncate">{branch || "\u2014"}</span>
         </span>
-        <span className="flex items-center gap-1.5 text-[11px]">
+        <span className="flex shrink-0 items-center gap-1.5 text-[11px]">
           <span className="text-[var(--sb-diff-add-fg)]">+{stats.additions}</span>
           <span className="text-[var(--sb-diff-del-fg)]">-{stats.deletions}</span>
           <span className="text-muted-foreground">{stats.files_changed} files</span>

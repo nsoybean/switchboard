@@ -9,13 +9,17 @@ import { XTermContainer } from "../terminal/XTermContainer";
 import { ScrollView } from "../terminal/ScrollView";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
-import { GitPanel } from "../git/GitPanel";
 import { FilePreview } from "../files/FilePreview";
 import { SettingsPage } from "../settings/SettingsPage";
+import {
+  WorkspacePanel,
+  type WorkspaceContext,
+  type WorkspaceTab,
+} from "../workspace/WorkspacePanel";
 import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
-import { worktreeCommands } from "../../lib/tauri-commands";
+import { fileCommands, worktreeCommands } from "../../lib/tauri-commands";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,15 +52,20 @@ function getCodexInitialPrompt(session: Session): string | null {
   return firstArg;
 }
 
+function isPathWithinRoot(path: string, rootPath: string): boolean {
+  return path === rootPath || path.startsWith(`${rootPath}/`);
+}
+
 export function AppLayout() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
-  const [gitPanelOpen, setGitPanelOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const sessionsRef = useRef(state.sessions);
   const {
     currentVersion,
@@ -88,6 +97,50 @@ export function AppLayout() {
     : null;
   const selectedSession = viewingSession ?? activeSession;
   const selectedSessionId = viewingSession?.id ?? state.activeSessionId;
+  const projectLabel = state.projectPath
+    ? (state.projectPath.split("/").pop() ?? "Project")
+    : "Project";
+  const workspaceCandidate = useMemo<WorkspaceContext | null>(() => {
+    if (!state.projectPath) {
+      return null;
+    }
+
+    if (!selectedSession) {
+      return {
+        kind: "project",
+        rootPath: null,
+        label: projectLabel,
+        branch: null,
+        availability: "resolving",
+        source: "project",
+        isWorktree: false,
+      };
+    }
+
+    const source: WorkspaceContext["source"] = selectedSession.worktreePath
+      ? "worktreePath"
+      : state.sessions[selectedSession.id]
+        ? "cwd"
+        : "history";
+
+    return {
+      kind: "session",
+      rootPath: null,
+      label: selectedSession.label,
+      branch: selectedSession.branch,
+      availability: "resolving",
+      source,
+      isWorktree: Boolean(selectedSession.worktreePath),
+    };
+  }, [
+    projectLabel,
+    selectedSession,
+    state.projectPath,
+    state.sessions,
+  ]);
+  const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(
+    workspaceCandidate,
+  );
 
   const aliveSessionIds = new Set(
     sortedSessionIds.slice(0, MAX_ALIVE_TERMINALS),
@@ -96,6 +149,144 @@ export function AppLayout() {
   useEffect(() => {
     sessionsRef.current = state.sessions;
   }, [state.sessions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setWorkspaceContext(workspaceCandidate);
+
+    if (!state.projectPath) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const resolveWorkspace = async () => {
+      try {
+        if (!selectedSession) {
+          const projectPath = state.projectPath;
+          if (!projectPath) return;
+
+          const status = await fileCommands.inspectDirectory(projectPath);
+          if (cancelled) return;
+
+          setWorkspaceContext({
+            kind: "project",
+            rootPath:
+              status.exists && status.is_dir
+                ? (status.canonical_path ?? projectPath)
+                : null,
+            label: projectLabel,
+            branch: null,
+            availability:
+              status.exists && status.is_dir ? "ready" : "missing",
+            source: "project",
+            isWorktree: false,
+          });
+          return;
+        }
+
+        const sessionSource: WorkspaceContext["source"] = state.sessions[
+          selectedSession.id
+        ]
+          ? "cwd"
+          : "history";
+        const preferredRoots: Array<{
+          path: string;
+          source: Exclude<WorkspaceContext["source"], "project">;
+          isWorktree: boolean;
+        }> = [];
+
+        if (selectedSession.worktreePath) {
+          preferredRoots.push({
+            path: selectedSession.worktreePath,
+            source: "worktreePath",
+            isWorktree: true,
+          });
+        }
+
+        if (selectedSession.cwd) {
+          preferredRoots.push({
+            path: selectedSession.cwd,
+            source: sessionSource,
+            isWorktree: false,
+          });
+        }
+
+        for (const candidate of preferredRoots) {
+          const status = await fileCommands.inspectDirectory(candidate.path);
+          if (cancelled) return;
+          if (!status.exists || !status.is_dir) {
+            continue;
+          }
+
+          setWorkspaceContext({
+            kind: "session",
+            rootPath: status.canonical_path ?? candidate.path,
+            label: selectedSession.label,
+            branch: selectedSession.branch,
+            availability: "ready",
+            source: candidate.source,
+            isWorktree: candidate.isWorktree,
+          });
+          return;
+        }
+
+        if (cancelled) return;
+
+        setWorkspaceContext({
+          kind: "session",
+          rootPath: null,
+          label: selectedSession.label,
+          branch: selectedSession.branch,
+          availability: "missing",
+          source: selectedSession.worktreePath ? "worktreePath" : sessionSource,
+          isWorktree: Boolean(selectedSession.worktreePath),
+        });
+      } catch (error) {
+        if (cancelled) return;
+
+        console.error("Failed to resolve workspace context:", error);
+        setWorkspaceContext({
+          ...(workspaceCandidate ?? {
+            kind: "project",
+            rootPath: null,
+            label: projectLabel,
+            branch: null,
+            availability: "missing",
+            source: "project",
+            isWorktree: false,
+          }),
+          rootPath: null,
+          availability: "missing",
+        });
+      }
+    };
+
+    void resolveWorkspace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    projectLabel,
+    selectedSession,
+    state.projectPath,
+    state.sessions,
+    workspaceCandidate,
+  ]);
+
+  useEffect(() => {
+    if (!state.previewFilePath) return;
+    if (!workspaceContext || workspaceContext.availability !== "ready" || !workspaceContext.rootPath) {
+      dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      return;
+    }
+
+    if (!isPathWithinRoot(state.previewFilePath, workspaceContext.rootPath)) {
+      dispatch({ type: "SET_PREVIEW_FILE", path: null });
+    }
+  }, [dispatch, state.previewFilePath, workspaceContext]);
 
   const persistSession = useCallback(async (session: Session) => {
     try {
@@ -432,7 +623,11 @@ export function AppLayout() {
       },
       onNewSession: () => setDialogOpen(true),
       onToggleSidebar: () => setSidebarOpen((prev) => !prev),
-      onToggleGitPanel: () => setGitPanelOpen((prev) => !prev),
+      onToggleGitPanel: () => setInspectorOpen((prev) => !prev),
+      onToggleFileTree: () => {
+        setInspectorOpen(true);
+        setWorkspaceTab("files");
+      },
       onFocusTerminal: () => {
         const termEl = document.querySelector(".xterm-helper-textarea");
         if (termEl instanceof HTMLElement) termEl.focus();
@@ -453,10 +648,10 @@ export function AppLayout() {
       {/* Custom titlebar */}
       <Titlebar
         sidebarOpen={sidebarOpen}
-        gitPanelOpen={gitPanelOpen}
+        inspectorOpen={inspectorOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
-        branch={activeSession?.branch ?? undefined}
+        onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
+        branch={selectedSession?.branch ?? undefined}
         projectName={
           state.projectPath
             ? (state.projectPath.split("/").pop() ?? "switchboard")
@@ -530,8 +725,6 @@ export function AppLayout() {
               <TerminalToolbar
                 session={selectedSession}
                 onStopSession={handleStopSession}
-                gitPanelOpen={gitPanelOpen}
-                onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
               />
 
               <div className="flex-1 relative min-h-0">
@@ -637,19 +830,17 @@ export function AppLayout() {
             </div>
           </ResizablePanel>
 
-          {/* Git Panel (hidden in scroll view) */}
-          {gitPanelOpen &&
-            sessions.length > 0 &&
-            state.viewMode === "focused" && (
+          {/* Workspace inspector (hidden in scroll view) */}
+          {inspectorOpen && state.projectPath && state.viewMode === "focused" && (
               <>
                 <ResizableHandle />
                 <ResizablePanel defaultSize="25%" minSize="15%" maxSize="40%">
-                  <GitPanel
-                    key={selectedSession?.cwd ?? state.projectPath ?? "project-root"}
-                    cwd={selectedSession?.cwd ?? state.projectPath ?? ""}
-                    visible
+                  <WorkspacePanel
+                    activeTab={workspaceTab}
+                    context={workspaceContext}
                     githubToken={state.githubToken}
                     onOpenSettings={() => setSettingsOpen(true)}
+                    onTabChange={setWorkspaceTab}
                   />
                 </ResizablePanel>
               </>

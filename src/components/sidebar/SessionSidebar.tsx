@@ -12,10 +12,8 @@ import { Plus } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { useClaudeSessions, useCodexSessions } from "../../hooks/useSessions";
 import { SessionCard } from "./SessionCard";
-import { FilePanel } from "../files/FilePanel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
 import { formatCompactRelativeTime, formatTimestampTitle } from "@/lib/time";
 import type { Session } from "../../state/types";
 
@@ -58,7 +56,6 @@ export function SessionSidebar({
 }: SessionSidebarProps) {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const [activeTab, setActiveTab] = useState<"sessions" | "files">("sessions");
   const [renameTarget, setRenameTarget] = useState<SessionTarget | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
@@ -213,145 +210,112 @@ export function SessionSidebar({
         </Button>
       </div>
 
-      {/* Tab switcher */}
-      <div className="flex border-b shrink-0">
-        <button
-          onClick={() => setActiveTab("sessions")}
-          className={cn(
-            "flex-1 py-1.5 text-xs font-medium transition-colors",
-            activeTab === "sessions"
-              ? "text-foreground border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground",
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        <div className="flex flex-col gap-0.5 p-2">
+          {/* Active sessions */}
+          {activeSessions.length > 0 && pastSessions.length > 0 && (
+            <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+              Active
+            </div>
           )}
-        >
-          Sessions
-        </button>
-        <button
-          onClick={() => setActiveTab("files")}
-          className={cn(
-            "flex-1 py-1.5 text-xs font-medium transition-colors",
-            activeTab === "files"
-              ? "text-foreground border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Files
-        </button>
-      </div>
-
-      {/* Content */}
-      {activeTab === "files" && state.projectPath ? (
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <FilePanel rootPath={state.projectPath} />
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <div className="flex flex-col gap-0.5 p-2">
-            {/* Active sessions */}
-            {activeSessions.length > 0 && pastSessions.length > 0 && (
-              <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                Active
-              </div>
-            )}
-            {activeSessions.map((session) => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                isActive={effectiveSelectedSessionId === session.id}
-                timestampLabel={formatCompactRelativeTime(
-                  session.createdAt,
-                  now,
-                )}
-                timestampTitle={formatTimestampTitle(session.createdAt)}
-                onStop={
-                  session.ptyId !== null &&
-                  (session.status === "running" ||
-                    session.status === "needs-input")
-                    ? () => void onStopSession?.(session.id)
-                    : undefined
-                }
-                onRename={() => {
-                  setRenameTarget({ session, source: "local" });
-                  setRenameValue(session.label);
-                }}
-                onDelete={() => setDeleteTarget({ session, source: "local" })}
-                onClick={() => {
-                  onSelectActiveSession?.();
-                  dispatch({ type: "SET_ACTIVE", id: session.id });
-                  dispatch({ type: "SET_PREVIEW_FILE", path: null });
-                }}
-              />
-            ))}
-
-            {/* Past sessions */}
-            {pastSessions.length > 0 && (
-              <>
-                <Separator className="my-2" />
-                <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Past Sessions
-                </div>
-                {pastSessions.map((item) => {
-                  const canResume =
-                    item.session.agent === "claude-code" ||
-                    item.session.agent === "codex";
-                  return (
-                    <SessionCard
-                      key={item.key}
-                      session={item.session}
-                      isActive={effectiveSelectedSessionId === item.session.id}
-                      timestampLabel={formatCompactRelativeTime(
-                        item.session.createdAt,
-                        now,
-                      )}
-                      timestampTitle={formatTimestampTitle(
-                        item.session.createdAt,
-                      )}
-                      tokenInfo={item.tokenInfo}
-                      onResume={
-                        canResume && onResumeSession
-                          ? () => void onResumeSession(item.session)
-                          : undefined
-                      }
-                      onRename={() => {
-                        setRenameTarget({
-                          session: item.session,
-                          source: item.source,
-                        });
-                        setRenameValue(item.session.label);
-                      }}
-                      onDelete={() => {
-                        setDeleteTarget({
-                          session: item.session,
-                          source: item.source,
-                        });
-                      }}
-                      onClick={() => {
-                        onViewSession?.(item.session);
-                      }}
-                    />
-                  );
-                })}
-              </>
-            )}
-
-            {/* Empty state */}
-            {activeSessions.length === 0 &&
-              pastSessions.length === 0 &&
-              !loading && (
-                <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-                  No sessions yet.
-                </div>
+          {activeSessions.map((session) => (
+            <SessionCard
+              key={session.id}
+              session={session}
+              isActive={effectiveSelectedSessionId === session.id}
+              timestampLabel={formatCompactRelativeTime(
+                session.createdAt,
+                now,
               )}
+              timestampTitle={formatTimestampTitle(session.createdAt)}
+              onStop={
+                session.ptyId !== null &&
+                (session.status === "running" ||
+                  session.status === "needs-input")
+                  ? () => void onStopSession?.(session.id)
+                  : undefined
+              }
+              onRename={() => {
+                setRenameTarget({ session, source: "local" });
+                setRenameValue(session.label);
+              }}
+              onDelete={() => setDeleteTarget({ session, source: "local" })}
+              onClick={() => {
+                onSelectActiveSession?.();
+                dispatch({ type: "SET_ACTIVE", id: session.id });
+                dispatch({ type: "SET_PREVIEW_FILE", path: null });
+              }}
+            />
+          ))}
 
-            {/* Loading state */}
-            {loading && activeSessions.length === 0 && (
+          {/* Past sessions */}
+          {pastSessions.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                Past Sessions
+              </div>
+              {pastSessions.map((item) => {
+                const canResume =
+                  item.session.agent === "claude-code" ||
+                  item.session.agent === "codex";
+                return (
+                  <SessionCard
+                    key={item.key}
+                    session={item.session}
+                    isActive={effectiveSelectedSessionId === item.session.id}
+                    timestampLabel={formatCompactRelativeTime(
+                      item.session.createdAt,
+                      now,
+                    )}
+                    timestampTitle={formatTimestampTitle(
+                      item.session.createdAt,
+                    )}
+                    tokenInfo={item.tokenInfo}
+                    onResume={
+                      canResume && onResumeSession
+                        ? () => void onResumeSession(item.session)
+                        : undefined
+                    }
+                    onRename={() => {
+                      setRenameTarget({
+                        session: item.session,
+                        source: item.source,
+                      });
+                      setRenameValue(item.session.label);
+                    }}
+                    onDelete={() => {
+                      setDeleteTarget({
+                        session: item.session,
+                        source: item.source,
+                      });
+                    }}
+                    onClick={() => {
+                      onViewSession?.(item.session);
+                    }}
+                  />
+                );
+              })}
+            </>
+          )}
+
+          {/* Empty state */}
+          {activeSessions.length === 0 &&
+            pastSessions.length === 0 &&
+            !loading && (
               <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-                Loading sessions...
+                No sessions yet.
               </div>
             )}
-          </div>
+
+          {/* Loading state */}
+          {loading && activeSessions.length === 0 && (
+            <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+              Loading sessions...
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <Dialog
         open={renameTarget !== null}

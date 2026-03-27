@@ -15,8 +15,6 @@ const AGENT_LABELS: Record<string, string> = {
 interface TerminalToolbarProps {
   session: Session | null;
   onStopSession?: (sessionId: string) => Promise<void>;
-  gitPanelOpen?: boolean;
-  onToggleGitPanel?: () => void;
 }
 
 export function TerminalToolbar({

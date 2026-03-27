@@ -52,9 +52,18 @@ export interface FileEntry {
   size: number | null;
 }
 
+export interface DirectoryStatus {
+  path: string;
+  exists: boolean;
+  is_dir: boolean;
+  canonical_path: string | null;
+}
+
 export const fileCommands = {
   listDirectory: (path: string) =>
     invoke<FileEntry[]>("list_directory", { path }),
+  inspectDirectory: (path: string) =>
+    invoke<DirectoryStatus>("inspect_directory", { path }),
   readFile: (path: string) =>
     invoke<string>("read_file_contents", { path }),
 };
