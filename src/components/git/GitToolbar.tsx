@@ -73,11 +73,6 @@ export function GitToolbar({
 
   const handlePush = async () => {
     if (pushPending) return;
-
-    flushSync(() => {
-      setMenuOpen(false);
-    });
-
     requestAnimationFrame(() => {
       flushSync(() => {
         setPushPending(true);
@@ -140,6 +135,9 @@ export function GitToolbar({
               <DropdownMenuItem
                 disabled={pushPending || commitPending}
                 onSelect={() => {
+                  flushSync(() => {
+                    setMenuOpen(false);
+                  });
                   void handlePush();
                 }}
               >
