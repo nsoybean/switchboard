@@ -59,6 +59,7 @@ export function Titlebar({
   const projectPathLabel = projectPath
     ? projectPath.split("/").slice(-2).join("/")
     : null;
+  const inspectorAvailable = viewMode === "focused";
 
   const handleMaximize = async () => {
     await appWindow.toggleMaximize();
@@ -198,16 +199,23 @@ export function Titlebar({
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={onToggleInspector}
-            >
-              <PanelRight className={inspectorOpen ? "" : "opacity-40"} />
-            </Button>
+            <span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                disabled={!inspectorAvailable}
+                onClick={onToggleInspector}
+              >
+                <PanelRight className={inspectorOpen ? "" : "opacity-40"} />
+              </Button>
+            </span>
           </TooltipTrigger>
-          <TooltipContent>Toggle Inspector (⌘G)</TooltipContent>
+          <TooltipContent>
+            {inspectorAvailable
+              ? "Toggle Inspector (⌘G)"
+              : "Only available in focused view"}
+          </TooltipContent>
         </Tooltip>
 
         <Separator orientation="vertical" className="h-4 mx-1" />
