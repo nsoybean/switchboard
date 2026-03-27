@@ -8,7 +8,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { CircleDot, Ellipsis, PencilLine, Square, Trash2 } from "lucide-react";
+import {
+  CircleDot,
+  Ellipsis,
+  PencilLine,
+  Play,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { formatTokens, formatCost, estimateCost } from "../../lib/pricing";
 import type { Session } from "../../state/types";
@@ -32,7 +39,10 @@ interface SessionCardProps {
   isActive: boolean;
   isPast?: boolean;
   tokenInfo?: TokenInfo;
+  timestampLabel?: string;
+  timestampTitle?: string;
   onClick: () => void;
+  onResume?: () => void;
   onStop?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
@@ -41,9 +51,11 @@ interface SessionCardProps {
 export function SessionCard({
   session,
   isActive,
-  isPast,
   tokenInfo,
+  timestampLabel,
+  timestampTitle,
   onClick,
+  onResume,
   onStop,
   onRename,
   onDelete,
@@ -52,7 +64,7 @@ export function SessionCard({
     session.status === "done" ||
     session.status === "error" ||
     session.status === "stopped";
-  const canManage = !isPast && (onStop || onRename || onDelete);
+  const canManage = Boolean(onResume || onStop || onRename || onDelete);
 
   return (
     <div
@@ -71,7 +83,9 @@ export function SessionCard({
       >
         <AgentIcon agent={session.agent} className="mt-0.5 size-4" />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium text-[13px]">{session.label}</div>
+          <div className="truncate font-medium text-[13px]">
+            {session.label}
+          </div>
           {session.branch && (
             <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
               {session.branch}
@@ -81,71 +95,104 @@ export function SessionCard({
             <CircleDot
               className={cn(
                 "size-2.5",
-                session.status === "running" && "text-[var(--sb-status-running)]",
-                session.status === "needs-input" && "text-[var(--sb-status-warning)] animate-pulse",
+                session.status === "running" &&
+                  "text-[var(--sb-status-running)]",
+                session.status === "needs-input" &&
+                  "text-[var(--sb-status-warning)] animate-pulse",
                 session.status === "done" && "text-[var(--sb-status-done)]",
                 session.status === "stopped" && "text-muted-foreground",
                 session.status === "error" && "text-destructive",
               )}
             />
-            <Badge variant="secondary" className="h-4 px-1 text-[10px] font-normal">
+            <Badge
+              variant="secondary"
+              className="h-4 px-1 text-[10px] font-normal"
+            >
               {STATUS_LABELS[session.status] ?? session.status}
             </Badge>
-            {tokenInfo && (tokenInfo.inputTokens > 0 || tokenInfo.outputTokens > 0) && (
-              <span className="ml-auto text-[10px] text-muted-foreground/70">
-                {formatTokens(tokenInfo.inputTokens + tokenInfo.outputTokens)}
-                {" · "}
-                {formatCost(estimateCost(tokenInfo.model, tokenInfo.inputTokens, tokenInfo.outputTokens))}
-              </span>
-            )}
+            {tokenInfo &&
+              (tokenInfo.inputTokens > 0 || tokenInfo.outputTokens > 0) && (
+                <span className="ml-auto text-[10px] text-muted-foreground/70">
+                  {formatTokens(tokenInfo.inputTokens + tokenInfo.outputTokens)}
+                  {" · "}
+                  {formatCost(
+                    estimateCost(
+                      tokenInfo.model,
+                      tokenInfo.inputTokens,
+                      tokenInfo.outputTokens,
+                    ),
+                  )}
+                </span>
+              )}
           </div>
         </div>
       </button>
-      {canManage && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="mt-0.5 opacity-0 transition-opacity group-hover/session:opacity-100 group-focus-within/session:opacity-100 data-[state=open]:opacity-100"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
-            >
-              <Ellipsis />
-              <span className="sr-only">Session actions</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-36"
-            onClick={(event) => event.stopPropagation()}
+      <div className="relative mt-0.5 h-5 w-8 shrink-0 self-start">
+        {timestampLabel && (
+          <span
+            className={cn(
+              "absolute inset-0 flex items-start justify-end text-[10px] text-muted-foreground transition-opacity",
+              canManage &&
+                "group-hover/session:opacity-0 group-focus-within/session:opacity-0",
+            )}
+            title={timestampTitle}
+            aria-label={timestampTitle}
           >
-            <DropdownMenuGroup>
-              {onStop && (
-                <DropdownMenuItem onSelect={onStop}>
-                  <Square />
-                  Stop
-                </DropdownMenuItem>
-              )}
-              {onRename && (
-                <DropdownMenuItem onSelect={onRename}>
-                  <PencilLine />
-                  Rename
-                </DropdownMenuItem>
-              )}
-              {onDelete && (
-                <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-                  <Trash2 />
-                  Delete
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+            {timestampLabel}
+          </span>
+        )}
+        {canManage && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="absolute right-0 top-0 opacity-0 transition-opacity pointer-events-none group-hover/session:opacity-100 group-hover/session:pointer-events-auto group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                <Ellipsis />
+                <span className="sr-only">Session actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-36"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <DropdownMenuGroup>
+                {onResume && (
+                  <DropdownMenuItem onSelect={onResume}>
+                    <Play />
+                    Resume
+                  </DropdownMenuItem>
+                )}
+                {onStop && (
+                  <DropdownMenuItem onSelect={onStop}>
+                    <Square />
+                    Stop
+                  </DropdownMenuItem>
+                )}
+                {onRename && (
+                  <DropdownMenuItem onSelect={onRename}>
+                    <PencilLine />
+                    Rename
+                  </DropdownMenuItem>
+                )}
+                {onDelete && (
+                  <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                    <Trash2 />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
     </div>
-  )
+  );
 }

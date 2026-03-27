@@ -1,4 +1,5 @@
 pub mod claude_data;
+pub mod codex_data;
 pub mod files;
 pub mod git;
 pub mod pty;

@@ -40,9 +40,16 @@ export function getAgentConfig(agent: AgentType): AgentConfig {
 export function buildSpawnArgs(
   agent: AgentType,
   task?: string,
-): { command: string; args: string[] } {
+  sessionId?: string,
+): { command: string; args: string[]; resumeTargetId: string | null } {
   const config = AGENT_CONFIGS[agent];
   const args = [...config.defaultArgs];
+  let resumeTargetId: string | null = null;
+
+  if (agent === "claude-code" && sessionId) {
+    args.push("--session-id", sessionId);
+    resumeTargetId = sessionId;
+  }
 
   if (task && agent === "claude-code") {
     // Positional arg = first message in interactive session
@@ -51,5 +58,27 @@ export function buildSpawnArgs(
     args.push(task);
   }
 
-  return { command: config.command, args };
+  return { command: config.command, args, resumeTargetId };
+}
+
+export function buildResumeArgs(
+  agent: AgentType,
+  resumeTargetId: string | null,
+): { command: string; args: string[] } | null {
+  if (agent === "claude-code") {
+    if (!resumeTargetId) return null;
+    return {
+      command: "claude",
+      args: ["--resume", resumeTargetId],
+    };
+  }
+
+  if (agent === "codex") {
+    return {
+      command: "codex",
+      args: resumeTargetId ? ["resume", resumeTargetId] : ["resume", "--last"],
+    };
+  }
+
+  return null;
 }
