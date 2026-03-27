@@ -789,8 +789,9 @@ function stripMarkdownAdornment(text: string) {
 function summarizeQueryPreview(text: string) {
   const normalized = stripMarkdownAdornment(text).replace(/\s+/g, " ").trim();
 
-  if (normalized.length <= 48) return normalized || "User query";
-  return `${normalized.slice(0, 45).trimEnd()}...`;
+  if (!normalized) return "User query";
+  if (normalized.length <= 150) return normalized;
+  return `${normalized.slice(0, 147).trimEnd()}...`;
 }
 
 function extractMarkdownCodeBlock(children: ReactNode) {
