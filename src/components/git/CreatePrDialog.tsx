@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ExternalLink, Copy, Check } from "lucide-react";
 import { gitCommands } from "../../lib/tauri-commands";
@@ -172,11 +173,18 @@ export function CreatePrDialog({
             )}
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={handleClose}>
+              <Button variant="outline" onClick={handleClose} disabled={loading}>
                 Cancel
               </Button>
               <Button onClick={handleSubmit} disabled={loading}>
-                {loading ? "Creating..." : "Create PR"}
+                {loading ? (
+                  <>
+                    <Spinner className="size-3" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create PR"
+                )}
               </Button>
             </div>
           </div>

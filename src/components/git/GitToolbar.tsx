@@ -2,6 +2,7 @@ import { useState } from "react";
 import { GitBranch, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
@@ -46,15 +47,35 @@ export function GitToolbar({
   const [commitMsg, setCommitMsg] = useState("");
   const [stageAllFirst, setStageAllFirst] = useState(true);
   const [prDialogOpen, setPrDialogOpen] = useState(false);
+  const [commitPending, setCommitPending] = useState(false);
+  const [pushPending, setPushPending] = useState(false);
 
   const handleCommit = async () => {
-    if (!commitMsg.trim()) return;
-    if (stageAllFirst) {
-      await onStageAll();
+    const message = commitMsg.trim();
+    if (!message || commitPending) return;
+
+    setCommitPending(true);
+    try {
+      if (stageAllFirst) {
+        await onStageAll();
+      }
+      await onCommit(message);
+      setCommitMsg("");
+      setCommitOpen(false);
+    } finally {
+      setCommitPending(false);
     }
-    await onCommit(commitMsg.trim());
-    setCommitMsg("");
-    setCommitOpen(false);
+  };
+
+  const handlePush = async () => {
+    if (pushPending) return;
+
+    setPushPending(true);
+    try {
+      await onPush();
+    } finally {
+      setPushPending(false);
+    }
   };
 
   return (
@@ -76,8 +97,19 @@ export function GitToolbar({
       <div className="flex gap-1.5">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" className="flex-1 text-xs">
-              Commit
+            <Button
+              size="sm"
+              className="flex-1 text-xs"
+              disabled={commitPending || pushPending}
+            >
+              {commitPending || pushPending ? (
+                <>
+                  <Spinner className="size-3" />
+                  {commitPending ? "Committing..." : "Pushing..."}
+                </>
+              ) : (
+                "Commit"
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -85,7 +117,14 @@ export function GitToolbar({
               <DropdownMenuItem onClick={() => setCommitOpen(true)}>
                 Commit
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onPush()}>
+              <DropdownMenuItem
+                disabled={pushPending || commitPending}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  void handlePush();
+                }}
+              >
+                {pushPending ? <Spinner className="size-3" /> : null}
                 Push
               </DropdownMenuItem>
             </DropdownMenuGroup>
@@ -165,11 +204,24 @@ export function GitToolbar({
                 size="sm"
                 className="text-xs"
                 onClick={() => setCommitOpen(false)}
+                disabled={commitPending}
               >
                 Cancel
               </Button>
-              <Button size="sm" className="text-xs" onClick={handleCommit}>
-                Commit
+              <Button
+                size="sm"
+                className="text-xs"
+                onClick={handleCommit}
+                disabled={commitPending || !commitMsg.trim()}
+              >
+                {commitPending ? (
+                  <>
+                    <Spinner className="size-3" />
+                    Committing...
+                  </>
+                ) : (
+                  "Commit"
+                )}
               </Button>
             </div>
           </div>
