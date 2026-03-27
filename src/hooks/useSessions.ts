@@ -19,6 +19,11 @@ export function useClaudeSessions(projectPath: string | null) {
   const [sessions, setSessions] = useState<ClaudeSessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const reload = () => {
+    setReloadToken((current) => current + 1);
+  };
 
   useEffect(() => {
     if (!projectPath) {
@@ -37,6 +42,7 @@ export function useClaudeSessions(projectPath: string | null) {
         );
         if (!cancelled) {
           setSessions(result);
+          setError(null);
           setLoading(false);
         }
       } catch (err) {
@@ -51,7 +57,7 @@ export function useClaudeSessions(projectPath: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [projectPath]);
+  }, [projectPath, reloadToken]);
 
-  return { sessions, loading, error };
+  return { sessions, loading, error, reload };
 }

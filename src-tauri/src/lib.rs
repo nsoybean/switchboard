@@ -26,6 +26,8 @@ pub fn run() {
             commands::pty::pty_kill,
             commands::claude_data::get_claude_sessions,
             commands::claude_data::get_claude_history,
+            commands::claude_data::rename_claude_session,
+            commands::claude_data::delete_claude_session,
             commands::worktree::create_worktree,
             commands::worktree::remove_worktree,
             commands::worktree::list_worktrees,

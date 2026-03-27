@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useEffect, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Plus } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
@@ -9,14 +16,24 @@ import { FilePanel } from "../files/FilePanel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { formatCompactRelativeTime, formatTimestampTitle } from "@/lib/time";
 import type { Session } from "../../state/types";
 
 interface SessionSidebarProps {
   onNewSession: () => void;
-  onResumeSession?: (sessionId: string, projectPath: string, label: string) => void;
+  onResumeSession?: (
+    sessionId: string,
+    projectPath: string,
+    label: string,
+  ) => void;
   onStopSession?: (sessionId: string) => Promise<void>;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onDeleteSession?: (sessionId: string) => Promise<void>;
+}
+
+interface SessionTarget {
+  session: Session;
+  isPast: boolean;
 }
 
 export function SessionSidebar({
@@ -29,22 +46,33 @@ export function SessionSidebar({
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [activeTab, setActiveTab] = useState<"sessions" | "files">("sessions");
-  const [renameTarget, setRenameTarget] = useState<Session | null>(null);
+  const [renameTarget, setRenameTarget] = useState<SessionTarget | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SessionTarget | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
-  const { sessions: claudeSessions, loading } =
-    useClaudeSessions(state.projectPath);
+  const {
+    sessions: claudeSessions,
+    loading,
+    reload,
+  } = useClaudeSessions(state.projectPath);
 
   const activeSessions = Object.values(state.sessions).sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
   const activeSessionIds = new Set(activeSessions.map((s) => s.id));
   const pastSessions = claudeSessions.filter(
     (cs) => !activeSessionIds.has(cs.session_id),
   );
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNow(Date.now());
+    }, 60_000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const closeRenameDialog = () => {
     setRenameTarget(null);
@@ -53,13 +81,19 @@ export function SessionSidebar({
 
   const handleRenameSubmit = async () => {
     if (!renameTarget || !onRenameSession) return;
-    await onRenameSession(renameTarget.id, renameValue);
+    await onRenameSession(renameTarget.session.id, renameValue);
+    if (renameTarget.isPast) {
+      reload();
+    }
     closeRenameDialog();
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget || !onDeleteSession) return;
-    await onDeleteSession(deleteTarget.id);
+    await onDeleteSession(deleteTarget.session.id);
+    if (deleteTarget.isPast) {
+      reload();
+    }
     setDeleteTarget(null);
   };
 
@@ -106,99 +140,141 @@ export function SessionSidebar({
           <FilePanel rootPath={state.projectPath} />
         </div>
       ) : (
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-        <div className="flex flex-col gap-0.5 p-2">
-          {/* Active sessions */}
-          {activeSessions.length > 0 && pastSessions.length > 0 && (
-            <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-              Active
-            </div>
-          )}
-          {activeSessions.map((session) => (
-            <SessionCard
-              key={session.id}
-              session={session}
-              isActive={state.activeSessionId === session.id}
-              onStop={
-                session.ptyId !== null &&
-                (session.status === "running" || session.status === "needs-input")
-                  ? () => void onStopSession?.(session.id)
-                  : undefined
-              }
-              onRename={() => {
-                setRenameTarget(session);
-                setRenameValue(session.label);
-              }}
-              onDelete={() => setDeleteTarget(session)}
-              onClick={() => {
-                dispatch({ type: "SET_ACTIVE", id: session.id });
-                dispatch({ type: "SET_PREVIEW_FILE", path: null });
-              }}
-            />
-          ))}
-
-          {/* Past Claude sessions */}
-          {pastSessions.length > 0 && (
-            <>
-              <Separator className="my-2" />
-              <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                Past Sessions
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          <div className="flex flex-col gap-0.5 p-2">
+            {/* Active sessions */}
+            {activeSessions.length > 0 && pastSessions.length > 0 && (
+              <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                Active
               </div>
-              {pastSessions.map((cs) => {
-                const pseudoSession: Session = {
-                  id: cs.session_id,
-                  agent: "claude-code",
-                  label: cs.display,
-                  status: "done",
-                  ptyId: null,
-                  worktreePath: null,
-                  branch: null,
-                  cwd: cs.project_path,
-                  createdAt: cs.timestamp,
-                  exitCode: null,
-                  command: "claude",
-                  args: ["--resume", cs.session_id],
-                };
-                return (
-                  <SessionCard
-                    key={cs.session_id}
-                    session={pseudoSession}
-                    isActive={state.activeSessionId === cs.session_id}
-                    isPast
-                    tokenInfo={{
-                      inputTokens: cs.input_tokens,
-                      outputTokens: cs.output_tokens,
-                      model: cs.model,
-                    }}
-                    onClick={() => {
-                      if (onResumeSession) {
-                        onResumeSession(cs.session_id, cs.project_path, cs.display);
-                      }
-                    }}
-                  />
-                );
-              })}
-            </>
-          )}
+            )}
+            {activeSessions.map((session) => (
+              <SessionCard
+                key={session.id}
+                session={session}
+                isActive={state.activeSessionId === session.id}
+                timestampLabel={formatCompactRelativeTime(
+                  session.createdAt,
+                  now,
+                )}
+                timestampTitle={formatTimestampTitle(session.createdAt)}
+                onStop={
+                  session.ptyId !== null &&
+                  (session.status === "running" ||
+                    session.status === "needs-input")
+                    ? () => void onStopSession?.(session.id)
+                    : undefined
+                }
+                onRename={() => {
+                  setRenameTarget({ session, isPast: false });
+                  setRenameValue(session.label);
+                }}
+                onDelete={() => setDeleteTarget({ session, isPast: false })}
+                onClick={() => {
+                  dispatch({ type: "SET_ACTIVE", id: session.id });
+                  dispatch({ type: "SET_PREVIEW_FILE", path: null });
+                }}
+              />
+            ))}
 
-          {/* Empty state */}
-          {activeSessions.length === 0 && pastSessions.length === 0 && !loading && (
-            <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-              No sessions yet.
-            </div>
-          )}
+            {/* Past Claude sessions */}
+            {pastSessions.length > 0 && (
+              <>
+                <Separator className="my-2" />
+                <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Past Sessions
+                </div>
+                {pastSessions.map((cs) => {
+                  const pseudoSession: Session = {
+                    id: cs.session_id,
+                    agent: "claude-code",
+                    label: cs.display,
+                    status: "done",
+                    ptyId: null,
+                    worktreePath: null,
+                    branch: null,
+                    cwd: cs.project_path,
+                    createdAt: cs.timestamp,
+                    exitCode: null,
+                    command: "claude",
+                    args: ["--resume", cs.session_id],
+                  };
+                  return (
+                    <SessionCard
+                      key={cs.session_id}
+                      session={pseudoSession}
+                      isActive={state.activeSessionId === cs.session_id}
+                      isPast
+                      timestampLabel={formatCompactRelativeTime(
+                        cs.timestamp,
+                        now,
+                      )}
+                      timestampTitle={formatTimestampTitle(cs.timestamp)}
+                      tokenInfo={{
+                        inputTokens: cs.input_tokens,
+                        outputTokens: cs.output_tokens,
+                        model: cs.model,
+                      }}
+                      onResume={() => {
+                        if (onResumeSession) {
+                          onResumeSession(
+                            cs.session_id,
+                            cs.project_path,
+                            cs.display,
+                          );
+                        }
+                      }}
+                      onRename={() => {
+                        setRenameTarget({
+                          session: pseudoSession,
+                          isPast: true,
+                        });
+                        setRenameValue(cs.display);
+                      }}
+                      onDelete={() => {
+                        setDeleteTarget({
+                          session: pseudoSession,
+                          isPast: true,
+                        });
+                      }}
+                      onClick={() => {
+                        if (onResumeSession) {
+                          onResumeSession(
+                            cs.session_id,
+                            cs.project_path,
+                            cs.display,
+                          );
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </>
+            )}
 
-          {/* Loading state */}
-          {loading && activeSessions.length === 0 && (
-            <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-              Loading sessions...
-            </div>
-          )}
+            {/* Empty state */}
+            {activeSessions.length === 0 &&
+              pastSessions.length === 0 &&
+              !loading && (
+                <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+                  No sessions yet.
+                </div>
+              )}
+
+            {/* Loading state */}
+            {loading && activeSessions.length === 0 && (
+              <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
+                Loading sessions...
+              </div>
+            )}
+          </div>
         </div>
-      </div>
       )}
 
-      <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && closeRenameDialog()}>
+      <Dialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => !open && closeRenameDialog()}
+      >
         <DialogContent className="sm:max-w-[360px]">
           <DialogHeader>
             <DialogTitle>Rename Session</DialogTitle>
@@ -229,7 +305,10 @@ export function SessionSidebar({
             </Button>
             <Button
               onClick={() => void handleRenameSubmit()}
-              disabled={!renameValue.trim() || renameValue.trim() === renameTarget?.label}
+              disabled={
+                !renameValue.trim() ||
+                renameValue.trim() === renameTarget?.session.label
+              }
             >
               Save
             </Button>
@@ -237,22 +316,30 @@ export function SessionSidebar({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
         <DialogContent className="sm:max-w-[360px]">
           <DialogHeader>
             <DialogTitle>Delete Session</DialogTitle>
             <DialogDescription>
-              This removes the session from Switchboard and stops its terminal process if it is still running.
+              This removes the session from Switchboard and stops its terminal
+              process if it is still running.
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-foreground">
-            Delete <span className="font-medium">{deleteTarget?.label}</span>?
+            Delete{" "}
+            <span className="font-medium">{deleteTarget?.session.label}</span>?
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => void handleDeleteConfirm()}>
+            <Button
+              variant="destructive"
+              onClick={() => void handleDeleteConfirm()}
+            >
               Delete
             </Button>
           </DialogFooter>
