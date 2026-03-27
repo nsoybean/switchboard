@@ -43,6 +43,7 @@ export function GitToolbar({
   onRefresh,
   onOpenSettings,
 }: GitToolbarProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
   const [stageAllFirst, setStageAllFirst] = useState(true);
@@ -70,6 +71,7 @@ export function GitToolbar({
   const handlePush = async () => {
     if (pushPending) return;
 
+    setMenuOpen(false);
     setPushPending(true);
     try {
       await onPush();
@@ -95,7 +97,7 @@ export function GitToolbar({
 
       {/* Action buttons */}
       <div className="flex gap-1.5">
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
@@ -114,13 +116,17 @@ export function GitToolbar({
           </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => setCommitOpen(true)}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setMenuOpen(false);
+                  setCommitOpen(true);
+                }}
+              >
                 Commit
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={pushPending || commitPending}
-                onSelect={(event) => {
-                  event.preventDefault();
+                onSelect={() => {
                   void handlePush();
                 }}
               >
