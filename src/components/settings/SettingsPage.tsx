@@ -137,7 +137,7 @@ export function SettingsPage({
                 <p className="mt-1 text-sm text-muted-foreground">No project selected</p>
               )}
               <p className="mt-3 text-[11px] text-muted-foreground">
-                Saved projects: {state.projects.length}
+                Projects added: {state.projects.length}
               </p>
             </div>
           </section>
@@ -149,8 +149,7 @@ export function SettingsPage({
               <div>
                 <h2 className="text-sm font-semibold">App Updates</h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Switchboard checks GitHub Releases on launch and shows an
-                  update button in the titlebar when a newer version exists.
+                  Checks GitHub Releases on launch.
                 </p>
               </div>
               <Button
