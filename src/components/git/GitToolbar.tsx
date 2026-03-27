@@ -44,7 +44,6 @@ export function GitToolbar({
   onRefresh,
   onOpenSettings,
 }: GitToolbarProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
   const [stageAllFirst, setStageAllFirst] = useState(true);
@@ -71,21 +70,20 @@ export function GitToolbar({
     }
   };
 
-  const handlePush = async () => {
-    if (pushPending) return;
-    requestAnimationFrame(() => {
-      flushSync(() => {
-        setPushPending(true);
-      });
+  const handlePush = () => {
+    if (pushPending || commitPending) return;
 
-      void (async () => {
-        try {
-          await onPush();
-        } finally {
-          setPushPending(false);
-        }
-      })();
+    flushSync(() => {
+      setPushPending(true);
     });
+
+    void (async () => {
+      try {
+        await onPush();
+      } finally {
+        setPushPending(false);
+      }
+    })();
   };
 
   return (
@@ -105,7 +103,7 @@ export function GitToolbar({
 
       {/* Action buttons */}
       <div className="flex gap-1.5">
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
@@ -124,24 +122,13 @@ export function GitToolbar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setMenuOpen(false);
-                  setCommitOpen(true);
-                }}
-              >
+              <DropdownMenuItem onSelect={() => setCommitOpen(true)}>
                 Commit
               </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={pushPending || commitPending}
-                onSelect={() => {
-                  flushSync(() => {
-                    setMenuOpen(false);
-                  });
-                  void handlePush();
-                }}
-              >
-                Push
+              <DropdownMenuItem asChild disabled={pushPending || commitPending}>
+                <button type="button" onClick={handlePush}>
+                  Push
+                </button>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
