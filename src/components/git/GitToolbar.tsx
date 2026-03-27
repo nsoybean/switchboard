@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import { GitBranch, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -55,7 +56,9 @@ export function GitToolbar({
     const message = commitMsg.trim();
     if (!message || commitPending) return;
 
-    setCommitPending(true);
+    flushSync(() => {
+      setCommitPending(true);
+    });
     try {
       if (stageAllFirst) {
         await onStageAll();
@@ -71,8 +74,10 @@ export function GitToolbar({
   const handlePush = async () => {
     if (pushPending) return;
 
-    setMenuOpen(false);
-    setPushPending(true);
+    flushSync(() => {
+      setMenuOpen(false);
+      setPushPending(true);
+    });
     try {
       await onPush();
     } finally {
