@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { Titlebar } from "./Titlebar";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
-import { TerminalToolbar } from "../terminal/TerminalToolbar";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
 import { ScrollView } from "../terminal/ScrollView";
@@ -857,11 +856,6 @@ export function AppLayout() {
           {/* Main area */}
           <ResizablePanel defaultSize="55%">
             <div className="flex flex-col h-full min-w-0 overflow-hidden">
-              <TerminalToolbar
-                session={selectedSession}
-                onStopSession={handleStopSession}
-              />
-
               <div className="flex-1 relative min-h-0">
                 {!state.projectPath ? (
                   <div className="h-full flex items-center justify-center bg-background">
@@ -907,6 +901,7 @@ export function AppLayout() {
                       dispatch({ type: "SET_ACTIVE", id });
                       setViewingSession(null);
                     }}
+                    onStopSession={handleStopSession}
                     onSessionSpawn={handleSessionSpawn}
                     onSessionExit={handleSessionExit}
                   />

@@ -1,20 +1,20 @@
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CircleDot } from "lucide-react";
+import { CircleDot, Square } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { XTermContainer } from "./XTermContainer";
 import type { Session } from "../../state/types";
-
-const AGENT_LABELS: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  bash: "bash",
-};
 
 interface ScrollViewProps {
   sessions: Session[];
   activeSessionId?: string | null;
   onSessionSelect?: (id: string) => void;
+  onStopSession?: (id: string) => Promise<void>;
   onSessionSpawn: (id: string, ptyId: number) => void;
   onSessionExit: (id: string) => (code: number | null) => void;
 }
@@ -23,6 +23,7 @@ export function ScrollView({
   sessions,
   activeSessionId,
   onSessionSelect,
+  onStopSession,
   onSessionSpawn,
   onSessionExit,
 }: ScrollViewProps) {
@@ -45,6 +46,9 @@ export function ScrollView({
       >
         {sessions.map((session) => {
           const isActive = session.id === activeSessionId;
+          const canStop =
+            session.ptyId !== null &&
+            (session.status === "running" || session.status === "needs-input");
           return (
             <div
               key={session.id}
@@ -62,9 +66,24 @@ export function ScrollView({
                 <span className="text-xs font-medium truncate flex-1">
                   {session.label}
                 </span>
-                <Badge variant="secondary" className="h-4 px-1 text-[10px]">
-                  {AGENT_LABELS[session.agent] ?? session.agent}
-                </Badge>
+                {canStop && onStopSession ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void onStopSession(session.id);
+                        }}
+                      >
+                        <Square />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Stop session</TooltipContent>
+                  </Tooltip>
+                ) : null}
                 <CircleDot
                   className={cn(
                     "size-2.5",
