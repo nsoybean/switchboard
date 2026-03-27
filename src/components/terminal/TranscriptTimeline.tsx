@@ -129,8 +129,11 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
 
   return (
     <div className="relative h-full bg-background font-sans text-foreground">
-      <ScrollArea ref={scrollAreaRef} className="h-full">
-        <div className="mx-auto max-w-4xl px-5 py-5">
+      <ScrollArea
+        ref={scrollAreaRef}
+        className="h-full [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:w-3 [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:border-l-border/60 [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:bg-background/95 [&_[data-slot=scroll-area-thumb]]:rounded-none [&_[data-slot=scroll-area-thumb]]:bg-muted-foreground/35 hover:[&_[data-slot=scroll-area-thumb]]:bg-muted-foreground/50"
+      >
+        <div className="mx-auto max-w-4xl px-5 py-5 pr-6">
           {items.length === 0 ? (
             <div className="rounded-none border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
               No transcript events found for this session.
@@ -212,23 +215,60 @@ function TimelineEventCard({ event }: { event: SessionTranscriptEvent }) {
   }
 
   if (event.kind === "reasoning") {
-    return (
-      <TimelineRow tone="muted">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="font-medium">{event.title ?? "Thinking"}</span>
-          {event.text && (
-            <span className="truncate text-xs">
-              {stripMarkdownAdornment(event.text)}
-            </span>
-          )}
-        </div>
-      </TimelineRow>
-    );
+    return <ReasoningTimelineCard event={event} />;
   }
 
   return (
     <TimelineRow tone={eventTone(event.status)}>
       <MarkdownTextBlock text={event.text ?? ""} />
+    </TimelineRow>
+  );
+}
+
+function ReasoningTimelineCard({
+  event,
+}: {
+  event: SessionTranscriptEvent;
+}) {
+  const text = event.text ?? "";
+  const shouldCollapse =
+    countLines(text) > 3 || text.length > 220 || text.includes("\n\n");
+  const [expanded, setExpanded] = useState(!shouldCollapse);
+
+  return (
+    <TimelineRow tone="muted">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground">
+            <span className="font-medium">{event.title ?? "Thinking"}</span>
+            {!expanded && text && (
+              <span className="truncate text-xs">
+                {stripMarkdownAdornment(text)}
+              </span>
+            )}
+          </div>
+          {shouldCollapse && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs text-muted-foreground"
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {expanded ? (
+                <ChevronDown data-icon="inline-start" />
+              ) : (
+                <ChevronRight data-icon="inline-start" />
+              )}
+              {expanded ? "Collapse" : "Expand"}
+            </Button>
+          )}
+        </div>
+        {expanded && text && (
+          <div className="text-sm text-muted-foreground">
+            <MarkdownTextBlock text={text} />
+          </div>
+        )}
+      </div>
     </TimelineRow>
   );
 }

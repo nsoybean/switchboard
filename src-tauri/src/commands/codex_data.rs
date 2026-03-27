@@ -344,6 +344,7 @@ pub fn get_codex_session_transcript(
     let data = fs::read_to_string(file_path).map_err(|e| format!("Read failed: {}", e))?;
     let mut events = Vec::new();
     let mut tool_titles = HashMap::<String, String>::new();
+    let mut last_reasoning_text: Option<String> = None;
 
     for (index, line) in data.lines().enumerate() {
         if line.trim().is_empty() {
@@ -355,10 +356,6 @@ pub fn get_codex_session_transcript(
             Err(_) => continue,
         };
 
-        if value.get("type").and_then(|v| v.as_str()) != Some("response_item") {
-            continue;
-        }
-
         let Some(payload) = value.get("payload") else {
             continue;
         };
@@ -367,6 +364,38 @@ pub fn get_codex_session_transcript(
             .and_then(|value| value.as_str())
             .map(|value| value.to_string());
         let event_id = format!("codex-{index}");
+
+        if value.get("type").and_then(|v| v.as_str()) == Some("event_msg") {
+            if payload.get("type").and_then(|value| value.as_str()) == Some("agent_reasoning") {
+                let text = payload
+                    .get("text")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+
+                if !text.is_empty() {
+                    last_reasoning_text = Some(text.clone());
+                    events.push(SessionTranscriptEvent {
+                        id: event_id,
+                        kind: "reasoning".to_string(),
+                        timestamp,
+                        role: Some("assistant".to_string()),
+                        title: Some("Thinking".to_string()),
+                        text: Some(text),
+                        status: None,
+                        display_mode: Some("text".to_string()),
+                        call_id: None,
+                        metadata: Vec::new(),
+                    });
+                }
+            }
+            continue;
+        }
+
+        if value.get("type").and_then(|v| v.as_str()) != Some("response_item") {
+            continue;
+        }
 
         match payload
             .get("type")
@@ -433,17 +462,22 @@ pub fn get_codex_session_transcript(
                     })
                     .unwrap_or_default();
 
+                let summary = summary.trim().to_string();
+                if summary.is_empty() {
+                    continue;
+                }
+
+                if last_reasoning_text.as_deref() == Some(summary.as_str()) {
+                    continue;
+                }
+
                 events.push(SessionTranscriptEvent {
                     id: event_id,
                     kind: "reasoning".to_string(),
                     timestamp,
                     role: Some("assistant".to_string()),
                     title: Some("Thinking".to_string()),
-                    text: if summary.trim().is_empty() {
-                        None
-                    } else {
-                        Some(summary.trim().to_string())
-                    },
+                    text: Some(summary),
                     status: None,
                     display_mode: Some("text".to_string()),
                     call_id: None,
@@ -559,17 +593,17 @@ fn describe_codex_tool_call(
     match name {
         "exec_command" => {
             let parsed = parse_json_arguments(arguments);
-            let cmd = parsed
-                .as_ref()
-                .and_then(|value| value.get("cmd"))
-                .and_then(|value| value.as_str())
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty());
             let workdir = parsed
                 .as_ref()
                 .and_then(|value| value.get("workdir"))
                 .and_then(|value| value.as_str())
                 .map(|value| value.to_string());
+            let cmd = parsed
+                .as_ref()
+                .and_then(|value| value.get("cmd"))
+                .and_then(|value| value.as_str())
+                .map(|value| normalize_exec_command(value, workdir.as_deref()))
+                .filter(|value| !value.is_empty());
 
             let mut metadata = Vec::new();
             if let Some(workdir) = workdir {
@@ -693,6 +727,25 @@ fn apply_patch_files(arguments: &str) -> Vec<String> {
         .collect()
 }
 
+fn normalize_exec_command(command: &str, workdir: Option<&str>) -> String {
+    let trimmed = command.trim();
+    let Some(workdir) = workdir.map(str::trim).filter(|value| !value.is_empty()) else {
+        return trimmed.to_string();
+    };
+
+    for prefix in [
+        format!("cd {workdir} && "),
+        format!("cd '{workdir}' && "),
+        format!("cd \"{workdir}\" && "),
+    ] {
+        if let Some(stripped) = trimmed.strip_prefix(&prefix) {
+            return stripped.trim().to_string();
+        }
+    }
+
+    trimmed.to_string()
+}
+
 fn codex_output_status(output: &str) -> &'static str {
     if output.contains("Process exited with code 0") {
         "success"
@@ -709,5 +762,24 @@ fn codex_output_display_mode(output: &str) -> &'static str {
         "diff"
     } else {
         "code"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_exec_command;
+
+    #[test]
+    fn strips_matching_workdir_prefix_from_exec_command() {
+        let command = "cd /tmp/project && npm test";
+        let normalized = normalize_exec_command(command, Some("/tmp/project"));
+        assert_eq!(normalized, "npm test");
+    }
+
+    #[test]
+    fn preserves_exec_command_when_prefix_does_not_match_workdir() {
+        let command = "cd /tmp/other && npm test";
+        let normalized = normalize_exec_command(command, Some("/tmp/project"));
+        assert_eq!(normalized, "cd /tmp/other && npm test");
     }
 }
