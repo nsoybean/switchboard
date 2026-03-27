@@ -28,6 +28,7 @@ Switchboard gives you:
 Early alpha. The core works — you can spawn Claude Code and Codex sessions, interact with them, switch between them, manage git, and resume past sessions. Building in public.
 
 **What's working (M1):**
+
 - Interactive terminal sessions via PTY (portable-pty → xterm.js)
 - Agent picker (Claude Code / Codex / Bash)
 - Session sidebar with status indicators
@@ -39,6 +40,7 @@ Early alpha. The core works — you can spawn Claude Code and Codex sessions, in
 - Session persistence across app restarts
 
 **Coming next (M2):**
+
 - Comparison mode — same task to different agents, side-by-side diff
 - Stream View — all terminals visible in a horizontal scroll
 - File tree viewer
@@ -73,15 +75,15 @@ Produces `.dmg` (macOS) or `.AppImage` (Linux) in `src-tauri/target/release/bund
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Desktop framework | [Tauri v2](https://v2.tauri.app/) (Rust) |
-| Frontend | React 19 + TypeScript + Tailwind CSS |
-| Terminal emulation | [xterm.js](https://xtermjs.org/) v6 + WebGL addon |
-| PTY management | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands) |
-| Git operations | Git CLI subprocess |
-| State management | React Context + useReducer |
-| Session data | Reads from `~/.claude/projects/` (Claude Code) + `~/.switchboard/sessions.json` (own metadata) |
+| Layer              | Technology                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| Desktop framework  | [Tauri v2](https://v2.tauri.app/) (Rust)                                                       |
+| Frontend           | React 19 + TypeScript + Tailwind CSS                                                           |
+| Terminal emulation | [xterm.js](https://xtermjs.org/) v6 + WebGL addon                                              |
+| PTY management     | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands)                  |
+| Git operations     | Git CLI subprocess                                                                             |
+| State management   | React Context + useReducer                                                                     |
+| Session data       | Reads from `~/.claude/projects/` (Claude Code) + `~/.switchboard/sessions.json` (own metadata) |
 
 ### Architecture
 

@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Switchboard",
   "version": "0.1.0",
-  "identifier": "dev.switchboard.app",
+  "identifier": "dev.switchboard.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -36,5 +37,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGMUQxRDk1RUUyOUZENTgKUldSWS9TbnVsUjBkLzhzYXN0bWFGUjEyc1ZnS1I5WlpwQlg3K2JtSXJCNGs0dGZ0ZlEyeUVML0oK",
+      "endpoints": [
+        "https://github.com/nsoybean/switchboard/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

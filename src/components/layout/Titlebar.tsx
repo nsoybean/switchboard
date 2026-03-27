@@ -1,9 +1,11 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  ArrowDownToLine,
   ChevronLeft,
   ChevronRight,
   Columns2,
   GitBranch,
+  Loader2,
   PanelLeft,
   PanelRight,
   Settings,
@@ -31,6 +33,11 @@ interface TitlebarProps {
   viewMode?: "focused" | "scroll";
   onToggleViewMode?: () => void;
   onOpenSettings?: () => void;
+  updateVersion?: string | null;
+  checkingForUpdates?: boolean;
+  installingUpdate?: boolean;
+  updateProgress?: number | null;
+  onInstallUpdate?: () => void;
 }
 
 export function Titlebar({
@@ -44,6 +51,11 @@ export function Titlebar({
   viewMode = "focused",
   onToggleViewMode,
   onOpenSettings,
+  updateVersion = null,
+  checkingForUpdates = false,
+  installingUpdate = false,
+  updateProgress = null,
+  onInstallUpdate,
 }: TitlebarProps) {
   const { theme, setTheme } = useTheme();
   const appWindow = getCurrentWindow();
@@ -121,6 +133,29 @@ export function Titlebar({
 
       {/* Right controls */}
       <div className="flex items-center gap-0.5 px-2">
+        {updateVersion && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs"
+              onClick={onInstallUpdate}
+              disabled={checkingForUpdates || installingUpdate}
+            >
+              {installingUpdate ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <ArrowDownToLine className="size-3.5" />
+              )}
+              {installingUpdate && updateProgress !== null
+                ? `Updating ${updateProgress}%`
+                : `Update ${updateVersion}`}
+            </Button>
+
+            <Separator orientation="vertical" className="h-4 mx-1" />
+          </>
+        )}
+
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
