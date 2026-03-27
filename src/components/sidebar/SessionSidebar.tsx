@@ -21,6 +21,7 @@ import type { Session } from "../../state/types";
 
 interface SessionSidebarProps {
   onNewSession: () => void;
+  onViewSession?: (session: Session) => void;
   onResumeSession?: (session: Session) => Promise<void> | void;
   onStopSession?: (sessionId: string) => Promise<void>;
   onRenameSession?: (session: Session, label: string) => Promise<void>;
@@ -45,6 +46,7 @@ interface PastSessionItem {
 
 export function SessionSidebar({
   onNewSession,
+  onViewSession,
   onResumeSession,
   onStopSession,
   onRenameSession,
@@ -318,12 +320,7 @@ export function SessionSidebar({
                         });
                       }}
                       onClick={() => {
-                        if (canResume && onResumeSession) {
-                          void onResumeSession(item.session);
-                        } else {
-                          dispatch({ type: "SET_ACTIVE", id: item.session.id });
-                          dispatch({ type: "SET_PREVIEW_FILE", path: null });
-                        }
+                        onViewSession?.(item.session);
                       }}
                     />
                   );

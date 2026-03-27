@@ -44,7 +44,8 @@ fn read_store() -> Result<SessionStore, String> {
 
 fn write_store(store: &SessionStore) -> Result<(), String> {
     let path = store_path()?;
-    let data = serde_json::to_string_pretty(store).map_err(|e| format!("Serialize failed: {}", e))?;
+    let data =
+        serde_json::to_string_pretty(store).map_err(|e| format!("Serialize failed: {}", e))?;
     fs::write(&path, data).map_err(|e| format!("Write failed: {}", e))
 }
 
@@ -183,10 +184,7 @@ pub fn validate_github_token(token: String) -> Result<String, String> {
 /// Detect which agent CLIs are available in PATH
 #[tauri::command]
 pub fn detect_agents() -> Result<Vec<DetectedAgent>, String> {
-    let agents = vec![
-        ("claude", "Claude Code"),
-        ("codex", "Codex"),
-    ];
+    let agents = vec![("claude", "Claude Code"), ("codex", "Codex")];
 
     let mut results = Vec::new();
     for (cmd, name) in agents {

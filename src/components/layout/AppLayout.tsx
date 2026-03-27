@@ -4,6 +4,7 @@ import { useAppState, useAppDispatch } from "../../state/context";
 import { Titlebar } from "./Titlebar";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { TerminalToolbar } from "../terminal/TerminalToolbar";
+import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
 import { ScrollView } from "../terminal/ScrollView";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
@@ -54,18 +55,23 @@ export function AppLayout() {
   const [gitPanelOpen, setGitPanelOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const sessionsRef = useRef(state.sessions);
 
   const sessions = Object.values(state.sessions);
+  const liveSessions = sessions.filter(
+    (session) =>
+      session.status === "running" || session.status === "needs-input",
+  );
   const sortedSessionIds = useMemo(
     () =>
-      sessions
+      liveSessions
         .sort(
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         )
         .map((s) => s.id),
-    [sessions],
+    [liveSessions],
   );
   const activeSession = state.activeSessionId
     ? state.sessions[state.activeSessionId]
@@ -472,6 +478,7 @@ export function AppLayout() {
               <ResizablePanel defaultSize="20%" minSize="15%" maxSize="35%">
                 <SessionSidebar
                   onNewSession={() => setDialogOpen(true)}
+                  onViewSession={(session) => setViewingSession(session)}
                   onResumeSession={handleResumeSession}
                   onStopSession={handleStopSession}
                   onRenameSession={handleRenameSession}
@@ -486,7 +493,7 @@ export function AppLayout() {
           <ResizablePanel defaultSize="55%">
             <div className="flex flex-col h-full min-w-0 overflow-hidden">
               <TerminalToolbar
-                session={activeSession}
+                session={viewingSession ? null : activeSession}
                 onStopSession={handleStopSession}
                 gitPanelOpen={gitPanelOpen}
                 onToggleGitPanel={() => setGitPanelOpen(!gitPanelOpen)}
@@ -529,16 +536,19 @@ export function AppLayout() {
                   </div>
                 ) : state.viewMode === "scroll" ? (
                   <ScrollView
-                    sessions={sessions.filter((s) => aliveSessionIds.has(s.id))}
+                    sessions={liveSessions.filter((s) =>
+                      aliveSessionIds.has(s.id),
+                    )}
                     onSessionClick={(id) => {
                       dispatch({ type: "SET_ACTIVE", id });
+                      setViewingSession(null);
                       dispatch({ type: "SET_VIEW_MODE", mode: "focused" });
                     }}
                     onSessionSpawn={handleSessionSpawn}
                     onSessionExit={handleSessionExit}
                   />
                 ) : (
-                  sessions.map((session) => {
+                  liveSessions.map((session) => {
                     if (!aliveSessionIds.has(session.id)) return null;
                     const isActive = session.id === state.activeSessionId;
 
@@ -561,6 +571,19 @@ export function AppLayout() {
                       </div>
                     );
                   })
+                )}
+
+                {viewingSession && (
+                  <div className="absolute inset-0 z-10">
+                    <SessionTranscriptView
+                      session={viewingSession}
+                      onClose={() => setViewingSession(null)}
+                      onResume={() => {
+                        void handleResumeSession(viewingSession);
+                        setViewingSession(null);
+                      }}
+                    />
+                  </div>
                 )}
 
                 {/* File preview overlay */}
