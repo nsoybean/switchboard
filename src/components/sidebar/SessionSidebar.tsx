@@ -22,10 +22,12 @@ import type { Session } from "../../state/types";
 interface SessionSidebarProps {
   onNewSession: () => void;
   onViewSession?: (session: Session) => void;
+  onSelectActiveSession?: () => void;
   onResumeSession?: (session: Session) => Promise<void> | void;
   onStopSession?: (sessionId: string) => Promise<void>;
   onRenameSession?: (session: Session, label: string) => Promise<void>;
   onDeleteSession?: (session: Session) => Promise<void>;
+  selectedSessionId?: string | null;
 }
 
 interface SessionTarget {
@@ -47,10 +49,12 @@ interface PastSessionItem {
 export function SessionSidebar({
   onNewSession,
   onViewSession,
+  onSelectActiveSession,
   onResumeSession,
   onStopSession,
   onRenameSession,
   onDeleteSession,
+  selectedSessionId,
 }: SessionSidebarProps) {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -71,6 +75,7 @@ export function SessionSidebar({
     reload: reloadCodexSessions,
   } = useCodexSessions(state.projectPath);
   const loading = claudeLoading || codexLoading;
+  const effectiveSelectedSessionId = selectedSessionId ?? state.activeSessionId;
 
   const allLocalSessions = Object.values(state.sessions).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -252,7 +257,7 @@ export function SessionSidebar({
               <SessionCard
                 key={session.id}
                 session={session}
-                isActive={state.activeSessionId === session.id}
+                isActive={effectiveSelectedSessionId === session.id}
                 timestampLabel={formatCompactRelativeTime(
                   session.createdAt,
                   now,
@@ -271,6 +276,7 @@ export function SessionSidebar({
                 }}
                 onDelete={() => setDeleteTarget({ session, source: "local" })}
                 onClick={() => {
+                  onSelectActiveSession?.();
                   dispatch({ type: "SET_ACTIVE", id: session.id });
                   dispatch({ type: "SET_PREVIEW_FILE", path: null });
                 }}
@@ -292,7 +298,7 @@ export function SessionSidebar({
                     <SessionCard
                       key={item.key}
                       session={item.session}
-                      isActive={state.activeSessionId === item.session.id}
+                      isActive={effectiveSelectedSessionId === item.session.id}
                       timestampLabel={formatCompactRelativeTime(
                         item.session.createdAt,
                         now,

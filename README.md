@@ -2,6 +2,10 @@
 
 **Run a team of AI coding agents from one window.**
 
+<p align="center">
+  <img src="./public/hero-shot.png" alt="Switchboard showing multiple Claude Code and Codex sessions in one desktop window" width="1120" />
+</p>
+
 Switchboard is an open-source desktop app for managing multiple AI coding agents (Claude Code, Codex) in parallel. Each agent gets its own interactive terminal — exactly like running it natively — with session management, git worktree isolation, and a built-in git panel on top.
 
 Think [Conductor](https://www.conductor.build/), but open source.

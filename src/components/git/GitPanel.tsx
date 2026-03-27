@@ -25,7 +25,7 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [stats, setStats] = useState<DiffStats>({ additions: 0, deletions: 0, files_changed: 0 });
   const [activeTab, setActiveTab] = useState("unstaged");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [fileDiff, setFileDiff] = useState<string>("");
