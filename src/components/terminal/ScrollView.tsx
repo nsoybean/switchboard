@@ -13,14 +13,16 @@ const AGENT_LABELS: Record<string, string> = {
 
 interface ScrollViewProps {
   sessions: Session[];
-  onSessionClick: (id: string) => void;
+  activeSessionId?: string | null;
+  onSessionSelect?: (id: string) => void;
   onSessionSpawn: (id: string, ptyId: number) => void;
   onSessionExit: (id: string) => (code: number | null) => void;
 }
 
 export function ScrollView({
   sessions,
-  onSessionClick,
+  activeSessionId,
+  onSessionSelect,
   onSessionSpawn,
   onSessionExit,
 }: ScrollViewProps) {
@@ -42,14 +44,20 @@ export function ScrollView({
         }}
       >
         {sessions.map((session) => {
+          const isActive = session.id === activeSessionId;
           return (
             <div
               key={session.id}
-              className="flex flex-col border rounded-md overflow-hidden bg-background cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => onSessionClick(session.id)}
+              className={cn(
+                "flex flex-col overflow-hidden rounded-md border bg-background transition-colors",
+                isActive
+                  ? "border-primary shadow-sm"
+                  : "hover:border-primary/50",
+              )}
+              onClick={() => onSessionSelect?.(session.id)}
             >
               {/* Mini header */}
-              <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-card shrink-0">
+              <div className="flex shrink-0 items-center gap-2 border-b bg-card px-3 py-1.5">
                 <AgentIcon agent={session.agent} className="size-3.5" />
                 <span className="text-xs font-medium truncate flex-1">
                   {session.label}

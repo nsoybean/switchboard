@@ -549,10 +549,10 @@ export function AppLayout() {
                     sessions={liveSessions.filter((s) =>
                       aliveSessionIds.has(s.id),
                     )}
-                    onSessionClick={(id) => {
+                    activeSessionId={state.activeSessionId}
+                    onSessionSelect={(id) => {
                       dispatch({ type: "SET_ACTIVE", id });
                       setViewingSession(null);
-                      dispatch({ type: "SET_VIEW_MODE", mode: "focused" });
                     }}
                     onSessionSpawn={handleSessionSpawn}
                     onSessionExit={handleSessionExit}
