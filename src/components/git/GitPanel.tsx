@@ -12,6 +12,7 @@ import { DiffView } from "./DiffView";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import {
   Tooltip,
   TooltipContent,
@@ -146,13 +147,31 @@ export function GitPanel({ cwd, visible, githubToken, onOpenSettings }: GitPanel
   };
 
   const handleCommit = async (message: string) => {
-    await gitCommands.commit(cwd, message);
-    refresh();
+    await toast.promise(
+      (async () => {
+        await gitCommands.commit(cwd, message);
+        await refresh();
+      })(),
+      {
+        loading: "Committing changes...",
+        success: "Commit created",
+        error: (err) => `Failed to commit: ${String(err)}`,
+      },
+    );
   };
 
   const handlePush = async () => {
-    await gitCommands.push(cwd);
-    refresh();
+    await toast.promise(
+      (async () => {
+        await gitCommands.push(cwd);
+        await refresh();
+      })(),
+      {
+        loading: `Pushing ${branch || "current branch"}...`,
+        success: `Pushed ${branch || "current branch"}`,
+        error: (err) => `Failed to push: ${String(err)}`,
+      },
+    );
   };
 
   if (!visible) return null;
