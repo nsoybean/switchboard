@@ -97,75 +97,75 @@ export function GitToolbar({
 
       {/* Action buttons */}
       <div className="flex gap-1.5">
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              className="flex-1 text-xs"
-              disabled={commitPending || pushPending}
-            >
-              {commitPending || pushPending ? (
-                <>
-                  <Spinner className="size-3" />
-                  {commitPending ? "Committing..." : "Pushing..."}
-                </>
-              ) : (
-                "Commit"
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setMenuOpen(false);
-                  setCommitOpen(true);
-                }}
+        {commitPending || pushPending ? (
+          <Button size="sm" className="flex-1 text-xs" disabled>
+            <Spinner className="size-3" />
+            {commitPending ? "Committing..." : "Pushing..."}
+          </Button>
+        ) : (
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                className="flex-1 text-xs"
+                disabled={commitPending || pushPending}
               >
                 Commit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={pushPending || commitPending}
-                onSelect={() => {
-                  void handlePush();
-                }}
-              >
-                {pushPending ? <Spinner className="size-3" /> : null}
-                Push
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              {githubToken ? (
-                <DropdownMenuItem onClick={() => setPrDialogOpen(true)}>
-                  Create PR
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setMenuOpen(false);
+                    setCommitOpen(true);
+                  }}
+                >
+                  Commit
                 </DropdownMenuItem>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuItem
-                      disabled
-                      onSelect={(e) => e.preventDefault()}
-                    >
-                      Create PR
-                    </DropdownMenuItem>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">
-                    <p className="text-xs">Add a GitHub token in Settings to create PRs</p>
-                    {onOpenSettings && (
-                      <button
-                        className="text-xs text-primary underline mt-1"
-                        onClick={onOpenSettings}
+                <DropdownMenuItem
+                  disabled={pushPending || commitPending}
+                  onSelect={() => {
+                    void handlePush();
+                  }}
+                >
+                  {pushPending ? <Spinner className="size-3" /> : null}
+                  Push
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                {githubToken ? (
+                  <DropdownMenuItem onClick={() => setPrDialogOpen(true)}>
+                    Create PR
+                  </DropdownMenuItem>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuItem
+                        disabled
+                        onSelect={(e) => e.preventDefault()}
                       >
-                        Open Settings
-                      </button>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+                        Create PR
+                      </DropdownMenuItem>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                      <p className="text-xs">Add a GitHub token in Settings to create PRs</p>
+                      {onOpenSettings && (
+                        <button
+                          className="text-xs text-primary underline mt-1"
+                          onClick={onOpenSettings}
+                        >
+                          Open Settings
+                        </button>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="outline" size="sm" onClick={onRefresh}>
