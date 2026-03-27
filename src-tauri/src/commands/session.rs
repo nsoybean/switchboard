@@ -8,6 +8,7 @@ pub struct PersistedSession {
     pub id: String,
     pub agent: String,
     pub label: String,
+    pub resume_target_id: Option<String>,
     pub worktree_path: Option<String>,
     pub branch: Option<String>,
     pub cwd: String,

@@ -12,7 +12,7 @@ import { GitPanel } from "../git/GitPanel";
 import { FilePreview } from "../files/FilePreview";
 import { SettingsPage } from "../settings/SettingsPage";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
-import { buildSpawnArgs } from "../../lib/agents";
+import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
 import { worktreeCommands } from "../../lib/tauri-commands";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,26 @@ import { FolderOpen, Plus } from "lucide-react";
 import type { AgentType, Session, SessionStatus } from "../../state/types";
 
 const MAX_ALIVE_TERMINALS = 8;
+
+interface HistorySessionSummary {
+  session_id: string;
+  display: string;
+  timestamp: string;
+  project_path: string;
+}
+
+function getCodexInitialPrompt(session: Session): string | null {
+  if (session.agent !== "codex" || session.args.length === 0) {
+    return null;
+  }
+
+  const [firstArg] = session.args;
+  if (!firstArg || firstArg.startsWith("-") || firstArg === "resume") {
+    return null;
+  }
+
+  return firstArg;
+}
 
 export function AppLayout() {
   const state = useAppState();
@@ -66,6 +86,7 @@ export function AppLayout() {
           id: session.id,
           agent: session.agent,
           label: session.label,
+          resume_target_id: session.resumeTargetId,
           worktree_path: session.worktreePath,
           branch: session.branch,
           cwd: session.cwd,
@@ -116,9 +137,10 @@ export function AppLayout() {
         }
       }
 
-      const { command, args } = buildSpawnArgs(
+      const { command, args, resumeTargetId } = buildSpawnArgs(
         config.agent,
         config.task || undefined,
+        id,
       );
 
       const session: Session = {
@@ -126,6 +148,7 @@ export function AppLayout() {
         agent: config.agent,
         label: config.label,
         status: "running",
+        resumeTargetId,
         ptyId: null,
         worktreePath,
         branch,
@@ -141,35 +164,95 @@ export function AppLayout() {
     [dispatch, persistSession, state.projectPath],
   );
 
+  const syncCodexResumeTarget = useCallback(
+    async (session: Session) => {
+      if (session.agent !== "codex" || session.resumeTargetId) {
+        return session.resumeTargetId;
+      }
+
+      try {
+        const createdAtSecs = Math.floor(
+          new Date(session.createdAt).getTime() / 1000,
+        );
+        const match = await invoke<HistorySessionSummary | null>(
+          "find_codex_session",
+          {
+            cwd: session.cwd,
+            createdAtSecs,
+            prompt: getCodexInitialPrompt(session),
+          },
+        );
+
+        if (!match?.session_id) {
+          return null;
+        }
+
+        dispatch({
+          type: "SET_RESUME_TARGET",
+          id: session.id,
+          resumeTargetId: match.session_id,
+        });
+        await persistSession({
+          ...session,
+          resumeTargetId: match.session_id,
+        });
+        return match.session_id;
+      } catch (err) {
+        console.warn("Failed to sync Codex resume target:", err);
+        return null;
+      }
+    },
+    [dispatch, persistSession],
+  );
+
   const handleResumeSession = useCallback(
-    (sessionId: string, projectPath: string, label: string) => {
-      if (state.sessions[sessionId]) {
-        dispatch({ type: "SET_ACTIVE", id: sessionId });
+    async (session: Session) => {
+      const existingSession = state.sessions[session.id];
+      if (
+        existingSession &&
+        (existingSession.status === "running" ||
+          existingSession.status === "needs-input")
+      ) {
+        dispatch({ type: "SET_ACTIVE", id: existingSession.id });
         return;
       }
 
-      const session: Session = {
-        id: sessionId,
-        agent: "claude-code",
-        label,
+      const resumeTargetId =
+        session.resumeTargetId ?? (await syncCodexResumeTarget(session));
+      const resumeConfig = buildResumeArgs(session.agent, resumeTargetId);
+      if (!resumeConfig) {
+        return;
+      }
+
+      const nextSession: Session = {
+        ...session,
+        id: resumeTargetId ?? session.id,
         status: "running",
+        resumeTargetId,
         ptyId: null,
-        worktreePath: null,
-        branch: null,
-        cwd: projectPath,
         createdAt: new Date().toISOString(),
         exitCode: null,
-        command: "claude",
-        args: ["--resume", sessionId],
+        command: resumeConfig.command,
+        args: resumeConfig.args,
       };
-      dispatch({ type: "ADD_SESSION", session });
-      persistSession(session);
+
+      if (existingSession) {
+        await invoke("delete_session", { id: existingSession.id }).catch(
+          (err) =>
+            console.warn("Failed to delete ended session before resume:", err),
+        );
+        dispatch({ type: "REMOVE_SESSION", id: existingSession.id });
+      }
+
+      dispatch({ type: "ADD_SESSION", session: nextSession });
+      await persistSession(nextSession);
     },
-    [dispatch, state.sessions, persistSession],
+    [dispatch, persistSession, state.sessions, syncCodexResumeTarget],
   );
 
   const handleSessionExit = useCallback(
     (sessionId: string) => (code: number | null) => {
+      const session = sessionsRef.current[sessionId];
       const currentStatus = sessionsRef.current[sessionId]?.status;
       const status: SessionStatus =
         currentStatus === "stopped"
@@ -184,8 +267,12 @@ export function AppLayout() {
         status,
         exitCode: code,
       });
+
+      if (session?.agent === "codex") {
+        void syncCodexResumeTarget(session);
+      }
     },
-    [dispatch],
+    [dispatch, syncCodexResumeTarget],
   );
 
   const handleSessionSpawn = useCallback(
@@ -209,21 +296,35 @@ export function AppLayout() {
           status: "stopped",
           exitCode: session.exitCode,
         });
+        if (session.agent === "codex") {
+          void syncCodexResumeTarget(session);
+        }
       } catch (err) {
         toast.error("Failed to stop session", {
           description: String(err),
         });
       }
     },
-    [dispatch],
+    [dispatch, syncCodexResumeTarget],
   );
 
   const handleRenameSession = useCallback(
-    async (sessionId: string, label: string) => {
-      const session = state.sessions[sessionId];
-      if (!session) {
+    async (session: Session, label: string) => {
+      const localSession = state.sessions[session.id];
+      const historySessionId = session.resumeTargetId ?? session.id;
+      if (!localSession) {
         try {
-          await invoke("rename_claude_session", { sessionId, label });
+          if (session.agent === "codex") {
+            await invoke("rename_codex_session", {
+              sessionId: historySessionId,
+              label,
+            });
+          } else {
+            await invoke("rename_claude_session", {
+              sessionId: historySessionId,
+              label,
+            });
+          }
         } catch (err) {
           toast.error("Failed to rename session", {
             description: String(err),
@@ -233,13 +334,13 @@ export function AppLayout() {
       }
 
       const nextLabel = label.trim();
-      if (!nextLabel || nextLabel === session.label) return;
+      if (!nextLabel || nextLabel === localSession.label) return;
 
-      const updatedSession: Session = { ...session, label: nextLabel };
+      const updatedSession: Session = { ...localSession, label: nextLabel };
 
       try {
         await persistSession(updatedSession);
-        dispatch({ type: "RENAME_SESSION", id: sessionId, label: nextLabel });
+        dispatch({ type: "RENAME_SESSION", id: session.id, label: nextLabel });
       } catch (err) {
         toast.error("Failed to rename session", {
           description: String(err),
@@ -250,11 +351,20 @@ export function AppLayout() {
   );
 
   const handleDeleteSession = useCallback(
-    async (sessionId: string) => {
-      const session = state.sessions[sessionId];
-      if (!session) {
+    async (session: Session) => {
+      const localSession = state.sessions[session.id];
+      const historySessionId = session.resumeTargetId ?? session.id;
+      if (!localSession) {
         try {
-          await invoke("delete_claude_session", { sessionId });
+          if (session.agent === "codex") {
+            await invoke("delete_codex_session", {
+              sessionId: historySessionId,
+            });
+          } else {
+            await invoke("delete_claude_session", {
+              sessionId: historySessionId,
+            });
+          }
         } catch (err) {
           toast.error("Failed to delete session", {
             description: String(err),
@@ -263,15 +373,15 @@ export function AppLayout() {
         return;
       }
 
-      if (session.ptyId !== null) {
-        await invoke("pty_kill", { id: session.ptyId }).catch((err) => {
+      if (localSession.ptyId !== null) {
+        await invoke("pty_kill", { id: localSession.ptyId }).catch((err) => {
           console.warn("Failed to kill PTY during session deletion:", err);
         });
       }
 
       try {
-        await invoke("delete_session", { id: sessionId });
-        dispatch({ type: "REMOVE_SESSION", id: sessionId });
+        await invoke("delete_session", { id: localSession.id });
+        dispatch({ type: "REMOVE_SESSION", id: localSession.id });
         dispatch({ type: "SET_PREVIEW_FILE", path: null });
       } catch (err) {
         toast.error("Failed to delete session", {

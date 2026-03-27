@@ -31,7 +31,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         sessions: remaining,
         activeSessionId:
           state.activeSessionId === action.id
-            ? ids[ids.length - 1] ?? null
+            ? (ids[ids.length - 1] ?? null)
             : state.activeSessionId,
       };
     }
@@ -79,6 +79,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         sessions: {
           ...state.sessions,
           [action.id]: { ...session, ptyId: action.ptyId },
+        },
+      };
+    }
+
+    case "SET_RESUME_TARGET": {
+      const session = state.sessions[action.id];
+      if (!session) return state;
+      return {
+        ...state,
+        sessions: {
+          ...state.sessions,
+          [action.id]: { ...session, resumeTargetId: action.resumeTargetId },
         },
       };
     }

@@ -1,12 +1,18 @@
 export type AgentType = "claude-code" | "codex" | "bash";
 
-export type SessionStatus = "running" | "needs-input" | "done" | "error" | "stopped";
+export type SessionStatus =
+  | "running"
+  | "needs-input"
+  | "done"
+  | "error"
+  | "stopped";
 
 export interface Session {
   id: string;
   agent: AgentType;
   label: string;
   status: SessionStatus;
+  resumeTargetId: string | null;
   ptyId: number | null;
   worktreePath: string | null;
   branch: string | null;
@@ -34,8 +40,14 @@ export type AppAction =
   | { type: "REMOVE_SESSION"; id: string }
   | { type: "SET_ACTIVE"; id: string | null }
   | { type: "RENAME_SESSION"; id: string; label: string }
-  | { type: "UPDATE_STATUS"; id: string; status: SessionStatus; exitCode?: number | null }
+  | {
+      type: "UPDATE_STATUS";
+      id: string;
+      status: SessionStatus;
+      exitCode?: number | null;
+    }
   | { type: "SET_PTY_ID"; id: string; ptyId: number | null }
+  | { type: "SET_RESUME_TARGET"; id: string; resumeTargetId: string | null }
   | { type: "TOGGLE_GIT_PANEL" }
   | { type: "SET_PROJECT_PATH"; path: string | null }
   | { type: "SET_VIEW_MODE"; mode: "focused" | "scroll" }

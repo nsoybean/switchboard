@@ -10,7 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Plus } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
-import { useClaudeSessions } from "../../hooks/useSessions";
+import { useClaudeSessions, useCodexSessions } from "../../hooks/useSessions";
 import { SessionCard } from "./SessionCard";
 import { FilePanel } from "../files/FilePanel";
 import { Button } from "@/components/ui/button";
@@ -21,19 +21,26 @@ import type { Session } from "../../state/types";
 
 interface SessionSidebarProps {
   onNewSession: () => void;
-  onResumeSession?: (
-    sessionId: string,
-    projectPath: string,
-    label: string,
-  ) => void;
+  onResumeSession?: (session: Session) => Promise<void> | void;
   onStopSession?: (sessionId: string) => Promise<void>;
-  onRenameSession?: (sessionId: string, label: string) => Promise<void>;
-  onDeleteSession?: (sessionId: string) => Promise<void>;
+  onRenameSession?: (session: Session, label: string) => Promise<void>;
+  onDeleteSession?: (session: Session) => Promise<void>;
 }
 
 interface SessionTarget {
   session: Session;
-  isPast: boolean;
+  source: "local" | "history";
+}
+
+interface PastSessionItem {
+  key: string;
+  session: Session;
+  source: "local" | "history";
+  tokenInfo?: {
+    inputTokens: number;
+    outputTokens: number;
+    model: string | null;
+  };
 }
 
 export function SessionSidebar({
@@ -53,17 +60,100 @@ export function SessionSidebar({
 
   const {
     sessions: claudeSessions,
-    loading,
-    reload,
+    loading: claudeLoading,
+    reload: reloadClaudeSessions,
   } = useClaudeSessions(state.projectPath);
+  const {
+    sessions: codexSessions,
+    loading: codexLoading,
+    reload: reloadCodexSessions,
+  } = useCodexSessions(state.projectPath);
+  const loading = claudeLoading || codexLoading;
 
-  const activeSessions = Object.values(state.sessions).sort(
+  const allLocalSessions = Object.values(state.sessions).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
+  const activeSessions = allLocalSessions.filter(
+    (session) =>
+      session.status === "running" || session.status === "needs-input",
+  );
+  const endedSessions = allLocalSessions.filter(
+    (session) =>
+      session.status === "done" ||
+      session.status === "stopped" ||
+      session.status === "error",
+  );
+  const representedHistoryKeys = new Set(
+    allLocalSessions.flatMap((session) => {
+      if (session.agent === "claude-code") {
+        return [`claude-code:${session.resumeTargetId ?? session.id}`];
+      }
+      if (session.agent === "codex" && session.resumeTargetId) {
+        return [`codex:${session.resumeTargetId}`];
+      }
+      return [];
+    }),
+  );
 
-  const activeSessionIds = new Set(activeSessions.map((s) => s.id));
-  const pastSessions = claudeSessions.filter(
-    (cs) => !activeSessionIds.has(cs.session_id),
+  const pastSessions: PastSessionItem[] = [
+    ...endedSessions.map((session) => ({
+      key: `local:${session.id}`,
+      session,
+      source: "local" as const,
+    })),
+    ...claudeSessions
+      .filter(
+        (cs) => !representedHistoryKeys.has(`claude-code:${cs.session_id}`),
+      )
+      .map((cs) => ({
+        key: `claude:${cs.session_id}`,
+        source: "history" as const,
+        tokenInfo: {
+          inputTokens: cs.input_tokens,
+          outputTokens: cs.output_tokens,
+          model: cs.model,
+        },
+        session: {
+          id: cs.session_id,
+          agent: "claude-code" as const,
+          label: cs.display,
+          status: "done" as const,
+          resumeTargetId: cs.session_id,
+          ptyId: null,
+          worktreePath: null,
+          branch: null,
+          cwd: cs.project_path,
+          createdAt: cs.timestamp,
+          exitCode: null,
+          command: "claude",
+          args: ["--resume", cs.session_id],
+        },
+      })),
+    ...codexSessions
+      .filter((cs) => !representedHistoryKeys.has(`codex:${cs.session_id}`))
+      .map((cs) => ({
+        key: `codex:${cs.session_id}`,
+        source: "history" as const,
+        session: {
+          id: cs.session_id,
+          agent: "codex" as const,
+          label: cs.display,
+          status: "done" as const,
+          resumeTargetId: cs.session_id,
+          ptyId: null,
+          worktreePath: null,
+          branch: null,
+          cwd: cs.project_path,
+          createdAt: cs.timestamp,
+          exitCode: null,
+          command: "codex",
+          args: ["resume", cs.session_id],
+        },
+      })),
+  ].sort(
+    (a, b) =>
+      new Date(b.session.createdAt).getTime() -
+      new Date(a.session.createdAt).getTime(),
   );
 
   useEffect(() => {
@@ -81,18 +171,26 @@ export function SessionSidebar({
 
   const handleRenameSubmit = async () => {
     if (!renameTarget || !onRenameSession) return;
-    await onRenameSession(renameTarget.session.id, renameValue);
-    if (renameTarget.isPast) {
-      reload();
+    await onRenameSession(renameTarget.session, renameValue);
+    if (renameTarget.source === "history") {
+      if (renameTarget.session.agent === "codex") {
+        reloadCodexSessions();
+      } else {
+        reloadClaudeSessions();
+      }
     }
     closeRenameDialog();
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget || !onDeleteSession) return;
-    await onDeleteSession(deleteTarget.session.id);
-    if (deleteTarget.isPast) {
-      reload();
+    await onDeleteSession(deleteTarget.session);
+    if (deleteTarget.source === "history") {
+      if (deleteTarget.session.agent === "codex") {
+        reloadCodexSessions();
+      } else {
+        reloadClaudeSessions();
+      }
     }
     setDeleteTarget(null);
   };
@@ -166,10 +264,10 @@ export function SessionSidebar({
                     : undefined
                 }
                 onRename={() => {
-                  setRenameTarget({ session, isPast: false });
+                  setRenameTarget({ session, source: "local" });
                   setRenameValue(session.label);
                 }}
-                onDelete={() => setDeleteTarget({ session, isPast: false })}
+                onDelete={() => setDeleteTarget({ session, source: "local" })}
                 onClick={() => {
                   dispatch({ type: "SET_ACTIVE", id: session.id });
                   dispatch({ type: "SET_PREVIEW_FILE", path: null });
@@ -177,73 +275,54 @@ export function SessionSidebar({
               />
             ))}
 
-            {/* Past Claude sessions */}
+            {/* Past sessions */}
             {pastSessions.length > 0 && (
               <>
                 <Separator className="my-2" />
                 <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                   Past Sessions
                 </div>
-                {pastSessions.map((cs) => {
-                  const pseudoSession: Session = {
-                    id: cs.session_id,
-                    agent: "claude-code",
-                    label: cs.display,
-                    status: "done",
-                    ptyId: null,
-                    worktreePath: null,
-                    branch: null,
-                    cwd: cs.project_path,
-                    createdAt: cs.timestamp,
-                    exitCode: null,
-                    command: "claude",
-                    args: ["--resume", cs.session_id],
-                  };
+                {pastSessions.map((item) => {
+                  const canResume =
+                    item.session.agent === "claude-code" ||
+                    item.session.agent === "codex";
                   return (
                     <SessionCard
-                      key={cs.session_id}
-                      session={pseudoSession}
-                      isActive={state.activeSessionId === cs.session_id}
-                      isPast
+                      key={item.key}
+                      session={item.session}
+                      isActive={state.activeSessionId === item.session.id}
                       timestampLabel={formatCompactRelativeTime(
-                        cs.timestamp,
+                        item.session.createdAt,
                         now,
                       )}
-                      timestampTitle={formatTimestampTitle(cs.timestamp)}
-                      tokenInfo={{
-                        inputTokens: cs.input_tokens,
-                        outputTokens: cs.output_tokens,
-                        model: cs.model,
-                      }}
-                      onResume={() => {
-                        if (onResumeSession) {
-                          onResumeSession(
-                            cs.session_id,
-                            cs.project_path,
-                            cs.display,
-                          );
-                        }
-                      }}
+                      timestampTitle={formatTimestampTitle(
+                        item.session.createdAt,
+                      )}
+                      tokenInfo={item.tokenInfo}
+                      onResume={
+                        canResume && onResumeSession
+                          ? () => void onResumeSession(item.session)
+                          : undefined
+                      }
                       onRename={() => {
                         setRenameTarget({
-                          session: pseudoSession,
-                          isPast: true,
+                          session: item.session,
+                          source: item.source,
                         });
-                        setRenameValue(cs.display);
+                        setRenameValue(item.session.label);
                       }}
                       onDelete={() => {
                         setDeleteTarget({
-                          session: pseudoSession,
-                          isPast: true,
+                          session: item.session,
+                          source: item.source,
                         });
                       }}
                       onClick={() => {
-                        if (onResumeSession) {
-                          onResumeSession(
-                            cs.session_id,
-                            cs.project_path,
-                            cs.display,
-                          );
+                        if (canResume && onResumeSession) {
+                          void onResumeSession(item.session);
+                        } else {
+                          dispatch({ type: "SET_ACTIVE", id: item.session.id });
+                          dispatch({ type: "SET_PREVIEW_FILE", path: null });
                         }
                       }}
                     />
