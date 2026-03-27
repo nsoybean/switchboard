@@ -49,10 +49,7 @@ pub fn create_worktree(
     let worktree_path = Path::new(&repo_path)
         .join(".switchboard-worktrees")
         .join(&slug);
-    let worktree_str = worktree_path
-        .to_str()
-        .ok_or("Invalid path")?
-        .to_string();
+    let worktree_str = worktree_path.to_str().ok_or("Invalid path")?.to_string();
 
     // Create parent directory if needed
     if let Some(parent) = worktree_path.parent() {

@@ -272,4 +272,3 @@ fn parse_github_remote(url: &str) -> Option<(String, String)> {
     }
     None
 }
-
