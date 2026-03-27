@@ -84,7 +84,8 @@ export function GitToolbar({
     }
   };
 
-  const handlePushSelect = () => {
+  const handlePushClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
     if (pushPending || commitPending) return;
 
     window.setTimeout(() => {
@@ -131,12 +132,15 @@ export function GitToolbar({
               <DropdownMenuItem onSelect={() => setCommitOpen(true)}>
                 Commit
               </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={pushPending || commitPending}
-                onSelect={handlePushSelect}
+              <a
+                href="#"
+                className={pushPending || commitPending ? "pointer-events-none" : ""}
+                onClick={handlePushClick}
               >
-                Push
-              </DropdownMenuItem>
+                <DropdownMenuItem disabled={pushPending || commitPending}>
+                  Push
+                </DropdownMenuItem>
+              </a>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
