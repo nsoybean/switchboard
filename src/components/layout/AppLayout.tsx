@@ -182,9 +182,6 @@ export function AppLayout() {
   const selectedSession = viewingSessionInProject
     ? (state.sessions[viewingSessionInProject.id] ?? viewingSessionInProject)
     : activeSession;
-  const selectedLiveSession = selectedSession
-    ? (state.sessions[selectedSession.id] ?? null)
-    : null;
   const selectedSessionId = viewingSessionInProject?.id ?? activeSession?.id ?? null;
   const projectLabel = state.projectPath
     ? (state.projectPath.split("/").pop() ?? "Project")
@@ -989,7 +986,7 @@ export function AppLayout() {
                   <WorkspacePanel
                     activeTab={workspaceTab}
                     context={workspaceContext}
-                    session={selectedLiveSession}
+                    session={selectedSession}
                     githubToken={state.githubToken}
                     onOpenSettings={() => setSettingsOpen(true)}
                     onSessionBranchChange={handleSessionBranchChange}

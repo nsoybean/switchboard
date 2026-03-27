@@ -272,7 +272,7 @@ export function GitPanel({
         branch={branch}
         branches={branches}
         branchesLoading={branchesLoading && branches.length === 0}
-        branchActionsEnabled={Boolean(session)}
+        branchActionsEnabled
         branchActionPending={branchActionPending}
         branchPrefix={session ? getBranchPrefix(session.agent) : undefined}
         stats={stats}
