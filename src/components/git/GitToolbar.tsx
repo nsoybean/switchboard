@@ -70,20 +70,26 @@ export function GitToolbar({
     }
   };
 
-  const handlePush = () => {
+  const handlePush = async () => {
     if (pushPending || commitPending) return;
 
     flushSync(() => {
       setPushPending(true);
     });
 
-    void (async () => {
-      try {
-        await onPush();
-      } finally {
-        setPushPending(false);
-      }
-    })();
+    try {
+      await onPush();
+    } finally {
+      setPushPending(false);
+    }
+  };
+
+  const handlePushSelect = () => {
+    if (pushPending || commitPending) return;
+
+    window.setTimeout(() => {
+      void handlePush();
+    }, 0);
   };
 
   return (
@@ -125,10 +131,11 @@ export function GitToolbar({
               <DropdownMenuItem onSelect={() => setCommitOpen(true)}>
                 Commit
               </DropdownMenuItem>
-              <DropdownMenuItem asChild disabled={pushPending || commitPending}>
-                <button type="button" onClick={handlePush}>
-                  Push
-                </button>
+              <DropdownMenuItem
+                disabled={pushPending || commitPending}
+                onSelect={handlePushSelect}
+              >
+                Push
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
