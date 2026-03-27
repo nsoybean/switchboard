@@ -1,33 +1,38 @@
 # Switchboard
 
-**Run a team of AI coding agents from one window.**
+**Open-source desktop workspace for parallel AI coding sessions.**
 
 <p align="center">
   <img src="./public/hero-shot.png" alt="Switchboard showing multiple Claude Code and Codex sessions in one desktop window" width="1120" />
 </p>
 
-Switchboard is an open-source desktop app for managing multiple AI coding agents (Claude Code, Codex) in parallel. Each agent gets its own interactive terminal — exactly like running it natively — with session management, git worktree isolation, and a built-in git panel on top.
+Switchboard is an open-source desktop app for running Claude Code, Codex, and Bash side by side without giving up the native terminal workflow. Each session gets a real interactive terminal, optional git worktree isolation, and a built-in git panel for reviewing and shipping changes from the same window.
 
-Think [Conductor](https://www.conductor.build/), but open source.
+It is built for the way people actually use coding agents: one agent implementing, another investigating, another running commands, all across the same repo without a pile of terminal tabs and manual branch juggling.
+
+You can launch new sessions, resume past Claude Code and Codex sessions from local history, inspect diffs, commit and push changes, and keep each agent safely isolated when needed.
+
+If you like [Conductor](https://www.conductor.build/), Switchboard is a similar workflow with an open-source, terminal-native, local-first approach.
 
 ## Why
 
-You're already using Claude Code or Codex in your terminal. But when you want to run three agents on three different tasks — or compare how two agents approach the same problem — you're juggling terminal windows, worktrees, and context switching manually.
+Claude Code and Codex are great in the terminal. The friction starts when you want to run several sessions at once, compare approaches, or keep multiple changes in flight without stepping on your own work.
 
 Switchboard gives you:
 
-- **Multiple interactive sessions** — each agent runs in a real PTY terminal, identical to your native CLI experience
-- **Session sidebar** — see all agents at a glance, which are running, which need your input
-- **Git worktree isolation** — each session can get its own worktree so agents don't step on each other
-- **Git panel** — stage, commit, push, and create PRs without leaving the app (Codex app style)
-- **Session persistence** — reads your existing Claude Code history from `~/.claude/projects/`, resume any past session with one click
-- **Keyboard-driven** — `Ctrl+1..9` to switch sessions, `Ctrl+N` for new, `Ctrl+G` for git panel, `Escape` to focus terminal
+- **Parallel native sessions** — every agent runs in a real PTY, so the experience matches the CLI you already use
+- **One place to supervise everything** — see active sessions, paused sessions, and sessions that need input at a glance
+- **Per-session worktree isolation** — spin up separate worktrees so agents can work in parallel without clobbering each other
+- **Built-in git workflow** — inspect diffs, stage files, commit, push, and create PRs without leaving the app
+- **Local-first history and resume** — reopen past Claude Code and Codex sessions from local history and jump back into the work
+- **Keyboard-friendly control** — switch sessions, open the git panel, and get back to the terminal fast
 
 ## Status
 
 Early alpha. The core works — you can spawn Claude Code and Codex sessions, interact with them, switch between them, manage git, and resume past sessions. Building in public.
 
 **What's working (M1):**
+
 - Interactive terminal sessions via PTY (portable-pty → xterm.js)
 - Agent picker (Claude Code / Codex / Bash)
 - Session sidebar with status indicators
@@ -39,6 +44,7 @@ Early alpha. The core works — you can spawn Claude Code and Codex sessions, in
 - Session persistence across app restarts
 
 **Coming next (M2):**
+
 - Comparison mode — same task to different agents, side-by-side diff
 - Stream View — all terminals visible in a horizontal scroll
 - File tree viewer
@@ -73,15 +79,15 @@ Produces `.dmg` (macOS) or `.AppImage` (Linux) in `src-tauri/target/release/bund
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Desktop framework | [Tauri v2](https://v2.tauri.app/) (Rust) |
-| Frontend | React 19 + TypeScript + Tailwind CSS |
-| Terminal emulation | [xterm.js](https://xtermjs.org/) v6 + WebGL addon |
-| PTY management | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands) |
-| Git operations | Git CLI subprocess |
-| State management | React Context + useReducer |
-| Session data | Reads from `~/.claude/projects/` (Claude Code) + `~/.switchboard/sessions.json` (own metadata) |
+| Layer              | Technology                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| Desktop framework  | [Tauri v2](https://v2.tauri.app/) (Rust)                                                       |
+| Frontend           | React 19 + TypeScript + Tailwind CSS                                                           |
+| Terminal emulation | [xterm.js](https://xtermjs.org/) v6 + WebGL addon                                              |
+| PTY management     | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands)                  |
+| Git operations     | Git CLI subprocess                                                                             |
+| State management   | React Context + useReducer                                                                     |
+| Session data       | Reads from `~/.claude/projects/` (Claude Code) + `~/.switchboard/sessions.json` (own metadata) |
 
 ### Architecture
 

@@ -12,6 +12,7 @@ import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
 import { GitPanel } from "../git/GitPanel";
 import { FilePreview } from "../files/FilePreview";
 import { SettingsPage } from "../settings/SettingsPage";
+import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
 import { worktreeCommands } from "../../lib/tauri-commands";
@@ -57,6 +58,15 @@ export function AppLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const sessionsRef = useRef(state.sessions);
+  const {
+    currentVersion,
+    availableUpdate,
+    checkingForUpdates,
+    installingUpdate,
+    updateProgress,
+    checkForUpdates,
+    installUpdate,
+  } = useAppUpdater();
 
   const sessions = Object.values(state.sessions);
   const liveSessions = sessions.filter(
@@ -454,6 +464,11 @@ export function AppLayout() {
         }
         onProjectClick={() => setProjectPickerOpen(true)}
         viewMode={state.viewMode}
+        updateVersion={availableUpdate?.version ?? null}
+        checkingForUpdates={checkingForUpdates}
+        installingUpdate={installingUpdate}
+        updateProgress={updateProgress}
+        onInstallUpdate={() => void installUpdate()}
         onToggleViewMode={() =>
           dispatch({
             type: "SET_VIEW_MODE",
@@ -466,7 +481,17 @@ export function AppLayout() {
       {/* Settings page (full overlay) */}
       {settingsOpen ? (
         <div className="flex-1 min-h-0">
-          <SettingsPage onBack={() => setSettingsOpen(false)} />
+          <SettingsPage
+            onBack={() => setSettingsOpen(false)}
+            currentVersion={currentVersion}
+            updateVersion={availableUpdate?.version ?? null}
+            updateNotes={availableUpdate?.body}
+            checkingForUpdates={checkingForUpdates}
+            installingUpdate={installingUpdate}
+            updateProgress={updateProgress}
+            onCheckForUpdates={() => void checkForUpdates()}
+            onInstallUpdate={() => void installUpdate()}
+          />
         </div>
       ) : (
         /* Main content below titlebar */

@@ -17,6 +17,8 @@
     "dialog:default",
     "shell:allow-open",
     "clipboard-manager:allow-write-text",
-    "clipboard-manager:allow-read-text"
+    "clipboard-manager:allow-read-text",
+    "process:default",
+    "updater:default"
   ]
 }

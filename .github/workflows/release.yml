@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release-macos:
+    name: Release macOS (${{ matrix.target }})
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            arch: aarch64
+          - target: x86_64-apple-darwin
+            arch: x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify tag matches app version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
+          if [ "v${APP_VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version v${APP_VERSION}"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build and publish release
+        id: tauri
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Switchboard v__VERSION__
+          releaseBody: |
+            Download the DMG from the assets below.
+
+            This release also includes updater metadata so installed copies of Switchboard can detect and install new versions in-app.
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          args: --bundles app --target ${{ matrix.target }}
+
+      - name: Build DMG from app bundle
+        run: |
+          APP_VERSION="${{ steps.tauri.outputs.appVersion }}"
+          APP_PATH="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Switchboard.app"
+          DMG_PATH="src-tauri/target/${{ matrix.target }}/release/bundle/dmg/Switchboard_${APP_VERSION}_${{ matrix.arch }}.dmg"
+
+          chmod +x ./scripts/package-dmg.sh
+          ./scripts/package-dmg.sh "$APP_PATH" "$DMG_PATH" "Switchboard"
+
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload DMG asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "v${{ steps.tauri.outputs.appVersion }}" "$DMG_PATH" --clobber
