@@ -44,7 +44,6 @@ export function GitToolbar({
   onRefresh,
   onOpenSettings,
 }: GitToolbarProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
   const [stageAllFirst, setStageAllFirst] = useState(true);
@@ -75,7 +74,6 @@ export function GitToolbar({
     if (pushPending) return;
 
     flushSync(() => {
-      setMenuOpen(false);
       setPushPending(true);
     });
     try {
@@ -108,7 +106,7 @@ export function GitToolbar({
             {commitPending ? "Committing..." : "Pushing..."}
           </Button>
         ) : (
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 size="sm"
@@ -120,12 +118,7 @@ export function GitToolbar({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuGroup>
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setMenuOpen(false);
-                    setCommitOpen(true);
-                  }}
-                >
+                <DropdownMenuItem onSelect={() => setCommitOpen(true)}>
                   Commit
                 </DropdownMenuItem>
                 <DropdownMenuItem
