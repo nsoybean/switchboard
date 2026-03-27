@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Plus } from "lucide-react";
+import { FolderGit2, Plus } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { useClaudeSessions, useCodexSessions } from "../../hooks/useSessions";
 import { SessionCard } from "./SessionCard";
@@ -19,6 +19,8 @@ import type { Session } from "../../state/types";
 
 interface SessionSidebarProps {
   onNewSession: () => void;
+  onAddProject?: () => void;
+  onSelectProject?: (path: string) => void;
   onViewSession?: (session: Session) => void;
   onSelectActiveSession?: () => void;
   onResumeSession?: (session: Session) => Promise<void> | void;
@@ -46,6 +48,8 @@ interface PastSessionItem {
 
 export function SessionSidebar({
   onNewSession,
+  onAddProject,
+  onSelectProject,
   onViewSession,
   onSelectActiveSession,
   onResumeSession,
@@ -74,7 +78,16 @@ export function SessionSidebar({
   const loading = claudeLoading || codexLoading;
   const effectiveSelectedSessionId = selectedSessionId ?? state.activeSessionId;
 
-  const allLocalSessions = Object.values(state.sessions).sort(
+  const allLocalSessions = Object.values(state.sessions)
+    .filter((session) => {
+      if (!state.projectPath) return true;
+      return (
+        session.workspace.repoRoot === state.projectPath ||
+        session.cwd === state.projectPath ||
+        session.cwd.startsWith(`${state.projectPath}/`)
+      );
+    })
+    .sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
   const activeSessions = allLocalSessions.filter(
@@ -126,6 +139,19 @@ export function SessionSidebar({
           ptyId: null,
           worktreePath: null,
           branch: null,
+          workspace: {
+            repoRoot: state.projectPath,
+            launchRoot: cs.project_path,
+            displayPath:
+              state.projectPath && cs.project_path === state.projectPath
+                ? "."
+                : cs.project_path.split("/").slice(-2).join("/"),
+            worktreePath: null,
+            workspaceKind: "project" as const,
+            branchName: null,
+            baseBranchName: null,
+            headKind: "unknown" as const,
+          },
           cwd: cs.project_path,
           createdAt: cs.timestamp,
           exitCode: null,
@@ -147,6 +173,19 @@ export function SessionSidebar({
           ptyId: null,
           worktreePath: null,
           branch: null,
+          workspace: {
+            repoRoot: state.projectPath,
+            launchRoot: cs.project_path,
+            displayPath:
+              state.projectPath && cs.project_path === state.projectPath
+                ? "."
+                : cs.project_path.split("/").slice(-2).join("/"),
+            worktreePath: null,
+            workspaceKind: "project" as const,
+            branchName: null,
+            baseBranchName: null,
+            headKind: "unknown" as const,
+          },
           cwd: cs.project_path,
           createdAt: cs.timestamp,
           exitCode: null,
@@ -212,6 +251,49 @@ export function SessionSidebar({
 
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col gap-0.5 p-2">
+          <div className="px-3 pt-1 pb-2">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Projects
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={onAddProject}
+                title="Add new project"
+              >
+                <Plus />
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              {state.projects.map((path) => {
+                const name = path.split("/").pop() ?? path;
+                const isActive = path === state.projectPath;
+                return (
+                  <button
+                    key={path}
+                    type="button"
+                    onClick={() => onSelectProject?.(path)}
+                    title={path}
+                    className={
+                      `flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+                        isActive
+                          ? "bg-accent text-accent-foreground"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                      }`
+                    }
+                  >
+                    <FolderGit2 className="size-3.5 shrink-0" />
+                    <span className="truncate font-medium">{name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <Separator className="my-2" />
+
           {/* Active sessions */}
           {activeSessions.length > 0 && pastSessions.length > 0 && (
             <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">

@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Columns2,
-  GitBranch,
   Loader2,
   PanelLeft,
   PanelRight,
@@ -27,8 +26,7 @@ interface TitlebarProps {
   inspectorOpen: boolean;
   onToggleSidebar: () => void;
   onToggleInspector: () => void;
-  branch?: string;
-  projectName?: string;
+  projectPath?: string | null;
   onProjectClick?: () => void;
   viewMode?: "focused" | "scroll";
   onToggleViewMode?: () => void;
@@ -45,8 +43,7 @@ export function Titlebar({
   inspectorOpen,
   onToggleSidebar,
   onToggleInspector,
-  branch,
-  projectName = "switchboard",
+  projectPath,
   onProjectClick,
   viewMode = "focused",
   onToggleViewMode,
@@ -59,6 +56,9 @@ export function Titlebar({
 }: TitlebarProps) {
   const { theme, setTheme } = useTheme();
   const appWindow = getCurrentWindow();
+  const projectPathLabel = projectPath
+    ? projectPath.split("/").slice(-2).join("/")
+    : null;
 
   const handleMaximize = async () => {
     await appWindow.toggleMaximize();
@@ -112,20 +112,25 @@ export function Titlebar({
 
       <Separator orientation="vertical" className="h-4" />
 
-      {/* Branch + project */}
-      <div className="flex items-center gap-2 px-3">
-        {branch && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <GitBranch className="size-3" />
-            {branch}
-          </span>
-        )}
-        <button
-          onClick={onProjectClick}
-          className="text-xs font-medium hover:text-muted-foreground transition-colors"
-        >
-          {projectName}
-        </button>
+      {/* App + project identity */}
+      <div className="flex min-w-0 items-center gap-2 px-3">
+        <span className="shrink-0 text-xs font-semibold tracking-wide">
+          switchboard
+        </span>
+        {projectPathLabel ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onProjectClick}
+                className="min-w-0 truncate rounded-md border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {projectPathLabel}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{projectPath}</TooltipContent>
+          </Tooltip>
+        ) : null}
       </div>
 
       {/* Spacer — drag region */}

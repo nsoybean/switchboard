@@ -79,6 +79,9 @@ export const fileCommands = {
 export const projectCommands = {
   getPath: () => invoke<string | null>("get_project_path"),
   setPath: (path: string) => invoke<void>("set_project_path", { path }),
+  listPaths: () => invoke<string[]>("list_project_paths"),
+  addPath: (path: string) => invoke<void>("add_project_path", { path }),
+  removePath: (path: string) => invoke<void>("remove_project_path", { path }),
 };
 
 export const settingsCommands = {

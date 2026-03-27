@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FolderOpen,
   GitPullRequest,
   Loader2,
   RefreshCw,
@@ -13,6 +14,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { settingsCommands } from "../../lib/tauri-commands";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { toast } from "sonner";
@@ -107,6 +113,37 @@ export function SettingsPage({
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-xl mx-auto py-8 px-6">
+          <section>
+            <div className="flex items-center gap-2 mb-1">
+              <FolderOpen className="size-4" />
+              <h2 className="text-sm font-semibold">Project</h2>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Switchboard is currently focused on this git repository.
+            </p>
+
+            <div className="rounded-lg border bg-muted/30 px-4 py-3">
+              <p className="text-xs text-muted-foreground">Selected project repo</p>
+              {state.projectPath ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="mt-1 truncate font-mono text-sm" title={state.projectPath}>
+                      {state.projectPath}
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent>{state.projectPath}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">No project selected</p>
+              )}
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Saved projects: {state.projects.length}
+              </p>
+            </div>
+          </section>
+
+          <Separator className="my-8" />
+
           <section>
             <div className="flex items-center justify-between gap-3 mb-1">
               <div>

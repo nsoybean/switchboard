@@ -6,9 +6,9 @@ import {
   type Dispatch,
   type ReactNode,
 } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { appReducer, initialState } from "./reducer";
 import type { AppState, AppAction } from "./types";
+import { projectCommands, settingsCommands } from "@/lib/tauri-commands";
 
 const AppStateContext = createContext<AppState>(initialState);
 const AppDispatchContext = createContext<Dispatch<AppAction>>(() => {});
@@ -17,7 +17,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
   useEffect(() => {
-    invoke<string | null>("get_project_path")
+    projectCommands
+      .getPath()
       .then((path) => {
         dispatch({ type: "SET_PROJECT_PATH", path });
       })
@@ -25,7 +26,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.error("Failed to load project path:", err);
       });
 
-    invoke<string | null>("get_github_token")
+    projectCommands
+      .listPaths()
+      .then((paths) => {
+        dispatch({ type: "SET_PROJECTS", paths });
+      })
+      .catch((err) => {
+        console.error("Failed to load project paths:", err);
+      });
+
+    settingsCommands
+      .getGitHubToken()
       .then((token) => {
         dispatch({ type: "SET_GITHUB_TOKEN", token });
       })

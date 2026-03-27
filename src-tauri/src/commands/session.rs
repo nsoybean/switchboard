@@ -11,6 +11,12 @@ pub struct PersistedSession {
     pub resume_target_id: Option<String>,
     pub worktree_path: Option<String>,
     pub branch: Option<String>,
+    pub repo_root: Option<String>,
+    pub launch_root: Option<String>,
+    pub display_path: Option<String>,
+    pub workspace_kind: Option<String>,
+    pub base_branch: Option<String>,
+    pub head_kind: Option<String>,
     pub cwd: String,
     pub created_at: String,
     pub command: String,
@@ -113,6 +119,52 @@ fn write_config(config: &serde_json::Value) -> Result<(), String> {
     fs::write(&path, data).map_err(|e| format!("Write failed: {}", e))
 }
 
+fn validate_repo_path(path: &str) -> Result<String, String> {
+    let p = std::path::Path::new(path);
+    if !p.is_dir() {
+        return Err(format!("'{}' is not a directory", path));
+    }
+    if !p.join(".git").exists() {
+        return Err(format!("'{}' is not a git repository", path));
+    }
+
+    std::fs::canonicalize(p)
+        .map_err(|e| format!("Failed to resolve '{}': {}", path, e))
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+fn read_project_paths(config: &serde_json::Value) -> Vec<String> {
+    let mut paths: Vec<String> = config
+        .get("project_paths")
+        .and_then(|v| v.as_array())
+        .map(|paths| {
+            paths
+                .iter()
+                .filter_map(|path| path.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let Some(current) = config.get("project_path").and_then(|v| v.as_str()) {
+        if !paths.iter().any(|path| path == current) {
+            paths.push(current.to_string());
+        }
+    }
+
+    paths
+}
+
+fn write_project_paths(
+    config: &mut serde_json::Value,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    let object = config
+        .as_object_mut()
+        .ok_or_else(|| "Invalid config format".to_string())?;
+    object.insert("project_paths".to_string(), serde_json::json!(paths));
+    Ok(())
+}
+
 /// Get the stored project path, or None if not set
 #[tauri::command]
 pub fn get_project_path() -> Result<Option<String>, String> {
@@ -126,15 +178,63 @@ pub fn get_project_path() -> Result<Option<String>, String> {
 /// Set and validate the project path (must be a directory with .git)
 #[tauri::command]
 pub fn set_project_path(path: String) -> Result<(), String> {
-    let p = std::path::Path::new(&path);
-    if !p.is_dir() {
-        return Err(format!("'{}' is not a directory", path));
-    }
-    if !p.join(".git").exists() {
-        return Err(format!("'{}' is not a git repository", path));
-    }
+    let canonical = validate_repo_path(&path)?;
     let mut config = read_config()?;
-    config["project_path"] = serde_json::json!(path);
+    let mut paths = read_project_paths(&config);
+    if !paths.iter().any(|p| p == &canonical) {
+        paths.push(canonical.clone());
+        paths.sort();
+    }
+    write_project_paths(&mut config, paths)?;
+    config["project_path"] = serde_json::json!(canonical);
+    write_config(&config)
+}
+
+/// Get all saved project paths
+#[tauri::command]
+pub fn list_project_paths() -> Result<Vec<String>, String> {
+    let config = read_config()?;
+    let mut paths = read_project_paths(&config);
+    paths.sort();
+    Ok(paths)
+}
+
+/// Add a project path without changing the current selection
+#[tauri::command]
+pub fn add_project_path(path: String) -> Result<(), String> {
+    let canonical = validate_repo_path(&path)?;
+    let mut config = read_config()?;
+    let mut paths = read_project_paths(&config);
+    if !paths.iter().any(|p| p == &canonical) {
+        paths.push(canonical);
+        paths.sort();
+        write_project_paths(&mut config, paths)?;
+        write_config(&config)?;
+    }
+    Ok(())
+}
+
+/// Remove a saved project path
+#[tauri::command]
+pub fn remove_project_path(path: String) -> Result<(), String> {
+    let mut config = read_config()?;
+    let current = config
+        .get("project_path")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let mut paths = read_project_paths(&config);
+    paths.retain(|p| p != &path);
+    write_project_paths(&mut config, paths.clone())?;
+
+    if current.as_deref() == Some(path.as_str()) {
+        let next = paths.first().cloned();
+        if let Some(next_path) = next {
+            config["project_path"] = serde_json::json!(next_path);
+        } else if let Some(object) = config.as_object_mut() {
+            object.remove("project_path");
+        }
+    }
+
     write_config(&config)
 }
 

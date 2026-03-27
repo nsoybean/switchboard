@@ -15,7 +15,7 @@ import { projectCommands } from "../../lib/tauri-commands";
 interface ProjectPickerDialogProps {
   open: boolean;
   onClose: () => void;
-  onSelect: (path: string) => void;
+  onSelect: (path: string) => Promise<void> | void;
 }
 
 export function ProjectPickerDialog({
@@ -45,7 +45,7 @@ export function ProjectPickerDialog({
     setError(null);
     try {
       await projectCommands.setPath(trimmed);
-      onSelect(trimmed);
+      await onSelect(trimmed);
       onClose();
     } catch (err) {
       setError(String(err));

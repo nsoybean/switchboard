@@ -5,6 +5,7 @@ export const initialState: AppState = {
   activeSessionId: null,
   gitPanelOpen: false,
   projectPath: null,
+  projects: [],
   viewMode: "focused",
   previewFilePath: null,
   githubToken: null,
@@ -106,6 +107,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         projectPath: action.path,
+      };
+    }
+
+    case "SET_PROJECTS": {
+      return {
+        ...state,
+        projects: action.paths,
       };
     }
 

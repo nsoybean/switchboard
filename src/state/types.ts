@@ -1,4 +1,20 @@
 export type AgentType = "claude-code" | "codex" | "bash";
+export type SessionWorkspaceKind =
+  | "project"
+  | "switchboard-worktree"
+  | "external-worktree";
+export type SessionHeadKind = "branch" | "detached" | "unknown";
+
+export interface SessionWorkspaceIdentity {
+  repoRoot: string | null;
+  launchRoot: string;
+  displayPath: string;
+  worktreePath: string | null;
+  workspaceKind: SessionWorkspaceKind;
+  branchName: string | null;
+  baseBranchName: string | null;
+  headKind: SessionHeadKind;
+}
 
 export type SessionStatus =
   | "running"
@@ -16,6 +32,7 @@ export interface Session {
   ptyId: number | null;
   worktreePath: string | null;
   branch: string | null;
+  workspace: SessionWorkspaceIdentity;
   cwd: string;
   createdAt: string;
   exitCode: number | null;
@@ -30,6 +47,7 @@ export interface AppState {
   activeSessionId: string | null;
   gitPanelOpen: boolean;
   projectPath: string | null;
+  projects: string[];
   viewMode: "focused" | "scroll";
   previewFilePath: string | null;
   githubToken: string | null;
@@ -50,6 +68,7 @@ export type AppAction =
   | { type: "SET_RESUME_TARGET"; id: string; resumeTargetId: string | null }
   | { type: "TOGGLE_GIT_PANEL" }
   | { type: "SET_PROJECT_PATH"; path: string | null }
+  | { type: "SET_PROJECTS"; paths: string[] }
   | { type: "SET_VIEW_MODE"; mode: "focused" | "scroll" }
   | { type: "SET_PREVIEW_FILE"; path: string | null }
   | { type: "SET_GITHUB_TOKEN"; token: string | null };

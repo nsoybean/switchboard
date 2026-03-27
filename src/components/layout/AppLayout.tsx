@@ -19,7 +19,11 @@ import {
 import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
-import { fileCommands, worktreeCommands } from "../../lib/tauri-commands";
+import {
+  fileCommands,
+  projectCommands,
+  worktreeCommands,
+} from "../../lib/tauri-commands";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +32,13 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { FolderOpen, Plus } from "lucide-react";
-import type { AgentType, Session, SessionStatus } from "../../state/types";
+import type {
+  AgentType,
+  Session,
+  SessionStatus,
+  SessionWorkspaceIdentity,
+  SessionWorkspaceKind,
+} from "../../state/types";
 
 const MAX_ALIVE_TERMINALS = 8;
 
@@ -56,6 +66,73 @@ function isPathWithinRoot(path: string, rootPath: string): boolean {
   return path === rootPath || path.startsWith(`${rootPath}/`);
 }
 
+function sessionBelongsToProject(
+  session: Session,
+  projectPath: string | null,
+): boolean {
+  if (!projectPath) return true;
+  if (session.workspace.repoRoot) {
+    return session.workspace.repoRoot === projectPath;
+  }
+  return session.cwd === projectPath || session.cwd.startsWith(`${projectPath}/`);
+}
+
+function slugifyLabel(label: string): string {
+  return (
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "untitled"
+  );
+}
+
+function getBranchPrefix(agent: AgentType): string {
+  if (agent === "codex") return "codex/";
+  if (agent === "claude-code") return "claude/";
+  return "";
+}
+
+function getWorkspaceDisplayPath(path: string, repoRoot: string | null): string {
+  if (!repoRoot) return path;
+  if (path === repoRoot) return ".";
+  if (path.startsWith(`${repoRoot}/`)) {
+    return path.slice(repoRoot.length + 1);
+  }
+  return path;
+}
+
+function getWorkspaceKind(
+  repoRoot: string | null,
+  worktreePath: string | null,
+): SessionWorkspaceKind {
+  if (!worktreePath) return "project";
+  if (!repoRoot) return "external-worktree";
+  if (worktreePath.startsWith(`${repoRoot}/.switchboard-worktrees/`)) {
+    return "switchboard-worktree";
+  }
+  return "external-worktree";
+}
+
+function buildWorkspaceIdentity(config: {
+  repoRoot: string | null;
+  launchRoot: string;
+  worktreePath: string | null;
+  branchName: string | null;
+  baseBranchName?: string | null;
+}): SessionWorkspaceIdentity {
+  const workspaceKind = getWorkspaceKind(config.repoRoot, config.worktreePath);
+  return {
+    repoRoot: config.repoRoot,
+    launchRoot: config.launchRoot,
+    displayPath: getWorkspaceDisplayPath(config.launchRoot, config.repoRoot),
+    worktreePath: config.worktreePath,
+    workspaceKind,
+    branchName: config.branchName,
+    baseBranchName: config.baseBranchName ?? null,
+    headKind: config.branchName ? "branch" : "unknown",
+  };
+}
+
 export function AppLayout() {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -78,7 +155,10 @@ export function AppLayout() {
   } = useAppUpdater();
 
   const sessions = Object.values(state.sessions);
-  const liveSessions = sessions.filter(
+  const projectSessions = sessions.filter((session) =>
+    sessionBelongsToProject(session, state.projectPath),
+  );
+  const liveSessions = projectSessions.filter(
     (session) =>
       session.status === "running" || session.status === "needs-input",
   );
@@ -92,11 +172,21 @@ export function AppLayout() {
         .map((s) => s.id),
     [liveSessions],
   );
-  const activeSession = state.activeSessionId
+  const activeSessionCandidate = state.activeSessionId
     ? state.sessions[state.activeSessionId]
     : null;
-  const selectedSession = viewingSession ?? activeSession;
-  const selectedSessionId = viewingSession?.id ?? state.activeSessionId;
+  const activeSession =
+    activeSessionCandidate &&
+    sessionBelongsToProject(activeSessionCandidate, state.projectPath)
+      ? activeSessionCandidate
+      : null;
+  const viewingSessionInProject =
+    viewingSession &&
+    sessionBelongsToProject(viewingSession, state.projectPath)
+      ? viewingSession
+      : null;
+  const selectedSession = viewingSessionInProject ?? activeSession;
+  const selectedSessionId = viewingSessionInProject?.id ?? activeSession?.id ?? null;
   const projectLabel = state.projectPath
     ? (state.projectPath.split("/").pop() ?? "Project")
     : "Project";
@@ -145,6 +235,28 @@ export function AppLayout() {
   const aliveSessionIds = new Set(
     sortedSessionIds.slice(0, MAX_ALIVE_TERMINALS),
   );
+
+  useEffect(() => {
+    if (viewingSession && !sessionBelongsToProject(viewingSession, state.projectPath)) {
+      setViewingSession(null);
+    }
+  }, [state.projectPath, viewingSession]);
+
+  useEffect(() => {
+    if (
+      state.activeSessionId &&
+      activeSessionCandidate &&
+      !sessionBelongsToProject(activeSessionCandidate, state.projectPath)
+    ) {
+      dispatch({ type: "SET_ACTIVE", id: liveSessions[0]?.id ?? null });
+    }
+  }, [
+    activeSessionCandidate,
+    dispatch,
+    liveSessions,
+    state.activeSessionId,
+    state.projectPath,
+  ]);
 
   useEffect(() => {
     sessionsRef.current = state.sessions;
@@ -298,6 +410,12 @@ export function AppLayout() {
           resume_target_id: session.resumeTargetId,
           worktree_path: session.worktreePath,
           branch: session.branch,
+          repo_root: session.workspace.repoRoot,
+          launch_root: session.workspace.launchRoot,
+          display_path: session.workspace.displayPath,
+          workspace_kind: session.workspace.workspaceKind,
+          base_branch: session.workspace.baseBranchName,
+          head_kind: session.workspace.headKind,
           cwd: session.cwd,
           created_at: session.createdAt,
           command: session.command,
@@ -322,15 +440,12 @@ export function AppLayout() {
       let cwd = state.projectPath;
       let worktreePath: string | null = null;
       let branch: string | null = null;
+      let baseBranchName: string | null = null;
 
       if (config.useWorktree) {
         try {
-          const slug =
-            config.label
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/^-|-$/g, "") || "untitled";
-          const branchName = `sb/${slug}`;
+          const slug = slugifyLabel(config.label);
+          const branchName = `${getBranchPrefix(config.agent)}${slug}`;
           const info = await worktreeCommands.create(
             state.projectPath,
             branchName,
@@ -340,6 +455,7 @@ export function AppLayout() {
           cwd = info.path;
           worktreePath = info.path;
           branch = info.branch;
+          baseBranchName = config.baseBranch;
         } catch (err) {
           toast.error("Failed to create worktree", {
             description: String(err),
@@ -363,6 +479,13 @@ export function AppLayout() {
         ptyId: null,
         worktreePath,
         branch,
+        workspace: buildWorkspaceIdentity({
+          repoRoot: state.projectPath,
+          launchRoot: cwd,
+          worktreePath,
+          branchName: branch,
+          baseBranchName,
+        }),
         cwd,
         createdAt: new Date().toISOString(),
         exitCode: null,
@@ -653,12 +776,7 @@ export function AppLayout() {
         inspectorOpen={inspectorOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
-        branch={selectedSession?.branch ?? undefined}
-        projectName={
-          state.projectPath
-            ? (state.projectPath.split("/").pop() ?? "switchboard")
-            : "switchboard"
-        }
+        projectPath={state.projectPath}
         onProjectClick={() => setProjectPickerOpen(true)}
         viewMode={state.viewMode}
         updateVersion={availableUpdate?.version ?? null}
@@ -702,6 +820,21 @@ export function AppLayout() {
               <ResizablePanel defaultSize="20%" minSize="15%" maxSize="35%">
                 <SessionSidebar
                   onNewSession={() => setDialogOpen(true)}
+                  onAddProject={() => setProjectPickerOpen(true)}
+                  onSelectProject={(path) => {
+                    void projectCommands
+                      .setPath(path)
+                      .then(() => {
+                        dispatch({ type: "SET_PROJECT_PATH", path });
+                        setViewingSession(null);
+                        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+                      })
+                      .catch((err) => {
+                        toast.error("Failed to switch project", {
+                          description: String(err),
+                        });
+                      });
+                  }}
                   onViewSession={(session) => {
                     dispatch({ type: "SET_PREVIEW_FILE", path: null });
                     if (state.sessions[session.id]) {
@@ -747,7 +880,7 @@ export function AppLayout() {
                       </Button>
                     </div>
                   </div>
-                ) : sessions.length === 0 ? (
+                ) : projectSessions.length === 0 ? (
                   <div className="h-full flex items-center justify-center bg-background">
                     <div className="text-center max-w-sm">
                       <h2 className="text-lg font-semibold mb-3">
@@ -862,8 +995,13 @@ export function AppLayout() {
       <ProjectPickerDialog
         open={projectPickerOpen}
         onClose={() => setProjectPickerOpen(false)}
-        onSelect={(path) => {
-          dispatch({ type: "SET_PROJECT_PATH", path });
+        onSelect={async (path) => {
+          const [selectedPath, projectPaths] = await Promise.all([
+            fileCommands.inspectDirectory(path).then((status) => status.canonical_path ?? path),
+            projectCommands.listPaths(),
+          ]);
+          dispatch({ type: "SET_PROJECT_PATH", path: selectedPath });
+          dispatch({ type: "SET_PROJECTS", paths: projectPaths });
         }}
       />
     </div>
