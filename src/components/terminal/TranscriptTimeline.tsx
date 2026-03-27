@@ -128,18 +128,18 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
   };
 
   return (
-    <div className="relative h-full bg-background font-sans text-foreground">
+    <div className="relative h-full min-w-0 bg-background font-sans text-foreground">
       <ScrollArea
         ref={scrollAreaRef}
         className="h-full [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:w-3 [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:border-l-border/60 [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:bg-background/95 [&_[data-slot=scroll-area-thumb]]:rounded-none [&_[data-slot=scroll-area-thumb]]:bg-muted-foreground/35 hover:[&_[data-slot=scroll-area-thumb]]:bg-muted-foreground/50"
       >
-        <div className="mx-auto max-w-4xl px-5 py-5 pr-6">
+        <div className="w-full min-w-0 px-4 py-5 pr-5 sm:px-5 sm:pr-6">
           {items.length === 0 ? (
             <div className="rounded-none border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
               No transcript events found for this session.
             </div>
           ) : (
-            <div className="flex flex-col gap-0.5">
+            <div className="flex min-w-0 flex-col gap-0.5">
               {items.map((item) =>
                 item.kind === "tool" ? (
                   <ToolTimelineCard key={item.key} item={item} />
@@ -411,19 +411,19 @@ function DetailSection({
   const compact = shouldUseCompactIoRow(mode, text, metadata);
 
   return (
-    <div className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-start gap-2.5 px-2.5 py-1.5">
+    <div className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)] items-start gap-2.5 px-2.5 py-1.5">
       <div className="pt-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </div>
       <div className="min-w-0 flex flex-col gap-2">
         {compact ? (
-          <div className="flex min-h-8 items-center gap-2 py-0">
+          <div className="flex min-h-8 min-w-0 items-center gap-2 py-0">
             {metadata.length > 0 && (
-              <div className="flex shrink-0 flex-wrap gap-2 text-xs text-muted-foreground">
+              <div className="flex max-w-full shrink-0 flex-wrap gap-2 text-xs text-muted-foreground">
                 {metadata.map((item) => (
                   <span
                     key={`${item.label}:${item.value}`}
-                    className="truncate"
+                    className="max-w-full truncate"
                   >
                     {item.label === "File" ? basename(item.value) : item.value}
                   </span>
@@ -447,11 +447,11 @@ function DetailSection({
         ) : (
           <>
             {metadata.length > 0 && (
-              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <div className="flex max-w-full flex-wrap gap-2 text-xs text-muted-foreground">
                 {metadata.map((item) => (
                   <span
                     key={`${item.label}:${item.value}`}
-                    className="truncate"
+                    className="max-w-full truncate"
                   >
                     {item.label === "File" ? basename(item.value) : item.value}
                   </span>
@@ -478,7 +478,7 @@ function TimelineRow({
   tone: "success" | "muted" | "error";
 }) {
   return (
-    <div className="relative pl-8 pb-5">
+    <div className="relative min-w-0 pl-8 pb-5">
       <div className="absolute top-0 bottom-0 left-[10px] w-px -translate-x-1/2 bg-border/50" />
       <div
         className={cn(
@@ -600,14 +600,18 @@ function StructuredBlock({
   }
 
   if (mode === "diff") {
-    return <DiffView diff={text} />;
+    return (
+      <div className="min-w-0 max-w-full overflow-hidden">
+        <DiffView diff={text} />
+      </div>
+    );
   }
 
   if (mode === "text" && looksLikeStructuredPayload(text)) {
     return (
       <pre
         className={cn(
-          "overflow-x-auto rounded-none text-xs leading-5 font-mono whitespace-pre-wrap break-words text-foreground",
+          "min-w-0 max-w-full overflow-x-hidden rounded-none text-xs leading-5 font-mono whitespace-pre-wrap break-all text-foreground",
           embedded ? "px-0.5 py-0" : "border bg-background px-2.5 py-2",
         )}
       >
@@ -627,7 +631,7 @@ function StructuredBlock({
   return (
     <pre
       className={cn(
-        "overflow-x-auto rounded-none text-xs leading-5 font-mono whitespace-pre-wrap break-words text-foreground",
+        "min-w-0 max-w-full overflow-x-hidden rounded-none text-xs leading-5 font-mono whitespace-pre-wrap break-all text-foreground",
         embedded ? "px-0.5 py-0" : "border bg-background px-2.5 py-2",
       )}
     >

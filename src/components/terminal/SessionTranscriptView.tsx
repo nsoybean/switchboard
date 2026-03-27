@@ -83,10 +83,10 @@ export function SessionTranscriptView({
   }, [session.agent, session.id, session.resumeTargetId]);
 
   return (
-    <div className="flex h-full flex-col bg-background font-sans text-foreground">
-      <div className="flex shrink-0 items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
+    <div className="flex h-full min-w-0 flex-col bg-background font-sans text-foreground">
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
         <span
-          className="max-w-[20ch] truncate font-semibold"
+          className="min-w-0 max-w-[20ch] truncate font-semibold"
           title={session.label}
         >
           {session.label}
@@ -98,7 +98,7 @@ export function SessionTranscriptView({
           <Eye data-icon="inline-start" />
           View
         </Badge>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {onResume && (
             <Button variant="outline" size="sm" onClick={onResume}>
               <RotateCcw data-icon="inline-start" />
@@ -111,7 +111,7 @@ export function SessionTranscriptView({
           </Button>
         </div>
       </div>
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 min-w-0">
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Loading transcript...
