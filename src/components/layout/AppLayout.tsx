@@ -957,7 +957,7 @@ export function AppLayout() {
                       </Button>
                     </div>
                   </div>
-                ) : projectSessions.length === 0 ? (
+                ) : liveSessions.length === 0 ? (
                   <div className="h-full flex items-center justify-center bg-background">
                     <div className="text-center max-w-sm">
                       <h2 className="text-lg font-semibold mb-3">
