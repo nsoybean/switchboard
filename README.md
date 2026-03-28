@@ -118,8 +118,21 @@ The PTY pipeline is the core — `portable-pty` spawns agent processes, a backgr
 
 - **Font:** JetBrains Mono
 - **Spacing:** 4px base unit
-- **Aesthetic:** Terminal-native, dark, dense, minimal chrome
+- **Aesthetic:** Terminal-native, dense, minimal chrome
+- **Theme:** Light and dark mode
 - **Colors:** CSS variables prefixed with `--sb-` for future theming
+
+### Landing Page
+
+The landing page lives in `landing/` and is a static Next.js site deployed to GitHub Pages via GitHub Actions.
+
+```bash
+cd landing
+npm install
+npm run dev
+```
+
+Deployed at [nsoybean.github.io/switchboard](https://nsoybean.github.io/switchboard/).
 
 ## Contributing
 
