@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CircleDot, Square } from "lucide-react";
+import { Circle, Square } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import {
   Tooltip,
@@ -10,7 +10,7 @@ import {
 import { XTermContainer } from "./XTermContainer";
 import type { Session } from "../../state/types";
 
-interface ScrollViewProps {
+interface GridViewProps {
   sessions: Session[];
   activeSessionId?: string | null;
   onSessionSelect?: (id: string) => void;
@@ -19,14 +19,14 @@ interface ScrollViewProps {
   onSessionExit: (id: string) => (code: number | null) => void;
 }
 
-export function ScrollView({
+export function GridView({
   sessions,
   activeSessionId,
   onSessionSelect,
   onStopSession,
   onSessionSpawn,
   onSessionExit,
-}: ScrollViewProps) {
+}: GridViewProps) {
   if (sessions.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
@@ -84,9 +84,9 @@ export function ScrollView({
                     <TooltipContent>Stop session</TooltipContent>
                   </Tooltip>
                 ) : null}
-                <CircleDot
+                <Circle
                   className={cn(
-                    "size-2.5",
+                    "size-2.5 fill-current",
                     session.status === "running" && "text-[var(--sb-status-running)]",
                     session.status === "idle" && "text-[var(--sb-status-done)]",
                     session.status === "needs-input" && "text-[var(--sb-status-warning)] animate-pulse",

@@ -3,12 +3,12 @@ import {
   ArrowDownToLine,
   ChevronLeft,
   ChevronRight,
-  Columns2,
+  Focus,
+  LayoutGrid,
   Loader2,
   PanelLeft,
   PanelRight,
   Settings,
-  Square,
   Sun,
   Moon,
 } from "lucide-react";
@@ -28,7 +28,7 @@ interface TitlebarProps {
   onToggleInspector: () => void;
   projectPath?: string | null;
   onProjectClick?: () => void;
-  viewMode?: "focused" | "scroll";
+  viewMode?: "focused" | "grid";
   onToggleViewMode?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
@@ -170,15 +170,15 @@ export function Titlebar({
               className="size-9"
               onClick={onToggleViewMode}
             >
-              {viewMode === "scroll" ? (
-                <Square className="size-4" />
+              {viewMode === "focused" ? (
+                <LayoutGrid className="size-4" />
               ) : (
-                <Columns2 className="size-4 opacity-40" />
+                <Focus className="size-4" />
               )}
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {viewMode === "scroll" ? "Focused View (⌘⇧S)" : "Scroll View (⌘⇧S)"}
+            {viewMode === "grid" ? "Focused View (⌘⇧S)" : "Grid View (⌘⇧S)"}
           </TooltipContent>
         </Tooltip>
 
