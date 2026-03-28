@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./src-tauri/icons/AppIcon128.png" alt="Switchboard" width="80" />
+</p>
+
 # Switchboard
 
 **The open-source multi-agent workspace.** Run Claude Code, Codex, and Bash side by side — each in its own terminal, its own branch, its own worktree. Review and ship from one window.
