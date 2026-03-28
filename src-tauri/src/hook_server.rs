@@ -44,7 +44,7 @@ pub fn init_hook_server() -> (HookServerState, std::net::TcpListener) {
         .expect("failed to bind hook server");
     listener.set_nonblocking(true).expect("failed to set nonblocking");
     let port = listener.local_addr().unwrap().port();
-    let token = generate_token();
+    let token = load_or_create_token();
 
     log::info!("Hook server bound to 127.0.0.1:{}", port);
 
@@ -109,6 +109,30 @@ async fn handle_hook(
     let _ = state.app_handle.emit("claude-hook", event);
 
     StatusCode::OK
+}
+
+/// Load a persisted token from `~/.switchboard/hook_token`, or generate and
+/// save a new one. This keeps the token stable across restarts so that
+/// already-configured Claude sessions don't get 401s.
+fn load_or_create_token() -> String {
+    let token_path = dirs::home_dir()
+        .expect("no home dir")
+        .join(".switchboard")
+        .join("hook_token");
+
+    if let Ok(existing) = std::fs::read_to_string(&token_path) {
+        let trimmed = existing.trim().to_string();
+        if !trimmed.is_empty() {
+            return trimmed;
+        }
+    }
+
+    let token = generate_token();
+    if let Some(parent) = token_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&token_path, &token);
+    token
 }
 
 fn generate_token() -> String {

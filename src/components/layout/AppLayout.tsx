@@ -147,6 +147,7 @@ export function AppLayout() {
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const sessionsRef = useRef(state.sessions);
+  const hookConfigReady = useRef<Promise<void>>(Promise.resolve());
   const {
     currentVersion,
     availableUpdate,
@@ -279,11 +280,12 @@ export function AppLayout() {
     sessionsRef.current = state.sessions;
   }, [state.sessions]);
 
-  // Write hook config for the current project on startup / project change
+  // Write hook config for the current project on startup / project change.
+  // Sessions await hookConfigReady before spawning to avoid a race.
   useEffect(() => {
     if (!state.projectPath) return;
     const cwd = state.projectPath;
-    hookCommands
+    hookConfigReady.current = hookCommands
       .getPort()
       .then((port) => hookCommands.writeConfig(cwd, port))
       .catch((err) => console.warn("Failed to write hook config on startup:", err));
@@ -498,10 +500,12 @@ export function AppLayout() {
         id,
       );
 
-      // For Claude sessions, inject hook auth token as env var
+      // For Claude sessions, ensure hook config is written before spawning,
+      // then inject the current token as an env var.
       let env: Record<string, string> | undefined;
       if (config.agent === "claude-code") {
         try {
+          await hookConfigReady.current;
           const token = await hookCommands.getToken();
           env = { SWITCHBOARD_HOOK_TOKEN: token };
         } catch (err) {
@@ -599,6 +603,18 @@ export function AppLayout() {
         return;
       }
 
+      // Refresh hook token so resumed sessions use the current Switchboard
+      // instance's token, not a stale one from a prior launch.
+      let env = session.env;
+      if (session.agent === "claude-code") {
+        try {
+          const token = await hookCommands.getToken();
+          env = { ...env, SWITCHBOARD_HOOK_TOKEN: token };
+        } catch (err) {
+          console.warn("Failed to refresh Claude hook token on resume:", err);
+        }
+      }
+
       const nextSession: Session = {
         ...session,
         id: resumeTargetId ?? session.id,
@@ -609,6 +625,7 @@ export function AppLayout() {
         exitCode: null,
         command: resumeConfig.command,
         args: resumeConfig.args,
+        env,
       };
 
       if (existingSession) {
