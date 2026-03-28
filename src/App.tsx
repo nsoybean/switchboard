@@ -6,6 +6,8 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { ThemeProvider } from "./components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
+import { NotchNotification } from "./components/layout/NotchNotification";
+import { useNotchNotifications } from "./hooks/useNotchNotifications";
 
 type ResizeDirection =
   | "East"
@@ -65,6 +67,19 @@ const RESIZE_HANDLES: ResizeHandle[] = [
     className: "bottom-0 left-0 h-4 w-4 cursor-sw-resize",
   },
 ];
+
+function NotchNotificationLayer() {
+  const { notifications, dismissNotification, handleNotificationClick } =
+    useNotchNotifications();
+
+  return (
+    <NotchNotification
+      notifications={notifications}
+      onDismiss={dismissNotification}
+      onClick={handleNotificationClick}
+    />
+  );
+}
 
 function App() {
   const isMacOS =
@@ -135,6 +150,7 @@ function App() {
               <AppLayout />
             </div>
           </div>
+          <NotchNotificationLayer />
           <Toaster position="bottom-right" richColors />
         </AppProvider>
       </TooltipProvider>
