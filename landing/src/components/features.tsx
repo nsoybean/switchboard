@@ -37,10 +37,10 @@ export function Features() {
   return (
     <section className="border-t border-border/40 py-20">
       <div className="mx-auto max-w-5xl px-6">
-        <h2 className="text-center text-lg font-semibold tracking-tight">
+        <h2 className="text-center text-xl font-semibold tracking-tight">
           Everything you need to manage AI agents
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-center text-xs text-muted-foreground">
+        <p className="mx-auto mt-2 max-w-md text-center text-sm text-muted-foreground">
           A native desktop app built for developers who run multiple coding
           agents at once.
         </p>
@@ -54,8 +54,8 @@ export function Features() {
               <div className="mb-2.5 inline-flex h-7 w-7 items-center justify-center rounded-md bg-accent text-accent-foreground">
                 {f.icon}
               </div>
-              <h3 className="text-xs font-semibold">{f.title}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              <h3 className="text-sm font-semibold">{f.title}</h3>
+              <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted-foreground">
                 {f.description}
               </p>
             </div>
