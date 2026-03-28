@@ -1,4 +1,4 @@
-import { FolderOpen, LayoutGrid, LayoutList } from "lucide-react";
+import { Focus, FolderOpen, LayoutGrid } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -59,25 +59,25 @@ export function GeneralSettings() {
                 : "bg-muted/30 text-muted-foreground hover:bg-accent/50"
             }`}
           >
-            <LayoutList className="size-4" />
+            <Focus className="size-4" />
             Focused
           </button>
           <button
-            onClick={() => dispatch({ type: "SET_VIEW_MODE", mode: "scroll" })}
+            onClick={() => dispatch({ type: "SET_VIEW_MODE", mode: "grid" })}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors ${
-              state.viewMode === "scroll"
+              state.viewMode === "grid"
                 ? "bg-accent text-accent-foreground border-accent-foreground/20 font-medium"
                 : "bg-muted/30 text-muted-foreground hover:bg-accent/50"
             }`}
           >
             <LayoutGrid className="size-4" />
-            Scroll
+            Grid
           </button>
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
           {state.viewMode === "focused"
             ? "Shows one terminal at a time."
-            : "Shows all active terminals in a scrollable list."}
+            : "Shows all active terminals in a grid layout."}
         </p>
       </section>
     </>

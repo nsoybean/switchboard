@@ -5,7 +5,7 @@ import { Titlebar } from "./Titlebar";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
-import { ScrollView } from "../terminal/ScrollView";
+import { GridView } from "../terminal/GridView";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
 import { FilePreview } from "../files/FilePreview";
@@ -841,7 +841,7 @@ export function AppLayout() {
       onToggleViewMode: () => {
         dispatch({
           type: "SET_VIEW_MODE",
-          mode: state.viewMode === "focused" ? "scroll" : "focused",
+          mode: state.viewMode === "focused" ? "grid" : "focused",
         });
       },
     }),
@@ -869,7 +869,7 @@ export function AppLayout() {
         onToggleViewMode={() =>
           dispatch({
             type: "SET_VIEW_MODE",
-            mode: state.viewMode === "focused" ? "scroll" : "focused",
+            mode: state.viewMode === "focused" ? "grid" : "focused",
           })
         }
         onOpenSettings={() => setSettingsOpen(true)}
@@ -974,8 +974,8 @@ export function AppLayout() {
                       </Button>
                     </div>
                   </div>
-                ) : state.viewMode === "scroll" ? (
-                  <ScrollView
+                ) : state.viewMode === "grid" ? (
+                  <GridView
                     sessions={liveSessions.filter((s) =>
                       aliveSessionIds.has(s.id),
                     )}
@@ -1075,7 +1075,7 @@ export function AppLayout() {
             </div>
           </ResizablePanel>
 
-          {/* Workspace inspector (hidden in scroll view) */}
+          {/* Workspace inspector (hidden in grid view) */}
           {inspectorOpen && state.projectPath && state.viewMode === "focused" && (
               <>
                 <ResizableHandle />

@@ -10,7 +10,7 @@ import {
 import { XTermContainer } from "./XTermContainer";
 import type { Session } from "../../state/types";
 
-interface ScrollViewProps {
+interface GridViewProps {
   sessions: Session[];
   activeSessionId?: string | null;
   onSessionSelect?: (id: string) => void;
@@ -19,14 +19,14 @@ interface ScrollViewProps {
   onSessionExit: (id: string) => (code: number | null) => void;
 }
 
-export function ScrollView({
+export function GridView({
   sessions,
   activeSessionId,
   onSessionSelect,
   onStopSession,
   onSessionSpawn,
   onSessionExit,
-}: ScrollViewProps) {
+}: GridViewProps) {
   if (sessions.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
