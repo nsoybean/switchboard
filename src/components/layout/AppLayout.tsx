@@ -33,7 +33,8 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
-import { FolderOpen, Plus } from "lucide-react";
+import { FolderOpen, Plus, Square } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type {
   AgentType,
   Session,
@@ -43,6 +44,12 @@ import type {
 } from "../../state/types";
 
 const MAX_ALIVE_TERMINALS = 8;
+
+const AGENT_LABELS: Record<string, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  bash: "Bash",
+};
 
 interface HistorySessionSummary {
   session_id: string;
@@ -972,20 +979,51 @@ export function AppLayout() {
                     return (
                       <div
                         key={session.id}
-                        className="absolute inset-0 bg-background"
-                        style={{ display: isActive ? "block" : "none" }}
+                        className="absolute inset-0 flex flex-col bg-background"
+                        style={{ display: isActive ? "flex" : "none" }}
                       >
-                        <XTermContainer
-                          command={session.command}
-                          args={session.args}
-                          cwd={session.cwd}
-                          env={session.env}
-                          isActive={isActive}
-                          onSpawn={(ptyId) =>
-                            handleSessionSpawn(session.id, ptyId)
-                          }
-                          onExit={handleSessionExit(session.id)}
-                        />
+                        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
+                          <span
+                            className="min-w-0 max-w-[20ch] truncate font-semibold"
+                            title={session.label}
+                          >
+                            {session.label}
+                          </span>
+                          <Badge variant="secondary" className="text-[11px]">
+                            {AGENT_LABELS[session.agent] ?? session.agent}
+                          </Badge>
+                          <div className="ml-auto flex shrink-0 items-center gap-2">
+                            {session.ptyId !== null &&
+                              (session.status === "running" ||
+                                session.status === "idle" ||
+                                session.status === "needs-input") && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() =>
+                                    void handleStopSession(session.id)
+                                  }
+                                >
+                                  <Square data-icon="inline-start" />
+                                  Stop
+                                </Button>
+                              )}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-h-0">
+                          <XTermContainer
+                            command={session.command}
+                            args={session.args}
+                            cwd={session.cwd}
+                            env={session.env}
+                            isActive={isActive}
+                            onSpawn={(ptyId) =>
+                              handleSessionSpawn(session.id, ptyId)
+                            }
+                            onExit={handleSessionExit(session.id)}
+                          />
+                        </div>
                       </div>
                     );
                   })
