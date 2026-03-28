@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 export function Hero() {
   return (
     <section className="relative overflow-hidden pt-32 pb-20">
@@ -27,8 +25,6 @@ export function Hero() {
           The open-source
           <br />
           multi-agent workspace
-          <br />
-          for your codebase
         </h1>
 
         {/* Sub-headline */}
@@ -60,13 +56,13 @@ export function Hero() {
         {/* Product screenshot */}
         <div className="relative mx-auto mt-16 max-w-4xl">
           <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/30 shadow-2xl shadow-black/40">
-            <Image
-              src="/hero-shot.png"
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/switchboard/hero-shot.png"
               alt="Switchboard — multi-agent workspace interface"
               width={1920}
               height={1080}
               className="w-full"
-              priority
             />
           </div>
           {/* Reflection fade */}
