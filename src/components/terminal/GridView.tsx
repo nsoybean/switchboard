@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CircleDot, Square } from "lucide-react";
+import { Circle, Square } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import {
   Tooltip,
@@ -84,9 +84,9 @@ export function GridView({
                     <TooltipContent>Stop session</TooltipContent>
                   </Tooltip>
                 ) : null}
-                <CircleDot
+                <Circle
                   className={cn(
-                    "size-2.5",
+                    "size-2.5 fill-current",
                     session.status === "running" && "text-[var(--sb-status-running)]",
                     session.status === "idle" && "text-[var(--sb-status-done)]",
                     session.status === "needs-input" && "text-[var(--sb-status-warning)] animate-pulse",
