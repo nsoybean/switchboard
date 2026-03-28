@@ -113,27 +113,46 @@ pub fn pty_spawn(
     let pty_id = id;
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        let mut batch: Vec<u8> = Vec::with_capacity(65536);
+        let flush_interval = std::time::Duration::from_millis(5);
+        let mut last_flush = std::time::Instant::now();
+
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break, // EOF
                 Ok(n) => {
-                    let _ = app_clone.emit(
-                        "pty-output",
-                        PtyOutput {
-                            id: pty_id,
-                            data: buf[..n].to_vec(),
-                        },
-                    );
+                    batch.extend_from_slice(&buf[..n]);
+
+                    // Flush if the batch window has elapsed or the batch is large.
+                    // For interactive/slow output, elapsed will always be >= 5ms so
+                    // there is no added latency. For high-throughput output (agent
+                    // writing lots of code) we coalesce reads into a single event.
+                    if last_flush.elapsed() >= flush_interval || batch.len() >= 65536 {
+                        let _ = app_clone.emit(
+                            "pty-output",
+                            PtyOutput {
+                                id: pty_id,
+                                data: std::mem::replace(&mut batch, Vec::with_capacity(65536)),
+                            },
+                        );
+                        last_flush = std::time::Instant::now();
+                    }
                 }
                 Err(_) => break,
             }
         }
+
+        // Flush any remaining buffered data before signalling exit
+        if !batch.is_empty() {
+            let _ = app_clone.emit("pty-output", PtyOutput { id: pty_id, data: batch });
+        }
+
         // Process exited — notify frontend
         let _ = app_clone.emit(
             "pty-exit",
             PtyExit {
                 id: pty_id,
-                code: None, // Exit code retrieved separately
+                code: None,
             },
         );
     });
