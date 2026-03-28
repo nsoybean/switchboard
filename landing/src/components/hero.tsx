@@ -21,14 +21,14 @@ export function Hero() {
         </div>
 
         {/* Headline */}
-        <h1 className="mx-auto mt-6 max-w-2xl text-center text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl">
+        <h1 className="mx-auto mt-6 max-w-2xl text-center text-3xl font-semibold leading-[1.15] tracking-tight sm:text-[2.75rem]">
           The open-source
           <br />
           multi-agent workspace
         </h1>
 
         {/* Sub-headline */}
-        <p className="mx-auto mt-5 max-w-lg text-center text-base leading-relaxed text-muted-foreground">
+        <p className="mx-auto mt-5 max-w-lg text-center text-sm leading-relaxed text-muted-foreground">
           Run multiple AI coding sessions in parallel with isolated worktrees,
           live terminals, and native git workflows — all from one window.
         </p>
@@ -39,7 +39,7 @@ export function Hero() {
             href="https://github.com/nsoybean/switchboard/releases"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-9 items-center rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-opacity hover:opacity-90"
+            className="inline-flex h-8 items-center rounded-md bg-foreground px-3.5 text-xs font-medium text-background transition-opacity hover:opacity-90"
           >
             Download for macOS
           </a>
@@ -47,7 +47,7 @@ export function Hero() {
             href="https://github.com/nsoybean/switchboard"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-9 items-center rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex h-8 items-center rounded-md border border-border px-3.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             View on GitHub
           </a>
