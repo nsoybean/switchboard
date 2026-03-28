@@ -29,24 +29,58 @@ export function usePty(
   const ptyIdRef = useRef<number | null>(null);
   const unlistenOutputRef = useRef<UnlistenFn | null>(null);
   const unlistenExitRef = useRef<UnlistenFn | null>(null);
+  const writeQueueRef = useRef<Uint8Array[]>([]);
+  const rafRef = useRef<number | null>(null);
+
+  // Forward user input from xterm to PTY.
+  // Lives in its own effect so it is set up exactly once per terminal instance
+  // and properly disposed — prevents listener stacking on re-spawn.
+  useEffect(() => {
+    if (!terminal) return;
+    const disposable = terminal.onData((data: string) => {
+      if (ptyIdRef.current !== null) {
+        invoke("pty_write", { id: ptyIdRef.current, data }).catch(console.error);
+      }
+    });
+    return () => disposable.dispose();
+  }, [terminal]);
 
   const spawn = useCallback(
     async (options: SpawnOptions): Promise<number> => {
-      // Spawn PTY process
       const id = await invoke<number>("pty_spawn", { options });
       ptyIdRef.current = id;
 
-      // Listen for output events
+      // Batch incoming output chunks and flush once per animation frame.
+      // This prevents hundreds of synchronous terminal.write() calls per
+      // second when the agent is producing high-throughput output.
       unlistenOutputRef.current = await listen<PtyOutput>(
         "pty-output",
         (event) => {
-          if (event.payload.id === id && terminal) {
-            terminal.write(new Uint8Array(event.payload.data));
+          if (event.payload.id !== id || !terminal) return;
+          writeQueueRef.current.push(new Uint8Array(event.payload.data));
+          if (rafRef.current === null) {
+            rafRef.current = requestAnimationFrame(() => {
+              rafRef.current = null;
+              const queue = writeQueueRef.current;
+              if (queue.length === 0 || !terminal) return;
+              writeQueueRef.current = [];
+              if (queue.length === 1) {
+                terminal.write(queue[0]!);
+              } else {
+                const totalLength = queue.reduce((sum, c) => sum + c.length, 0);
+                const combined = new Uint8Array(totalLength);
+                let offset = 0;
+                for (const chunk of queue) {
+                  combined.set(chunk, offset);
+                  offset += chunk.length;
+                }
+                terminal.write(combined);
+              }
+            });
           }
         },
       );
 
-      // Listen for exit events
       unlistenExitRef.current = await listen<PtyExit>(
         "pty-exit",
         (event) => {
@@ -55,17 +89,6 @@ export function usePty(
           }
         },
       );
-
-      // Forward user input from xterm to PTY
-      if (terminal) {
-        terminal.onData((data: string) => {
-          if (ptyIdRef.current !== null) {
-            invoke("pty_write", { id: ptyIdRef.current, data }).catch(
-              console.error,
-            );
-          }
-        });
-      }
 
       return id;
     },
@@ -85,9 +108,13 @@ export function usePty(
     }
   }, []);
 
-  // Cleanup listeners on unmount
+  // Cleanup listeners and any pending RAF on unmount
   useEffect(() => {
     return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       unlistenOutputRef.current?.();
       unlistenExitRef.current?.();
     };
