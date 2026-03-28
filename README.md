@@ -49,7 +49,7 @@ Switchboard gives you:
 
 Early alpha. The core works — you can spawn Claude Code and Codex sessions, interact with them, switch between them, manage git, and resume past sessions. Building in public.
 
-**What's working (M1):**
+**What's working:**
 
 - Interactive terminal sessions via PTY (portable-pty → xterm.js)
 - Agent picker (Claude Code / Codex / Bash)
@@ -58,16 +58,16 @@ Early alpha. The core works — you can spawn Claude Code and Codex sessions, in
 - Session resume via `claude --resume`
 - Git panel with diff viewer, staging, commit, push
 - Git worktree management
+- File tree viewer
+- Token usage / cost tracking
 - Keyboard shortcuts
 - Session persistence across app restarts
 
-**Coming next (M2):**
+**Coming next:**
 
 - Comparison mode — same task to different agents, side-by-side diff
 - Stream View — all terminals visible in a horizontal scroll
-- File tree viewer
-- Token usage / cost tracking
-- Background (non-interactive) agents
+- Background tasks — queue up prompts for agents to run without manual interaction
 
 ## Tech Stack
 
@@ -79,7 +79,6 @@ Early alpha. The core works — you can spawn Claude Code and Codex sessions, in
 | PTY management     | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands)                  |
 | Git operations     | Git CLI subprocess                                                                             |
 | State management   | React Context + useReducer                                                                     |
-| Session data       | Reads from `~/.claude/projects/` (Claude Code) + `~/.switchboard/sessions.json` (own metadata) |
 
 ## Architecture
 
@@ -152,7 +151,6 @@ npx tsc --noEmit
 - **Spacing:** 4px base unit
 - **Aesthetic:** Terminal-native, dense, minimal chrome
 - **Theme:** Light and dark mode
-- **Colors:** CSS variables prefixed with `--sb-` for future theming
 
 ### Landing Page
 
