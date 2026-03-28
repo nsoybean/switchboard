@@ -37,6 +37,7 @@ interface GitToolbarProps {
   onSwitchBranch: (branchName: string) => Promise<void>;
   onCreateBranch: (branchName: string) => Promise<void>;
   onStageAll: () => Promise<void>;
+  onPull: () => Promise<void>;
   onPush: () => Promise<void>;
   onRefresh: () => void;
   onOpenSettings?: () => void;
@@ -56,6 +57,7 @@ export function GitToolbar({
   onSwitchBranch,
   onCreateBranch,
   onStageAll,
+  onPull,
   onPush,
   onRefresh,
   onOpenSettings,
@@ -66,6 +68,7 @@ export function GitToolbar({
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [prDialogOpen, setPrDialogOpen] = useState(false);
   const [commitPending, setCommitPending] = useState(false);
+  const [pullPending, setPullPending] = useState(false);
   const [pushPending, setPushPending] = useState(false);
 
   const handleCommit = async () => {
@@ -85,6 +88,28 @@ export function GitToolbar({
     } finally {
       setCommitPending(false);
     }
+  };
+
+  const runPull = async () => {
+    if (pullPending || pushPending || commitPending) return;
+
+    flushSync(() => {
+      setPullPending(true);
+    });
+
+    try {
+      await onPull();
+    } finally {
+      setPullPending(false);
+    }
+  };
+
+  const handlePullSelect = () => {
+    if (pullPending || pushPending || commitPending) return;
+
+    window.setTimeout(() => {
+      void runPull();
+    }, 0);
   };
 
   const runPush = async () => {
@@ -119,7 +144,7 @@ export function GitToolbar({
               branches={branches}
               loading={branchesLoading}
               value={branch}
-              disabled={branchActionPending || commitPending || pushPending}
+              disabled={branchActionPending || commitPending || pullPending || pushPending}
               triggerClassName="h-7 min-w-[12rem] max-w-full justify-between gap-2 px-2 text-xs"
               createLabel="Create and checkout new branch..."
               onSelect={(branchName) => void onSwitchBranch(branchName)}
@@ -146,12 +171,12 @@ export function GitToolbar({
             <Button
               size="sm"
               className="flex-1 text-xs"
-              disabled={commitPending || pushPending || branchActionPending}
+              disabled={commitPending || pullPending || pushPending || branchActionPending}
             >
-              {commitPending || pushPending ? (
+              {commitPending || pullPending || pushPending ? (
                 <>
                   <Spinner className="size-3" />
-                  {commitPending ? "Committing..." : "Pushing..."}
+                  {commitPending ? "Committing..." : pullPending ? "Pulling..." : "Pushing..."}
                 </>
               ) : (
                 "Commit"
@@ -164,7 +189,13 @@ export function GitToolbar({
                 Commit
               </DropdownMenuItem>
               <DropdownMenuItem
-                disabled={pushPending || commitPending || branchActionPending}
+                disabled={pullPending || pushPending || commitPending || branchActionPending}
+                onSelect={handlePullSelect}
+              >
+                Pull
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={pullPending || pushPending || commitPending || branchActionPending}
                 onSelect={handlePushSelect}
               >
                 Push
@@ -208,7 +239,7 @@ export function GitToolbar({
               variant="outline"
               size="sm"
               onClick={onRefresh}
-              disabled={branchActionPending || commitPending || pushPending}
+              disabled={branchActionPending || commitPending || pullPending || pushPending}
             >
               <RefreshCw data-icon="inline-start" />
             </Button>

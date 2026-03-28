@@ -256,6 +256,12 @@ pub fn git_commit(cwd: String, message: String) -> Result<String, String> {
     run_git(&cwd, &["commit", "-m", &message])
 }
 
+/// Pull current branch from remote
+#[tauri::command]
+pub fn git_pull(cwd: String) -> Result<String, String> {
+    run_git(&cwd, &["pull"])
+}
+
 /// Push current branch to remote
 #[tauri::command]
 pub fn git_push(cwd: String) -> Result<String, String> {

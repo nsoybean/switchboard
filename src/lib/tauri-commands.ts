@@ -45,6 +45,8 @@ export const gitCommands = {
     invoke<void>("git_revert_files", { cwd, files }),
   commit: (cwd: string, message: string) =>
     invoke<string>("git_commit", { cwd, message }),
+  pull: (cwd: string) =>
+    invoke<string>("git_pull", { cwd }),
   push: (cwd: string) =>
     invoke<string>("git_push", { cwd }),
   createBranch: (cwd: string, name: string) =>

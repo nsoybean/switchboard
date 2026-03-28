@@ -64,6 +64,7 @@ pub fn run() {
             commands::git::git_unstage,
             commands::git::git_revert_files,
             commands::git::git_commit,
+            commands::git::git_pull,
             commands::git::git_push,
             commands::git::git_create_branch,
             commands::git::git_checkout_branch,

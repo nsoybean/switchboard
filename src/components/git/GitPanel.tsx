@@ -196,6 +196,20 @@ export const GitPanel = memo(function GitPanel({
     );
   };
 
+  const handlePull = async () => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.pull(cwd);
+        await refresh();
+      })(),
+      {
+        loading: `Pulling ${branch || "current branch"}...`,
+        success: `Pulled ${branch || "current branch"}`,
+        error: (err) => `Failed to pull: ${String(err)}`,
+      },
+    );
+  };
+
   const handlePush = async () => {
     await toast.promise(
       (async () => {
@@ -288,6 +302,7 @@ export const GitPanel = memo(function GitPanel({
         onSwitchBranch={handleSwitchBranch}
         onCreateBranch={handleCreateBranch}
         onStageAll={handleStageAll}
+        onPull={handlePull}
         onPush={handlePush}
         onRefresh={refresh}
         onOpenSettings={onOpenSettings}
