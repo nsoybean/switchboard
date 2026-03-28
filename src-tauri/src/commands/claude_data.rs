@@ -28,18 +28,15 @@ struct HistoryEntry {
 
 /// A user message from a session JSONL file
 #[derive(Debug, Deserialize)]
-struct JonlMessage {
+struct JsonlMessage {
     #[serde(rename = "type")]
     msg_type: Option<String>,
-    #[serde(rename = "sessionId")]
-    session_id: Option<String>,
     timestamp: Option<String>,
     message: Option<MessageContent>,
 }
 
 #[derive(Debug, Deserialize)]
 struct MessageContent {
-    role: Option<String>,
     content: Option<serde_json::Value>,
     usage: Option<UsageInfo>,
     model: Option<String>,
@@ -227,7 +224,7 @@ fn parse_session_summary(
             continue;
         }
 
-        let msg: JonlMessage = match serde_json::from_str(&line) {
+        let msg: JsonlMessage = match serde_json::from_str(&line) {
             Ok(m) => m,
             Err(_) => continue, // Skip malformed lines
         };

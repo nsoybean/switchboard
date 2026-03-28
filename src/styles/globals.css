@@ -177,6 +177,35 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+html[data-platform="macos"],
+html[data-platform="macos"] body,
+html[data-platform="macos"] #root {
+  background: transparent;
+}
+
+.sb-window-shell {
+  padding: 10px;
+  background: transparent;
+}
+
+.sb-window-frame {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid
+    color-mix(in oklab, var(--border) 86%, var(--foreground) 14%);
+  border-radius: 14px;
+  background: var(--background);
+  box-shadow:
+    0 8px 20px oklch(0 0 0 / 0.13),
+    0 1px 0 oklch(1 0 0 / 0.05) inset;
+}
+
+.dark .sb-window-frame {
+  box-shadow:
+    0 10px 24px oklch(0 0 0 / 0.24),
+    0 1px 0 oklch(1 0 0 / 0.06) inset;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
   width: 6px;

@@ -68,7 +68,7 @@ export function Titlebar({
   return (
     <div
       data-tauri-drag-region
-      className="flex items-center h-[38px] border-b bg-background select-none shrink-0"
+      className="flex items-center h-[52px] border-b bg-background select-none shrink-0"
     >
       {/* Window controls — always visible */}
       <div className="flex items-center gap-1.5 pl-3 pr-2">
@@ -95,16 +95,16 @@ export function Titlebar({
       <div className="flex items-center gap-0.5 px-1">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-7" disabled>
-              <ChevronLeft />
+            <Button variant="ghost" size="icon" className="size-9" disabled>
+              <ChevronLeft className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Back</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-7" disabled>
-              <ChevronRight />
+            <Button variant="ghost" size="icon" className="size-9" disabled>
+              <ChevronRight className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Forward</TooltipContent>
@@ -124,7 +124,7 @@ export function Titlebar({
               <button
                 type="button"
                 onClick={onProjectClick}
-                className="min-w-0 truncate rounded-md border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                className="min-w-0 truncate rounded-md border px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
               >
                 {projectPathLabel}
               </button>
@@ -144,14 +144,14 @@ export function Titlebar({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 gap-1.5 px-2 text-xs"
+              className="h-9 gap-1.5 px-3 text-xs"
               onClick={onInstallUpdate}
               disabled={checkingForUpdates || installingUpdate}
             >
               {installingUpdate ? (
-                <Loader2 className="size-3.5 animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
               ) : (
-                <ArrowDownToLine className="size-3.5" />
+                <ArrowDownToLine className="size-4" />
               )}
               {installingUpdate && updateProgress !== null
                 ? `Updating ${updateProgress}%`
@@ -162,18 +162,18 @@ export function Titlebar({
           </>
         )}
 
-        <Tooltip>
+          <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="size-7"
+              className="size-9"
               onClick={onToggleViewMode}
             >
               {viewMode === "scroll" ? (
-                <Square className="size-3.5" />
+                <Square className="size-4" />
               ) : (
-                <Columns2 className="size-3.5 opacity-40" />
+                <Columns2 className="size-4 opacity-40" />
               )}
             </Button>
           </TooltipTrigger>
@@ -189,10 +189,10 @@ export function Titlebar({
             <Button
               variant="ghost"
               size="icon"
-              className="size-7"
+              className="size-9"
               onClick={onToggleSidebar}
             >
-              <PanelLeft className={sidebarOpen ? "" : "opacity-40"} />
+              <PanelLeft className={sidebarOpen ? "size-4" : "size-4 opacity-40"} />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
@@ -203,11 +203,13 @@ export function Titlebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7"
+                className="size-9"
                 disabled={!inspectorAvailable}
                 onClick={onToggleInspector}
               >
-                <PanelRight className={inspectorOpen ? "" : "opacity-40"} />
+                <PanelRight
+                  className={inspectorOpen ? "size-4" : "size-4 opacity-40"}
+                />
               </Button>
             </span>
           </TooltipTrigger>
@@ -225,10 +227,10 @@ export function Titlebar({
             <Button
               variant="ghost"
               size="icon"
-              className="size-7"
+              className="size-9"
               onClick={onOpenSettings}
             >
-              <Settings className="size-3.5" />
+              <Settings className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Settings</TooltipContent>
@@ -238,10 +240,14 @@ export function Titlebar({
             <Button
               variant="ghost"
               size="icon"
-              className="size-7"
+              className="size-9"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
-              {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+              {theme === "dark" ? (
+                <Sun className="size-4" />
+              ) : (
+                <Moon className="size-4" />
+              )}
             </Button>
           </TooltipTrigger>
           <TooltipContent>Toggle Theme</TooltipContent>
