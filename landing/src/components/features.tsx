@@ -51,7 +51,7 @@ export function Features() {
               key={f.title}
               className="rounded-xl border border-border/50 bg-muted/20 p-6 transition-colors hover:border-border hover:bg-muted/40"
             >
-              <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-muted/50 text-muted-foreground">
+              <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                 {f.icon}
               </div>
               <h3 className="text-sm font-semibold">{f.title}</h3>
