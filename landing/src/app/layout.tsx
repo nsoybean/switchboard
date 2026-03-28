@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Switchboard — Open-Source Multi-Agent Orchestrator",
+  title: "Switchboard — Open-Source Multi-Agent Workspace",
   description:
     "Run multiple AI coding agent sessions in parallel with isolated worktrees, live PTY terminals, and native git workflow management.",
   openGraph: {
-    title: "Switchboard — Open-Source Multi-Agent Orchestrator",
+    title: "Switchboard — Open-Source Multi-Agent Workspace",
     description:
       "Run multiple AI coding agent sessions in parallel with isolated worktrees, live PTY terminals, and native git workflow management.",
     type: "website",

@@ -24,11 +24,11 @@ export function Hero() {
 
         {/* Headline */}
         <h1 className="mx-auto mt-6 max-w-2xl text-center text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl">
-          The multi-agent
+          The open-source
           <br />
-          conductor for your
+          multi-agent workspace
           <br />
-          codebase
+          for your codebase
         </h1>
 
         {/* Sub-headline */}
@@ -62,7 +62,7 @@ export function Hero() {
           <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/30 shadow-2xl shadow-black/40">
             <Image
               src="/hero-shot.png"
-              alt="Switchboard — multi-agent orchestrator interface"
+              alt="Switchboard — multi-agent workspace interface"
               width={1920}
               height={1080}
               className="w-full"
