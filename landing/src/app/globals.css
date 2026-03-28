@@ -29,6 +29,16 @@
     scroll-behavior: smooth;
   }
 
+  html.light {
+    --color-background: oklch(1 0 0);
+    --color-foreground: oklch(0.147 0.004 49.25);
+    --color-muted: oklch(0.95 0.002 106.42);
+    --color-muted-foreground: oklch(0.455 0.013 58.07);
+    --color-border: oklch(0.87 0.006 56.04);
+    --color-accent: oklch(0.488 0.243 264.38);
+    --color-accent-foreground: oklch(0.985 0.001 106.42);
+  }
+
   body {
     min-height: 100vh;
   }
