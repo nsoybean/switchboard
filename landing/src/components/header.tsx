@@ -37,7 +37,7 @@ export function Header() {
             <GitHubIcon className="h-4 w-4" />
           </a>
           <a
-            href="https://x.com/nicksoybean"
+            href="https://x.com/nsoybean"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
