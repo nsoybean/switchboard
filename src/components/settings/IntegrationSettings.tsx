@@ -166,9 +166,8 @@ export function IntegrationSettings() {
         </div>
       </section>
 
+      {/* TODO: Claude Hooks section — auto-configured, not user-facing yet
       <Separator className="my-8" />
-
-      {/* Claude Hooks Section */}
       <section>
         <div className="flex items-center gap-2 mb-1">
           <Radio className="size-4" />
@@ -178,7 +177,6 @@ export function IntegrationSettings() {
           Real-time session status updates from Claude Code via HTTP hooks. Auto-configured when
           launching sessions.
         </p>
-
         <div className="rounded-lg border bg-muted/30 px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-[var(--sb-status-running)]" />
@@ -196,6 +194,7 @@ export function IntegrationSettings() {
           </p>
         </div>
       </section>
+      */}
     </>
   );
 }

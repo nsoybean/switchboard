@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
-  CircleDot,
+  Circle,
   Ellipsis,
   PencilLine,
   Play,
@@ -93,29 +93,30 @@ export function SessionCard({
             </div>
           )}
           <div className="mt-1 flex items-center gap-1.5">
-            <CircleDot
-              className={cn(
-                "size-2.5",
-                session.status === "running" &&
-                  "text-[var(--sb-status-running)]",
-                session.status === "idle" &&
-                  "text-[var(--sb-status-done)]",
-                session.status === "needs-input" &&
-                  "text-[var(--sb-status-warning)] animate-pulse",
-                session.status === "done" && "text-[var(--sb-status-done)]",
-                session.status === "stopped" && "text-muted-foreground",
-                session.status === "error" && "text-destructive",
-              )}
-            />
-            <Badge
-              variant="secondary"
-              className="h-4 px-1 text-[10px] font-normal"
-            >
-              {STATUS_LABELS[session.status] ?? session.status}
-            </Badge>
+            {!isDone && (
+              <>
+                <Circle
+                  className={cn(
+                    "size-2.5 fill-current",
+                    session.status === "running" &&
+                      "text-[var(--sb-status-running)]",
+                    session.status === "idle" &&
+                      "text-[var(--sb-status-done)]",
+                    session.status === "needs-input" &&
+                      "text-[var(--sb-status-warning)] animate-pulse",
+                  )}
+                />
+                <Badge
+                  variant="secondary"
+                  className="h-4 px-1 text-[10px] font-normal"
+                >
+                  {STATUS_LABELS[session.status] ?? session.status}
+                </Badge>
+              </>
+            )}
             {tokenInfo &&
               (tokenInfo.inputTokens > 0 || tokenInfo.outputTokens > 0) && (
-                <span className="ml-auto text-[10px] text-muted-foreground/70">
+                <span className="text-[10px] text-muted-foreground/70">
                   {formatTokens(tokenInfo.inputTokens + tokenInfo.outputTokens)}
                   {" · "}
                   {formatCost(
