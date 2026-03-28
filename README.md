@@ -1,6 +1,6 @@
 # Switchboard
 
-**Open-source desktop workspace for parallel AI coding sessions.**
+**The open-source multi-agent workspace.** Run Claude Code, Codex, and Bash side by side — each in its own terminal, its own branch, its own worktree. Review and ship from one window.
 
 <p align="center">
   <img src="./public/hero-shot.png" alt="Switchboard showing multiple Claude Code and Codex sessions in one desktop window" width="1120" />
@@ -13,6 +13,24 @@ It is built for the way people actually use coding agents: one agent implementin
 You can launch new sessions, resume past Claude Code and Codex sessions from local history, inspect diffs, commit and push changes, and keep each agent safely isolated when needed.
 
 If you like [Conductor](https://www.conductor.build/), Switchboard is a similar workflow with an open-source, terminal-native, local-first approach.
+
+## Install
+
+Download the [latest release](https://github.com/nsoybean/switchboard/releases/latest) (macOS, Apple Silicon & Intel).
+
+Or install from the command line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nsoybean/switchboard/main/scripts/install.sh | bash
+```
+
+You'll also need at least one of: [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex).
+
+> **macOS Gatekeeper notice:** Since the app is not yet code-signed with an Apple Developer certificate, macOS may block it from opening. To bypass this, run:
+> ```bash
+> xattr -cr /Applications/Switchboard.app
+> ```
+> Then open the app normally.
 
 ## Why
 
@@ -51,7 +69,48 @@ Early alpha. The core works — you can spawn Claude Code and Codex sessions, in
 - Token usage / cost tracking
 - Background (non-interactive) agents
 
-## Getting Started
+## Tech Stack
+
+| Layer              | Technology                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| Desktop framework  | [Tauri v2](https://v2.tauri.app/) (Rust)                                                       |
+| Frontend           | React 19 + TypeScript + Tailwind CSS                                                           |
+| Terminal emulation | [xterm.js](https://xtermjs.org/) v6 + WebGL addon                                              |
+| PTY management     | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands)                  |
+| Git operations     | Git CLI subprocess                                                                             |
+| State management   | React Context + useReducer                                                                     |
+| Session data       | Reads from `~/.claude/projects/` (Claude Code) + `~/.switchboard/sessions.json` (own metadata) |
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────┐
+│              FRONTEND (React + xterm.js)          │
+│                                                  │
+│  Sidebar ─── Terminal (xterm.js) ─── Git Panel   │
+│                      │                           │
+│               usePty hook                        │
+│                      │ Tauri events              │
+├──────────────────────┼───────────────────────────┤
+│              BACKEND (Rust / Tauri v2)            │
+│                                                  │
+│  PTY commands ── Session commands ── Git commands │
+│  (portable-pty)  (persistence)    (git CLI)      │
+│                      │                           │
+│         ┌────────────┼────────────┐              │
+│         ▼            ▼            ▼              │
+│  ~/.claude/     git worktree  ~/.switchboard/    │
+│  (read only)       CLI        sessions.json      │
+└──────────────────────────────────────────────────┘
+```
+
+The PTY pipeline is the core — `portable-pty` spawns agent processes, a background thread streams output via Tauri events to xterm.js, and user keystrokes flow back. The terminal renders identically to running the agent in your native terminal.
+
+## Contributing
+
+Contributions welcome. This is an early-stage project — if you're interested in multi-agent workflows, git worktree tooling, or terminal emulation in desktop apps, there's plenty to work on.
+
+## Running Locally
 
 ### Prerequisites
 
@@ -77,42 +136,15 @@ npm run tauri build
 
 Produces `.dmg` (macOS) or `.AppImage` (Linux) in `src-tauri/target/release/bundle/`.
 
-## Tech Stack
+### Tests
 
-| Layer              | Technology                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------------- |
-| Desktop framework  | [Tauri v2](https://v2.tauri.app/) (Rust)                                                       |
-| Frontend           | React 19 + TypeScript + Tailwind CSS                                                           |
-| Terminal emulation | [xterm.js](https://xtermjs.org/) v6 + WebGL addon                                              |
-| PTY management     | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands)                  |
-| Git operations     | Git CLI subprocess                                                                             |
-| State management   | React Context + useReducer                                                                     |
-| Session data       | Reads from `~/.claude/projects/` (Claude Code) + `~/.switchboard/sessions.json` (own metadata) |
+```bash
+# Run Rust tests
+cargo test --manifest-path src-tauri/Cargo.toml
 
-### Architecture
-
+# TypeScript check
+npx tsc --noEmit
 ```
-┌──────────────────────────────────────────────────┐
-│              FRONTEND (React + xterm.js)          │
-│                                                  │
-│  Sidebar ─── Terminal (xterm.js) ─── Git Panel   │
-│                      │                           │
-│               usePty hook                        │
-│                      │ Tauri events              │
-├──────────────────────┼───────────────────────────┤
-│              BACKEND (Rust / Tauri v2)            │
-│                                                  │
-│  PTY commands ── Session commands ── Git commands │
-│  (portable-pty)  (persistence)    (git CLI)      │
-│                      │                           │
-│         ┌────────────┼────────────┐              │
-│         ▼            ▼            ▼              │
-│  ~/.claude/     git worktree  ~/.switchboard/    │
-│  (read only)       CLI        sessions.json      │
-└──────────────────────────────────────────────────┘
-```
-
-The PTY pipeline is the core — `portable-pty` spawns agent processes, a background thread streams output via Tauri events to xterm.js, and user keystrokes flow back. The terminal renders identically to running the agent in your native terminal.
 
 ### Design
 
@@ -133,18 +165,6 @@ npm run dev
 ```
 
 Deployed at [nsoybean.github.io/switchboard](https://nsoybean.github.io/switchboard/).
-
-## Contributing
-
-Contributions welcome. This is an early-stage project — if you're interested in multi-agent workflows, git worktree tooling, or terminal emulation in desktop apps, there's plenty to work on.
-
-```bash
-# Run Rust tests
-cargo test --manifest-path src-tauri/Cargo.toml
-
-# TypeScript check
-npx tsc --noEmit
-```
 
 ## License
 

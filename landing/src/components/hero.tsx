@@ -29,8 +29,9 @@ export function Hero() {
 
         {/* Sub-headline */}
         <p className="mx-auto mt-5 max-w-lg text-center text-[0.8125rem] leading-relaxed text-muted-foreground">
-          Run multiple AI coding sessions in parallel with isolated worktrees,
-          live terminals, and native git workflows — all from one window.
+          Run Claude Code, Codex, and Bash side by side — each in its own
+          terminal, its own branch, its own worktree. Review and ship from one
+          window.
         </p>
 
         {/* CTA */}
