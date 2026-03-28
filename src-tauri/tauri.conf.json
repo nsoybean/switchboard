@@ -43,7 +43,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGMUQxRDk1RUUyOUZENTgKUldSWS9TbnVsUjBkLzhzYXN0bWFGUjEyc1ZnS1I5WlpwQlg3K2JtSXJCNGs0dGZ0ZlEyeUVML0oK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxOEE0RUU4RjY5MEFGOTkKUldTWnI1RDI2RTZLc2JUODJmSmYreTJXbFN0ZHFrQ2wrV1VHWmRvK2hKQllValdFS29zUjdpT1cK",
       "endpoints": [
         "https://github.com/nsoybean/switchboard/releases/latest/download/latest.json"
       ]
