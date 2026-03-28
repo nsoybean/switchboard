@@ -1,0 +1,85 @@
+import { FolderOpen, LayoutGrid, LayoutList } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAppState, useAppDispatch } from "../../state/context";
+
+export function GeneralSettings() {
+  const state = useAppState();
+  const dispatch = useAppDispatch();
+
+  return (
+    <>
+      <section>
+        <div className="flex items-center gap-2 mb-1">
+          <FolderOpen className="size-4" />
+          <h2 className="text-sm font-semibold">Project</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Switchboard is currently focused on this git repository.
+        </p>
+
+        <div className="rounded-lg border bg-muted/30 px-4 py-3">
+          <p className="text-xs text-muted-foreground">Selected project repo</p>
+          {state.projectPath ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="mt-1 truncate font-mono text-sm" title={state.projectPath}>
+                  {state.projectPath}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent>{state.projectPath}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">No project selected</p>
+          )}
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Projects added: {state.projects.length}
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <div className="flex items-center gap-2 mb-1">
+          <LayoutGrid className="size-4" />
+          <h2 className="text-sm font-semibold">View Mode</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          How terminal sessions are displayed.
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => dispatch({ type: "SET_VIEW_MODE", mode: "focused" })}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors ${
+              state.viewMode === "focused"
+                ? "bg-accent text-accent-foreground border-accent-foreground/20 font-medium"
+                : "bg-muted/30 text-muted-foreground hover:bg-accent/50"
+            }`}
+          >
+            <LayoutList className="size-4" />
+            Focused
+          </button>
+          <button
+            onClick={() => dispatch({ type: "SET_VIEW_MODE", mode: "scroll" })}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors ${
+              state.viewMode === "scroll"
+                ? "bg-accent text-accent-foreground border-accent-foreground/20 font-medium"
+                : "bg-muted/30 text-muted-foreground hover:bg-accent/50"
+            }`}
+          >
+            <LayoutGrid className="size-4" />
+            Scroll
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {state.viewMode === "focused"
+            ? "Shows one terminal at a time."
+            : "Shows all active terminals in a scrollable list."}
+        </p>
+      </section>
+    </>
+  );
+}

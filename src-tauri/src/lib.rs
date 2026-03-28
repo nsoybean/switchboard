@@ -1,17 +1,23 @@
 mod commands;
+mod hook_server;
 
 use commands::pty::PtyState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Bind hook server port synchronously so state is always available
+    let (hook_state, hook_listener) = hook_server::init_hook_server();
+    let hook_token = hook_state.token.clone();
+
     tauri::Builder::default()
         .manage(PtyState::new())
+        .manage(hook_state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
-        .setup(|app| {
+        .setup(move |app| {
             #[cfg(desktop)]
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
@@ -23,6 +29,14 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Spawn the async HTTP server now that the runtime is available
+            hook_server::spawn_hook_server(
+                app.handle().clone(),
+                hook_listener,
+                hook_token,
+            );
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -71,6 +85,11 @@ pub fn run() {
             commands::files::list_directory,
             commands::files::inspect_directory,
             commands::files::read_file_contents,
+            commands::session::get_notification_prefs,
+            commands::session::set_notification_prefs,
+            commands::hooks::write_claude_hook_config,
+            hook_server::get_hook_port,
+            hook_server::get_hook_token,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

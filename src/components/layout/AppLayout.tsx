@@ -16,11 +16,13 @@ import {
   type WorkspaceTab,
 } from "../workspace/WorkspacePanel";
 import { useAppUpdater } from "../../hooks/useAppUpdater";
+import { useClaudeHooks } from "../../hooks/useClaudeHooks";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
 import { getBranchPrefix } from "../../lib/branches";
 import {
   fileCommands,
+  hookCommands,
   projectCommands,
   worktreeCommands,
 } from "../../lib/tauri-commands";
@@ -154,7 +156,9 @@ export function AppLayout() {
   );
   const liveSessions = projectSessions.filter(
     (session) =>
-      session.status === "running" || session.status === "needs-input",
+      session.status === "running" ||
+      session.status === "idle" ||
+      session.status === "needs-input",
   );
   const sortedSessionIds = useMemo(
     () =>
@@ -203,9 +207,10 @@ export function AppLayout() {
       };
     }
 
+    const isLive = Boolean(state.sessions[selectedSession.id]);
     const source: WorkspaceContext["source"] = selectedSession.worktreePath
       ? "worktreePath"
-      : state.sessions[selectedSession.id]
+      : isLive
         ? "cwd"
         : "history";
 
@@ -218,11 +223,20 @@ export function AppLayout() {
       source,
       isWorktree: Boolean(selectedSession.worktreePath),
     };
+    // Only depend on workspace-relevant fields, not the full sessions object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     projectLabel,
-    selectedSession,
+    selectedSession?.id,
+    selectedSession?.label,
+    selectedSession?.branch,
+    selectedSession?.worktreePath,
+    selectedSession?.cwd,
     state.projectPath,
-    state.sessions,
+    // We need to know if the session is live (in state.sessions) but we don't
+    // want every status update to trigger a recompute. Check presence only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    selectedSession ? Boolean(state.sessions[selectedSession.id]) : false,
   ]);
   const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(
     workspaceCandidate,
@@ -257,6 +271,16 @@ export function AppLayout() {
   useEffect(() => {
     sessionsRef.current = state.sessions;
   }, [state.sessions]);
+
+  // Write hook config for the current project on startup / project change
+  useEffect(() => {
+    if (!state.projectPath) return;
+    const cwd = state.projectPath;
+    hookCommands
+      .getPort()
+      .then((port) => hookCommands.writeConfig(cwd, port))
+      .catch((err) => console.warn("Failed to write hook config on startup:", err));
+  }, [state.projectPath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -294,11 +318,11 @@ export function AppLayout() {
           return;
         }
 
-        const sessionSource: WorkspaceContext["source"] = state.sessions[
-          selectedSession.id
-        ]
-          ? "cwd"
-          : "history";
+        const wcSource = workspaceCandidate?.source;
+        const sessionSource: Exclude<WorkspaceContext["source"], "project"> =
+          wcSource === "worktreePath" || wcSource === "history"
+            ? wcSource
+            : "cwd";
         const preferredRoots: Array<{
           path: string;
           source: Exclude<WorkspaceContext["source"], "project">;
@@ -376,11 +400,12 @@ export function AppLayout() {
     return () => {
       cancelled = true;
     };
+    // Only re-resolve when workspace-relevant data changes, not on every
+    // session status update.  workspaceCandidate already filters this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     projectLabel,
-    selectedSession,
     state.projectPath,
-    state.sessions,
     workspaceCandidate,
   ]);
 
@@ -466,6 +491,17 @@ export function AppLayout() {
         id,
       );
 
+      // For Claude sessions, inject hook auth token as env var
+      let env: Record<string, string> | undefined;
+      if (config.agent === "claude-code") {
+        try {
+          const token = await hookCommands.getToken();
+          env = { SWITCHBOARD_HOOK_TOKEN: token };
+        } catch (err) {
+          console.warn("Failed to configure Claude hooks:", err);
+        }
+      }
+
       const session: Session = {
         id,
         agent: config.agent,
@@ -487,6 +523,7 @@ export function AppLayout() {
         exitCode: null,
         command,
         args,
+        env,
       };
       dispatch({ type: "ADD_SESSION", session });
       persistSession(session);
@@ -541,6 +578,7 @@ export function AppLayout() {
       if (
         existingSession &&
         (existingSession.status === "running" ||
+          existingSession.status === "idle" ||
           existingSession.status === "needs-input")
       ) {
         dispatch({ type: "SET_ACTIVE", id: existingSession.id });
@@ -579,6 +617,8 @@ export function AppLayout() {
     },
     [dispatch, persistSession, state.sessions, syncCodexResumeTarget],
   );
+
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
 
   const handleSessionBranchChange = useCallback(
     async (sessionId: string, branch: string | null) => {
@@ -784,6 +824,7 @@ export function AppLayout() {
     [sortedSessionIds, state.activeSessionId, state.viewMode, dispatch],
   );
   useKeyboardShortcuts(shortcutHandlers);
+  useClaudeHooks(state.sessions, dispatch);
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -938,6 +979,7 @@ export function AppLayout() {
                           command={session.command}
                           args={session.args}
                           cwd={session.cwd}
+                          env={session.env}
                           isActive={isActive}
                           onSpawn={(ptyId) =>
                             handleSessionSpawn(session.id, ptyId)
@@ -988,7 +1030,7 @@ export function AppLayout() {
                     context={workspaceContext}
                     session={selectedSession}
                     githubToken={state.githubToken}
-                    onOpenSettings={() => setSettingsOpen(true)}
+                    onOpenSettings={openSettings}
                     onSessionBranchChange={handleSessionBranchChange}
                     onTabChange={setWorkspaceTab}
                   />

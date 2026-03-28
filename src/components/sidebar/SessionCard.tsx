@@ -22,6 +22,7 @@ import type { Session } from "../../state/types";
 
 const STATUS_LABELS: Record<string, string> = {
   running: "Running",
+  idle: "Idle",
   "needs-input": "Needs Input",
   done: "Done",
   error: "Error",
@@ -97,6 +98,8 @@ export function SessionCard({
                 "size-2.5",
                 session.status === "running" &&
                   "text-[var(--sb-status-running)]",
+                session.status === "idle" &&
+                  "text-[var(--sb-status-done)]",
                 session.status === "needs-input" &&
                   "text-[var(--sb-status-warning)] animate-pulse",
                 session.status === "done" && "text-[var(--sb-status-done)]",

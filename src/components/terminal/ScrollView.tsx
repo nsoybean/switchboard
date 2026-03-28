@@ -48,7 +48,7 @@ export function ScrollView({
           const isActive = session.id === activeSessionId;
           const canStop =
             session.ptyId !== null &&
-            (session.status === "running" || session.status === "needs-input");
+            (session.status === "running" || session.status === "idle" || session.status === "needs-input");
           return (
             <div
               key={session.id}
@@ -88,6 +88,7 @@ export function ScrollView({
                   className={cn(
                     "size-2.5",
                     session.status === "running" && "text-[var(--sb-status-running)]",
+                    session.status === "idle" && "text-[var(--sb-status-done)]",
                     session.status === "needs-input" && "text-[var(--sb-status-warning)] animate-pulse",
                     session.status === "done" && "text-[var(--sb-status-done)]",
                     session.status === "stopped" && "text-muted-foreground",
@@ -101,6 +102,7 @@ export function ScrollView({
                   command={session.command}
                   args={session.args}
                   cwd={session.cwd}
+                  env={session.env}
                   onSpawn={(ptyId) => onSessionSpawn(session.id, ptyId)}
                   onExit={onSessionExit(session.id)}
                 />

@@ -92,7 +92,9 @@ export function SessionSidebar({
   );
   const activeSessions = allLocalSessions.filter(
     (session) =>
-      session.status === "running" || session.status === "needs-input",
+      session.status === "running" ||
+      session.status === "idle" ||
+      session.status === "needs-input",
   );
   const endedSessions = allLocalSessions.filter(
     (session) =>
@@ -313,6 +315,7 @@ export function SessionSidebar({
               onStop={
                 session.ptyId !== null &&
                 (session.status === "running" ||
+                  session.status === "idle" ||
                   session.status === "needs-input")
                   ? () => void onStopSession?.(session.id)
                   : undefined

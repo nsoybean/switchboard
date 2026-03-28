@@ -90,6 +90,28 @@ export const settingsCommands = {
   getGitHubToken: () => invoke<string | null>("get_github_token"),
   setGitHubToken: (token: string) => invoke<void>("set_github_token", { token }),
   validateGitHubToken: (token: string) => invoke<string>("validate_github_token", { token }),
+  getNotificationPrefs: () => invoke<NotificationPrefs>("get_notification_prefs"),
+  setNotificationPrefs: (prefs: NotificationPrefs) =>
+    invoke<void>("set_notification_prefs", { prefs }),
+};
+
+export interface NotificationPrefs {
+  native_enabled: boolean;
+  notch_enabled: boolean;
+  sound_enabled: boolean;
+  statuses: {
+    done: boolean;
+    error: boolean;
+    needs_input: boolean;
+    stopped: boolean;
+  };
+}
+
+export const hookCommands = {
+  getPort: () => invoke<number>("get_hook_port"),
+  getToken: () => invoke<string>("get_hook_token"),
+  writeConfig: (cwd: string, port: number) =>
+    invoke<void>("write_claude_hook_config", { cwd, port }),
 };
 
 export const worktreeCommands = {

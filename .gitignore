@@ -19,3 +19,5 @@ docs/
 # Environment
 .env
 .env.local
+
+local_scripts/

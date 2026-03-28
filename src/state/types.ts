@@ -18,6 +18,7 @@ export interface SessionWorkspaceIdentity {
 
 export type SessionStatus =
   | "running"
+  | "idle"
   | "needs-input"
   | "done"
   | "error"
@@ -40,6 +41,8 @@ export interface Session {
   command: string;
   /** CLI arguments */
   args: string[];
+  /** Transient env vars for PTY spawn (not persisted) */
+  env?: Record<string, string>;
 }
 
 export interface AppState {

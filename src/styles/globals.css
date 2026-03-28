@@ -84,7 +84,7 @@
     /* Switchboard semantic tokens — light */
     --sb-status-running: oklch(0.723 0.219 149.579);
     --sb-status-warning: oklch(0.795 0.184 86.047);
-    --sb-status-done: oklch(0.553 0.013 58.071);
+    --sb-status-done: oklch(0.588 0.158 241.966);
     --sb-status-error: oklch(0.577 0.245 27.325);
     --sb-diff-add-bg: oklch(0.95 0.05 149);
     --sb-diff-add-fg: oklch(0.4 0.15 149);
@@ -128,7 +128,7 @@
     /* Switchboard semantic tokens — dark */
     --sb-status-running: oklch(0.723 0.219 149.579);
     --sb-status-warning: oklch(0.795 0.184 86.047);
-    --sb-status-done: oklch(0.553 0.013 58.071);
+    --sb-status-done: oklch(0.707 0.165 254.624);
     --sb-status-error: oklch(0.704 0.191 22.216);
     --sb-diff-add-bg: oklch(0.25 0.05 149);
     --sb-diff-add-fg: oklch(0.723 0.219 149.579);

@@ -5,6 +5,7 @@ Desktop multi-agent coding orchestrator for Claude Code, Codex, and Bash.
 ## Source Of Truth
 - This file is the canonical agent instruction file for the repo.
 - Keep `CLAUDE.md` as a thin pointer to `AGENTS.md` so project rules stay portable across agents.
+- Read `docs/ARCHITECTURE.md` for the current feature map, module guide, and runtime flows.
 
 ## Stack
 - Backend: Rust + Tauri v2 in `src-tauri/`

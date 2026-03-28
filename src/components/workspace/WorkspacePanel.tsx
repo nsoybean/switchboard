@@ -99,7 +99,8 @@ export function WorkspacePanel({
         key={`changes:${rootKey}`}
         cwd={context.rootPath}
         visible
-        session={context.kind === "session" ? session : null}
+        sessionId={context.kind === "session" ? session?.id : null}
+        sessionAgent={context.kind === "session" ? session?.agent : null}
         githubToken={githubToken}
         onOpenSettings={onOpenSettings}
         onSessionBranchChange={onSessionBranchChange}

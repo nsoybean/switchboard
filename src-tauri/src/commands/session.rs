@@ -328,3 +328,30 @@ pub struct DetectedAgent {
     pub available: bool,
     pub version: Option<String>,
 }
+
+// -- Notification preferences --
+
+#[tauri::command]
+pub fn get_notification_prefs() -> Result<serde_json::Value, String> {
+    let config = read_config()?;
+    Ok(config.get("notifications").cloned().unwrap_or_else(|| {
+        serde_json::json!({
+            "native_enabled": true,
+            "notch_enabled": true,
+            "sound_enabled": false,
+            "statuses": {
+                "done": true,
+                "error": true,
+                "needs_input": true,
+                "stopped": true
+            }
+        })
+    }))
+}
+
+#[tauri::command]
+pub fn set_notification_prefs(prefs: serde_json::Value) -> Result<(), String> {
+    let mut config = read_config()?;
+    config["notifications"] = prefs;
+    write_config(&config)
+}

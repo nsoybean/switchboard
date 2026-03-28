@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Minus, Undo2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getBranchPrefix } from "@/lib/branches";
@@ -20,21 +20,23 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { Session } from "../../state/types";
+import type { AgentType } from "../../state/types";
 
 interface GitPanelProps {
   cwd: string;
   visible: boolean;
-  session?: Session | null;
+  sessionId?: string | null;
+  sessionAgent?: string | null;
   githubToken?: string | null;
   onOpenSettings?: () => void;
   onSessionBranchChange?: (sessionId: string, branch: string | null) => Promise<void> | void;
 }
 
-export function GitPanel({
+export const GitPanel = memo(function GitPanel({
   cwd,
   visible,
-  session,
+  sessionId,
+  sessionAgent,
   githubToken,
   onOpenSettings,
   onSessionBranchChange,
@@ -52,6 +54,7 @@ export function GitPanel({
   const [branchActionPending, setBranchActionPending] = useState(false);
 
   const showStaged = activeTab === "staged";
+  const branchesLoadedRef = useRef(false);
 
   useEffect(() => {
     setBranch("");
@@ -64,10 +67,11 @@ export function GitPanel({
     setFileDiff("");
     setBranchesLoading(true);
     setLoading(true);
+    branchesLoadedRef.current = false;
   }, [cwd]);
 
   const refresh = useCallback(async () => {
-    const shouldShowBranchLoading = branches.length === 0;
+    const shouldShowBranchLoading = !branchesLoadedRef.current;
 
     try {
       setLoading(true);
@@ -79,11 +83,13 @@ export function GitPanel({
       const nextBranches = await gitCommands.listBranches(cwd).catch(() => []);
       setBranch(status.branch);
       setBranches(nextBranches);
+      branchesLoadedRef.current = nextBranches.length > 0;
       setFiles(status.files);
       setStats(status.stats);
       return status;
     } catch (err) {
       setBranches([]);
+      branchesLoadedRef.current = false;
       setError(String(err));
       return null;
     } finally {
@@ -92,7 +98,7 @@ export function GitPanel({
       }
       setLoading(false);
     }
-  }, [branches.length, cwd]);
+  }, [cwd]);
 
   useEffect(() => {
     if (!visible) return;
@@ -213,8 +219,8 @@ export function GitPanel({
         (async () => {
           await gitCommands.checkoutBranch(cwd, branchName);
           const status = await refresh();
-          if (session?.id) {
-            await onSessionBranchChange?.(session.id, status?.branch ?? branchName);
+          if (sessionId) {
+            await onSessionBranchChange?.(sessionId!, status?.branch ?? branchName);
           }
         })(),
         {
@@ -237,8 +243,8 @@ export function GitPanel({
         (async () => {
           await gitCommands.createBranch(cwd, branchName);
           const status = await refresh();
-          if (session?.id) {
-            await onSessionBranchChange?.(session.id, status?.branch ?? branchName);
+          if (sessionId) {
+            await onSessionBranchChange?.(sessionId!, status?.branch ?? branchName);
           }
         })(),
         {
@@ -274,7 +280,7 @@ export function GitPanel({
         branchesLoading={branchesLoading && branches.length === 0}
         branchActionsEnabled
         branchActionPending={branchActionPending}
-        branchPrefix={session ? getBranchPrefix(session.agent) : undefined}
+        branchPrefix={sessionAgent ? getBranchPrefix(sessionAgent as AgentType) : undefined}
         stats={stats}
         cwd={cwd}
         githubToken={githubToken ?? null}
@@ -452,4 +458,4 @@ export function GitPanel({
       </div>
     </div>
   );
-}
+});

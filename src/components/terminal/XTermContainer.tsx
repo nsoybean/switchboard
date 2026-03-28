@@ -57,6 +57,7 @@ interface XTermContainerProps {
   command?: string;
   args?: string[];
   cwd?: string;
+  env?: Record<string, string>;
   isActive?: boolean;
   onSpawn?: (ptyId: number) => void;
   onExit?: (code: number | null) => void;
@@ -66,6 +67,7 @@ export function XTermContainer({
   command = "/bin/bash",
   args = [],
   cwd,
+  env,
   isActive,
   onSpawn,
   onExit,
@@ -256,6 +258,7 @@ export function XTermContainer({
           cwd: cwd ?? undefined,
           cols: terminal.cols,
           rows: terminal.rows,
+          env,
         });
         onSpawn?.(ptyId);
       } catch (err) {
@@ -263,7 +266,7 @@ export function XTermContainer({
       }
     };
     doSpawn();
-  }, [terminal, ready, command, args, cwd, spawn, onSpawn]);
+  }, [terminal, ready, command, args, cwd, env, spawn, onSpawn]);
 
   // Forward resize events to PTY
   useEffect(() => {

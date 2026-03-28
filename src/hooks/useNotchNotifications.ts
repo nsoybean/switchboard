@@ -6,17 +6,23 @@ import {
 } from "@tauri-apps/plugin-notification";
 import { useAppState, useAppDispatch } from "@/state/context";
 import { useWindowFocus } from "./useWindowFocus";
+import { settingsCommands, type NotificationPrefs } from "@/lib/tauri-commands";
 import type { NotchNotificationItem } from "@/components/layout/NotchNotification";
 import type { SessionStatus } from "@/state/types";
 
 let notifCounter = 0;
 
-const NOTIFIABLE_STATUSES: SessionStatus[] = [
-  "done",
-  "error",
-  "stopped",
-  "needs-input",
-];
+const DEFAULT_PREFS: NotificationPrefs = {
+  native_enabled: true,
+  notch_enabled: true,
+  sound_enabled: false,
+  statuses: {
+    done: true,
+    error: true,
+    needs_input: true,
+    stopped: true,
+  },
+};
 
 function statusToNativeTitle(status: SessionStatus): string {
   switch (status) {
@@ -33,6 +39,24 @@ function statusToNativeTitle(status: SessionStatus): string {
   }
 }
 
+function isStatusEnabled(
+  status: SessionStatus,
+  prefs: NotificationPrefs,
+): boolean {
+  switch (status) {
+    case "done":
+      return prefs.statuses.done;
+    case "error":
+      return prefs.statuses.error;
+    case "stopped":
+      return prefs.statuses.stopped;
+    case "needs-input":
+      return prefs.statuses.needs_input;
+    default:
+      return false;
+  }
+}
+
 export function useNotchNotifications() {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -46,6 +70,8 @@ export function useNotchNotifications() {
   const prevStatusRef = useRef<Record<string, SessionStatus>>({});
   // Track whether native notification permission has been acquired
   const nativePermRef = useRef<boolean | null>(null);
+  // Notification preferences
+  const prefsRef = useRef<NotificationPrefs>(DEFAULT_PREFS);
 
   // Request notification permission once on mount
   useEffect(() => {
@@ -59,10 +85,35 @@ export function useNotchNotifications() {
     })();
   }, []);
 
+  // Load notification preferences
+  useEffect(() => {
+    settingsCommands
+      .getNotificationPrefs()
+      .then((prefs) => {
+        prefsRef.current = prefs;
+      })
+      .catch(() => {});
+  }, []);
+
+  // Reload prefs periodically (picks up settings changes without restart)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      settingsCommands
+        .getNotificationPrefs()
+        .then((prefs) => {
+          prefsRef.current = prefs;
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Watch for session status transitions
+  // Notifications only fire when app is NOT focused
   useEffect(() => {
     const prev = prevStatusRef.current;
     const next: Record<string, SessionStatus> = {};
+    const prefs = prefsRef.current;
 
     for (const session of Object.values(state.sessions)) {
       next[session.id] = session.status;
@@ -70,15 +121,16 @@ export function useNotchNotifications() {
 
       // Only fire on a *transition* to a notifiable status
       if (oldStatus === session.status) continue;
-      if (!NOTIFIABLE_STATUSES.includes(session.status)) continue;
+      if (!isStatusEnabled(session.status, prefs)) continue;
 
       // Don't notify for sessions that just appeared (initial load)
       if (oldStatus === undefined) continue;
 
-      const isBackground = session.id !== state.activeSessionId;
-      const shouldNotchNotify = isBackground || !windowFocused;
+      // Only notify when app is NOT focused
+      if (windowFocused) continue;
 
-      if (shouldNotchNotify) {
+      // Notch notification
+      if (prefs.notch_enabled) {
         const id = `notch-${++notifCounter}`;
         setNotifications((n) => [
           ...n,
@@ -91,17 +143,28 @@ export function useNotchNotifications() {
         ]);
       }
 
-      // Send native OS notification when the window is not focused
-      if (!windowFocused && nativePermRef.current) {
+      // Native OS notification
+      if (prefs.native_enabled && nativePermRef.current) {
         sendNotification({
           title: statusToNativeTitle(session.status),
           body: session.label,
         });
       }
+
+      // Sound notification
+      if (prefs.sound_enabled) {
+        try {
+          const audio = new Audio("/notification.mp3");
+          audio.volume = 0.5;
+          audio.play().catch(() => {});
+        } catch {
+          // Audio playback not available
+        }
+      }
     }
 
     prevStatusRef.current = next;
-  }, [state.sessions, state.activeSessionId, windowFocused]);
+  }, [state.sessions, windowFocused]);
 
   const dismissNotification = useCallback((id: string) => {
     setNotifications((n) => n.filter((item) => item.id !== id));
@@ -109,6 +172,8 @@ export function useNotchNotifications() {
 
   const handleNotificationClick = useCallback(
     (sessionId: string) => {
+      // Dismiss all notifications for this session
+      setNotifications((n) => n.filter((item) => item.sessionId !== sessionId));
       dispatch({ type: "SET_ACTIVE", id: sessionId });
     },
     [dispatch],
