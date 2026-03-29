@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Eye, RotateCcw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AgentIcon } from "@/components/agents/AgentIcon";
 import { TranscriptTimeline } from "./TranscriptTimeline";
 import type { SessionTranscriptEvent } from "@/lib/session-transcript";
 import type { Session } from "../../state/types";
@@ -13,11 +14,6 @@ interface SessionTranscriptViewProps {
   onResume?: () => void;
 }
 
-const AGENT_LABELS: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  bash: "Bash",
-};
 
 export function SessionTranscriptView({
   session,
@@ -85,15 +81,13 @@ export function SessionTranscriptView({
   return (
     <div className="flex h-full min-w-0 flex-col bg-background font-sans text-foreground">
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
+        <AgentIcon agent={session.agent} className="size-4 shrink-0" />
         <span
-          className="min-w-0 max-w-[20ch] truncate font-semibold"
+          className="min-w-0 max-w-[40ch] truncate font-semibold"
           title={session.label}
         >
           {session.label}
         </span>
-        <Badge variant="secondary" className="text-[11px]">
-          {AGENT_LABELS[session.agent] ?? session.agent}
-        </Badge>
         <Badge variant="outline" className="text-[11px]">
           <Eye data-icon="inline-start" />
           view only

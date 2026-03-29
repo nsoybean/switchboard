@@ -178,6 +178,9 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
               sideOffset={8}
               className="w-72 rounded-md border bg-popover p-2 font-sans shadow-md"
             >
+              <div className="px-3 pt-1.5 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                Jump to section
+              </div>
               <div className="flex max-h-72 flex-col overflow-y-auto overscroll-y-contain">
                 {userSections.map((section) => (
                   <button
