@@ -2,7 +2,7 @@
 name: release
 description: Guides an interactive release flow for Switchboard — bumps the version, generates a user-facing GitHub changelog from commits since the last release, confirms with the user, then runs the full release (version sync across package.json / tauri.conf.json / Cargo.toml, git tag, push origin).
 user-invocable: true
-allowed-tools: Bash(git *), Bash(npm *), Bash(grep *), Bash(node *)
+allowed-tools: Bash(git *), Bash(npm *), Bash(npx *), Bash(cargo *), Bash(grep *), Bash(node *)
 ---
 
 # Release Skill
@@ -15,7 +15,23 @@ Follow these steps **in order**. Do not skip steps. Pause for user confirmation 
 
 ---
 
-### 1. Read the current version
+### 1. Run pre-release checks
+
+Run both checks before doing anything else. If either fails, stop and report the error — do not continue.
+
+```bash
+npx tsc --noEmit
+```
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+Report **"Pre-release checks passed."** before moving on.
+
+---
+
+### 2. Read the current version
 
 ```bash
 grep '"version"' package.json | head -1
@@ -25,7 +41,7 @@ Report the current version clearly: **"Current version: X.Y.Z"**
 
 ---
 
-### 2. Ask for bump type
+### 3. Ask for bump type
 
 Present the three options with the calculated next version for each:
 
@@ -40,7 +56,7 @@ Wait for the user to choose patch / minor / major before continuing.
 
 ---
 
-### 3. Find the previous release tag and collect commits
+### 4. Find the previous release tag and collect commits
 
 ```bash
 # Last release tag
@@ -54,7 +70,7 @@ If no previous tag exists, use all commits: `git log --oneline --no-merges`.
 
 ---
 
-### 4. Write the changelog
+### 5. Write the changelog
 
 Analyse the commits and write a concise, **user-facing** changelog in Markdown.
 
@@ -81,7 +97,7 @@ Present the full changelog to the user and ask: **"Does this changelog look good
 
 ---
 
-### 5. Run the release (after user confirmation)
+### 6. Run the release (after user confirmation)
 
 Execute the following commands in sequence. Stop immediately and report any failure.
 
@@ -106,7 +122,7 @@ git push origin "v<next_version>"
 
 ---
 
-### 6. Confirm success
+### 7. Confirm success
 
 Report: **"Released v\<next_version\>. Tag pushed to origin."**
 
