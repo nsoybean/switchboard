@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "version:sync": "node ./scripts/sync-version.mjs"
+    "version:sync": "node ./scripts/sync-version.mjs",
+    "release": "bash ./scripts/release.sh"
   },
   "license": "MIT",
   "description": "Open-source multi-agent orchestrator for AI coding agents",
