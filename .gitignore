@@ -21,3 +21,5 @@ docs/
 .env.local
 
 local_scripts/
+
+.collaborator
