@@ -127,7 +127,7 @@ export function WorkspacePanel({
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
-      <div className="flex items-center border-b px-2">
+      <div className="flex flex-wrap-reverse items-center border-b px-2">
         <div className="flex shrink-0">
           {(["files", "changes"] as WorkspaceTab[]).map((tab) => (
             <button
@@ -145,9 +145,10 @@ export function WorkspacePanel({
           ))}
         </div>
 
-        {/* Branch picker — flush right, always visible */}
+        <div className="min-w-0 grow" />
+        {/* Branch picker — flush right, wraps above tabs when narrow */}
         {hasRoot && (
-          <div className="ml-auto min-w-0 max-w-[60%] pl-2">
+          <div className="min-w-0 py-1.5 pl-2">
             <BranchPicker
               branches={git.branches}
               loading={git.branchesLoading && git.branches.length === 0}
