@@ -79,10 +79,13 @@ export function usePty(
         }
       };
 
+      // Listen on per-session channels so this handler only fires for its
+      // own PTY. Eliminates N-1 wasted handler invocations per event when
+      // N sessions are alive.
       unlistenOutputRef.current = await listen<PtyOutput>(
-        "pty-output",
+        `pty-output-${id}`,
         (event) => {
-          if (event.payload.id !== id || !terminal) return;
+          if (!terminal) return;
           writeQueueRef.current.push(new Uint8Array(event.payload.data));
           // Schedule flush: 5ms timer ensures low latency for interactive use;
           // rAF ensures we don't flush mid-frame during high-throughput bursts.
@@ -93,11 +96,9 @@ export function usePty(
       );
 
       unlistenExitRef.current = await listen<PtyExit>(
-        "pty-exit",
+        `pty-exit-${id}`,
         (event) => {
-          if (event.payload.id === id) {
-            onExit?.(event.payload.code);
-          }
+          onExit?.(event.payload.code);
         },
       );
 

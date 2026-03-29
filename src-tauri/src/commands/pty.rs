@@ -111,6 +111,11 @@ pub fn pty_spawn(
 
     let app_clone = app.clone();
     let pty_id = id;
+    // Per-session event channels so listeners only receive their own data.
+    // Avoids broadcasting every chunk to all sessions (N-1 wasted handler
+    // invocations + deserializations per event when N sessions are alive).
+    let output_channel = format!("pty-output-{}", pty_id);
+    let exit_channel = format!("pty-exit-{}", pty_id);
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
         let mut batch: Vec<u8> = Vec::with_capacity(65536);
@@ -129,7 +134,7 @@ pub fn pty_spawn(
                     // writing lots of code) we coalesce reads into a single event.
                     if last_flush.elapsed() >= flush_interval || batch.len() >= 65536 {
                         let _ = app_clone.emit(
-                            "pty-output",
+                            &output_channel,
                             PtyOutput {
                                 id: pty_id,
                                 data: std::mem::replace(&mut batch, Vec::with_capacity(65536)),
@@ -144,12 +149,12 @@ pub fn pty_spawn(
 
         // Flush any remaining buffered data before signalling exit
         if !batch.is_empty() {
-            let _ = app_clone.emit("pty-output", PtyOutput { id: pty_id, data: batch });
+            let _ = app_clone.emit(&output_channel, PtyOutput { id: pty_id, data: batch });
         }
 
         // Process exited — notify frontend
         let _ = app_clone.emit(
-            "pty-exit",
+            &exit_channel,
             PtyExit {
                 id: pty_id,
                 code: None,
