@@ -1,21 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import {
-  Circle,
-  Ellipsis,
-  PencilLine,
-  Play,
-  Square,
-  Trash2,
-} from "lucide-react";
+import { Circle, PencilLine, Play, Square, Trash2 } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { formatTokens, formatCost, estimateCost } from "../../lib/pricing";
 import type { Session } from "../../state/types";
@@ -131,13 +122,13 @@ export function SessionCard({
           </div>
         </div>
       </button>
-      <div className="relative mt-0.5 h-5 w-8 shrink-0 self-start">
+      <div className="relative mt-0.5 shrink-0 self-start">
         {timestampLabel && (
           <span
             className={cn(
-              "absolute inset-0 flex items-start justify-end text-[10px] text-muted-foreground transition-opacity",
+              "flex items-start justify-end text-[10px] text-muted-foreground transition-opacity",
               canManage &&
-                "group-hover/session:opacity-0 group-focus-within/session:opacity-0",
+                "group-hover/session:opacity-0 group-hover/session:hidden group-focus-within/session:opacity-0 group-focus-within/session:hidden",
             )}
             title={timestampTitle}
             aria-label={timestampTitle}
@@ -146,55 +137,84 @@ export function SessionCard({
           </span>
         )}
         {canManage && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="absolute right-0 top-0 opacity-0 transition-opacity pointer-events-none group-hover/session:opacity-100 group-hover/session:pointer-events-auto group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-              >
-                <Ellipsis />
-                <span className="sr-only">Session actions</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-36"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <DropdownMenuGroup>
-                {onResume && (
-                  <DropdownMenuItem onSelect={onResume}>
-                    <Play />
-                    Resume
-                  </DropdownMenuItem>
-                )}
-                {onStop && (
-                  <DropdownMenuItem onSelect={onStop}>
-                    <Square />
-                    Stop
-                  </DropdownMenuItem>
-                )}
-                {onRename && (
-                  <DropdownMenuItem onSelect={onRename}>
-                    <PencilLine />
-                    Rename
-                  </DropdownMenuItem>
-                )}
-                {onDelete && (
-                  <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-                    <Trash2 />
-                    Delete
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="hidden items-center gap-0.5 group-hover/session:flex group-focus-within/session:flex">
+            {onResume && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-5 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onResume();
+                    }}
+                  >
+                    <Play className="size-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Resume</TooltipContent>
+              </Tooltip>
+            )}
+            {onStop && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-5 text-destructive hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStop();
+                    }}
+                  >
+                    <Square className="size-3 fill-current" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Stop</TooltipContent>
+              </Tooltip>
+            )}
+            {onRename && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-5 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRename();
+                    }}
+                  >
+                    <PencilLine className="size-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Rename</TooltipContent>
+              </Tooltip>
+            )}
+            {onDelete && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-5 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Delete</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         )}
       </div>
     </div>

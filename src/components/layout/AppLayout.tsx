@@ -34,7 +34,7 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { FolderOpen, Plus, Square } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AgentIcon } from "@/components/agents/AgentIcon";
 import type {
   AgentType,
   Session,
@@ -44,12 +44,6 @@ import type {
 } from "../../state/types";
 
 const MAX_ALIVE_TERMINALS = 8;
-
-const AGENT_LABELS: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  bash: "Bash",
-};
 
 interface HistorySessionSummary {
   session_id: string;
@@ -1000,15 +994,13 @@ export function AppLayout() {
                         style={{ display: isActive ? "flex" : "none" }}
                       >
                         <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
+                          <AgentIcon agent={session.agent} className="size-4 shrink-0" />
                           <span
-                            className="min-w-0 max-w-[20ch] truncate font-semibold"
+                            className="min-w-0 max-w-[40ch] truncate font-semibold"
                             title={session.label}
                           >
                             {session.label}
                           </span>
-                          <Badge variant="secondary" className="text-[11px]">
-                            {AGENT_LABELS[session.agent] ?? session.agent}
-                          </Badge>
                           <div className="ml-auto flex shrink-0 items-center gap-2">
                             {session.ptyId !== null &&
                               (session.status === "running" ||
