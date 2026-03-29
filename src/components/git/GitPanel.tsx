@@ -1,111 +1,47 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Plus, Minus, Undo2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getBranchPrefix } from "@/lib/branches";
 import {
   fileCommands,
   gitCommands,
-  type ChangedFile,
-  type DiffStats,
-  type GitBranchInfo,
 } from "../../lib/tauri-commands";
 import { GitToolbar } from "./GitToolbar";
 import { DiffView } from "./DiffView";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { AgentType } from "../../state/types";
+import type { GitState, GitActions } from "@/hooks/useGitState";
 
 interface GitPanelProps {
   cwd: string;
-  visible: boolean;
-  sessionId?: string | null;
-  sessionAgent?: string | null;
+  git: GitState & GitActions;
   githubToken?: string | null;
   onOpenSettings?: () => void;
-  onSessionBranchChange?: (sessionId: string, branch: string | null) => Promise<void> | void;
 }
 
 export const GitPanel = memo(function GitPanel({
   cwd,
-  visible,
-  sessionId,
-  sessionAgent,
+  git,
   githubToken,
   onOpenSettings,
-  onSessionBranchChange,
 }: GitPanelProps) {
-  const [branch, setBranch] = useState("");
-  const [branches, setBranches] = useState<GitBranchInfo[]>([]);
-  const [files, setFiles] = useState<ChangedFile[]>([]);
-  const [stats, setStats] = useState<DiffStats>({ additions: 0, deletions: 0, files_changed: 0 });
   const [activeTab, setActiveTab] = useState("unstaged");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [fileDiff, setFileDiff] = useState<string>("");
-  const [branchesLoading, setBranchesLoading] = useState(false);
-  const [branchActionPending, setBranchActionPending] = useState(false);
 
   const showStaged = activeTab === "staged";
-  const branchesLoadedRef = useRef(false);
 
+  // Reset UI state when cwd changes
   useEffect(() => {
-    setBranch("");
-    setBranches([]);
-    setFiles([]);
-    setStats({ additions: 0, deletions: 0, files_changed: 0 });
     setActiveTab("unstaged");
-    setError(null);
     setExpandedFile(null);
     setFileDiff("");
-    setBranchesLoading(true);
-    setLoading(true);
-    branchesLoadedRef.current = false;
   }, [cwd]);
-
-  const refresh = useCallback(async () => {
-    const shouldShowBranchLoading = !branchesLoadedRef.current;
-
-    try {
-      setLoading(true);
-      if (shouldShowBranchLoading) {
-        setBranchesLoading(true);
-      }
-      setError(null);
-      const status = await gitCommands.status(cwd);
-      const nextBranches = await gitCommands.listBranches(cwd).catch(() => []);
-      setBranch(status.branch);
-      setBranches(nextBranches);
-      branchesLoadedRef.current = nextBranches.length > 0;
-      setFiles(status.files);
-      setStats(status.stats);
-      return status;
-    } catch (err) {
-      setBranches([]);
-      branchesLoadedRef.current = false;
-      setError(String(err));
-      return null;
-    } finally {
-      if (shouldShowBranchLoading) {
-        setBranchesLoading(false);
-      }
-      setLoading(false);
-    }
-  }, [cwd]);
-
-  useEffect(() => {
-    if (!visible) return;
-    refresh();
-    const interval = setInterval(refresh, 5000);
-    return () => clearInterval(interval);
-  }, [visible, refresh]);
 
   // Fetch diff when a file is expanded
   useEffect(() => {
@@ -114,7 +50,7 @@ export const GitPanel = memo(function GitPanel({
       return;
     }
 
-    const expandedFileEntry = files.find(
+    const expandedFileEntry = git.files.find(
       (file) => file.path === expandedFile && file.staged === showStaged,
     );
     let cancelled = false;
@@ -144,167 +80,52 @@ export const GitPanel = memo(function GitPanel({
     void loadDiff();
 
     return () => { cancelled = true; };
-  }, [expandedFile, cwd, files, showStaged]);
+  }, [expandedFile, cwd, git.files, showStaged]);
 
   const toggleFile = (path: string) => {
     setExpandedFile((prev) => (prev === path ? null : path));
   };
 
-  const handleStageAll = async () => {
-    const unstaged = files.filter((f) => !f.staged).map((f) => f.path);
-    if (unstaged.length === 0) return;
-    await gitCommands.stage(cwd, unstaged);
-    refresh();
-  };
-
-  const handleRevertAll = async () => {
-    const unstaged = files.filter((f) => !f.staged && f.status !== "??").map((f) => f.path);
-    if (unstaged.length === 0) return;
-    await gitCommands.revert(cwd, unstaged);
-    refresh();
-  };
-
   const handleStageFile = async (e: React.MouseEvent, path: string) => {
     e.stopPropagation();
-    await gitCommands.stage(cwd, [path]);
-    refresh();
+    await git.stageFiles([path]);
   };
 
   const handleUnstageFile = async (e: React.MouseEvent, path: string) => {
     e.stopPropagation();
-    await gitCommands.unstage(cwd, [path]);
-    refresh();
+    await git.unstageFiles([path]);
   };
 
   const handleRevertFile = async (e: React.MouseEvent, path: string) => {
     e.stopPropagation();
-    await gitCommands.revert(cwd, [path]);
-    refresh();
+    await git.revertFiles([path]);
   };
-
-  const handleCommit = async (message: string) => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.commit(cwd, message);
-        await refresh();
-      })(),
-      {
-        loading: "Committing changes...",
-        success: "Commit created",
-        error: (err) => `Failed to commit: ${String(err)}`,
-      },
-    );
-  };
-
-  const handlePull = async () => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.pull(cwd);
-        await refresh();
-      })(),
-      {
-        loading: `Pulling ${branch || "current branch"}...`,
-        success: `Pulled ${branch || "current branch"}`,
-        error: (err) => `Failed to pull: ${String(err)}`,
-      },
-    );
-  };
-
-  const handlePush = async () => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.push(cwd);
-        await refresh();
-      })(),
-      {
-        loading: `Pushing ${branch || "current branch"}...`,
-        success: `Pushed ${branch || "current branch"}`,
-        error: (err) => `Failed to push: ${String(err)}`,
-      },
-    );
-  };
-
-  const handleSwitchBranch = async (branchName: string) => {
-    if (branchName === branch || branchActionPending) return;
-
-    setBranchActionPending(true);
-    try {
-      await toast.promise(
-        (async () => {
-          await gitCommands.checkoutBranch(cwd, branchName);
-          const status = await refresh();
-          if (sessionId) {
-            await onSessionBranchChange?.(sessionId!, status?.branch ?? branchName);
-          }
-        })(),
-        {
-          loading: `Switching to ${branchName}...`,
-          success: `Switched to ${branchName}`,
-          error: (err) => `Failed to switch branch: ${String(err)}`,
-        },
-      );
-    } finally {
-      setBranchActionPending(false);
-    }
-  };
-
-  const handleCreateBranch = async (branchName: string) => {
-    if (branchActionPending) return;
-
-    setBranchActionPending(true);
-    try {
-      await toast.promise(
-        (async () => {
-          await gitCommands.createBranch(cwd, branchName);
-          const status = await refresh();
-          if (sessionId) {
-            await onSessionBranchChange?.(sessionId!, status?.branch ?? branchName);
-          }
-        })(),
-        {
-          loading: `Creating ${branchName}...`,
-          success: `Created and checked out ${branchName}`,
-          error: (err) => `Failed to create branch: ${String(err)}`,
-        },
-      );
-    } finally {
-      setBranchActionPending(false);
-    }
-  };
-
-  if (!visible) return null;
 
   const filteredFiles = showStaged
-    ? files.filter((f) => f.staged)
-    : files.filter((f) => !f.staged);
+    ? git.files.filter((f) => f.staged)
+    : git.files.filter((f) => !f.staged);
 
-  const unstagedCount = files.filter((f) => !f.staged).length;
-  const stagedCount = files.filter((f) => f.staged).length;
+  const unstagedCount = git.files.filter((f) => !f.staged).length;
+  const stagedCount = git.files.filter((f) => f.staged).length;
 
   const isNotGitRepo =
-    error !== null &&
-    (error.includes("not a git repository") ||
-      error.includes("needed a single revision"));
+    git.error !== null &&
+    (git.error.includes("not a git repository") ||
+      git.error.includes("needed a single revision"));
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <GitToolbar
-        branch={branch}
-        branches={branches}
-        branchesLoading={branchesLoading && branches.length === 0}
-        branchActionsEnabled
-        branchActionPending={branchActionPending}
-        branchPrefix={sessionAgent ? getBranchPrefix(sessionAgent as AgentType) : undefined}
-        stats={stats}
+        branch={git.branch}
+        branchActionPending={git.branchActionPending}
+        stats={git.stats}
         cwd={cwd}
         githubToken={githubToken ?? null}
-        onCommit={handleCommit}
-        onSwitchBranch={handleSwitchBranch}
-        onCreateBranch={handleCreateBranch}
-        onStageAll={handleStageAll}
-        onPull={handlePull}
-        onPush={handlePush}
-        onRefresh={refresh}
+        onCommit={git.commit}
+        onStageAll={git.stageAll}
+        onPull={git.pull}
+        onPush={git.push}
+        onRefresh={git.refresh}
         onOpenSettings={onOpenSettings}
       />
 
@@ -348,19 +169,19 @@ export const GitPanel = memo(function GitPanel({
             </div>
           </div>
         )}
-        {error && !isNotGitRepo && (
-          <div className="p-3 text-xs text-destructive">{error}</div>
+        {git.error && !isNotGitRepo && (
+          <div className="p-3 text-xs text-destructive">{git.error}</div>
         )}
-        {loading && filteredFiles.length === 0 && !error && (
+        {git.loading && filteredFiles.length === 0 && !git.error && (
           <div className="p-3 text-xs text-muted-foreground">Loading...</div>
         )}
-        {!loading && filteredFiles.length === 0 && !error && (
+        {!git.loading && filteredFiles.length === 0 && !git.error && (
           <div className="p-3 text-xs text-muted-foreground">
             {showStaged ? "No staged changes" : "No unstaged changes"}
           </div>
         )}
 
-        {!error && filteredFiles.map((file) => {
+        {!git.error && filteredFiles.map((file) => {
           const isExpanded = expandedFile === file.path;
           return (
             <div key={`${file.path}-${file.staged}`}>
@@ -457,7 +278,7 @@ export const GitPanel = memo(function GitPanel({
           variant="outline"
           size="sm"
           className="flex-1 text-xs"
-          onClick={handleRevertAll}
+          onClick={git.revertAll}
         >
           <Undo2 data-icon="inline-start" />
           Revert all
@@ -465,7 +286,7 @@ export const GitPanel = memo(function GitPanel({
         <Button
           size="sm"
           className="flex-1 text-xs"
-          onClick={handleStageAll}
+          onClick={git.stageAll}
         >
           <Plus data-icon="inline-start" />
           Stage all
