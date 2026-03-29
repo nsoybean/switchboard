@@ -26,7 +26,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Architecture
-- PTY pipeline: `portable-pty -> Tauri events -> usePty -> xterm.js`
+- PTY pipeline: `portable-pty -> per-session Tauri events (pty-output-{id}) -> usePty -> xterm.js`
 - Active Switchboard sessions are persisted in `~/.switchboard/sessions.json`
 - Claude history is read from `~/.claude/history.jsonl` and `~/.claude/projects/...`
 - Codex history is read from `~/.codex/state_5.sqlite` and `~/.codex/archived_sessions`
