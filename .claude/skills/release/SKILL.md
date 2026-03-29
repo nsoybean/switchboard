@@ -2,12 +2,13 @@
 name: release
 description: Guides an interactive release flow for Switchboard — bumps the version, generates a user-facing GitHub changelog from commits since the last release, confirms with the user, then runs the full release (version sync across package.json / tauri.conf.json / Cargo.toml, git tag, push origin).
 user-invocable: true
+disable-model-invocation: true
 allowed-tools: Bash(git *), Bash(npm *), Bash(npx *), Bash(cargo *), Bash(grep *), Bash(node *)
 ---
 
 # Release Skill
 
-Orchestrates the full Switchboard release flow when the user types `$release`.
+Orchestrates the full Switchboard release flow when the user types `/release`.
 
 ## Steps
 
