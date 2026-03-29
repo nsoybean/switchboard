@@ -205,13 +205,18 @@ export function XTermContainer({
     setTerminal(term);
     scheduleFit(false);
 
-    // Debounced resize to avoid rapid pty_resize calls during panel drags
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-    const observer = new ResizeObserver(() => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        scheduleFit(true, 2);
-      }, 50);
+    // rAF-coalesced resize: cancels pending frame and schedules a new one,
+    // so rapid resize events (panel drags) collapse to a single fit per frame
+    // (~16ms) instead of the previous 50ms setTimeout debounce.
+    let resizeRafId = 0;
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) {
+        cancelAnimationFrame(resizeRafId);
+        resizeRafId = requestAnimationFrame(() => {
+          scheduleFit(true, 1);
+        });
+      }
     });
     observer.observe(containerRef.current);
 
@@ -223,7 +228,7 @@ export function XTermContainer({
 
     return () => {
       cancelScheduledFit();
-      if (resizeTimer) clearTimeout(resizeTimer);
+      cancelAnimationFrame(resizeRafId);
       observer.disconnect();
       term.dispose();
       terminalRef.current = null;
@@ -268,14 +273,9 @@ export function XTermContainer({
     doSpawn();
   }, [terminal, ready, command, args, cwd, env, spawn, onSpawn]);
 
-  // Forward resize events to PTY
-  useEffect(() => {
-    if (!terminal) return;
-    const disposable = terminal.onResize(({ cols, rows }) => {
-      resize(cols, rows).catch(console.error);
-    });
-    return () => disposable.dispose();
-  }, [terminal, resize]);
+  // Note: PTY resize is handled inside fitTerminal(syncPty=true) which
+  // deduplicates by sizeKey. No separate terminal.onResize listener needed —
+  // that would cause a redundant second pty_resize IPC call per resize.
 
   return (
     <div className="size-full bg-background p-2 border-0">
