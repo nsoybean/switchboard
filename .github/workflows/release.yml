@@ -77,6 +77,15 @@ jobs:
           uploadUpdaterJson: true
           args: --bundles app --target ${{ matrix.target }}
 
+      - name: Sync tag message to release description
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_MESSAGE=$(git show -s --format=%b ${{ github.ref_name }} 2>/dev/null || echo "")
+          if [ -n "$TAG_MESSAGE" ]; then
+            gh release edit ${{ github.ref_name }} --notes "$TAG_MESSAGE"
+          fi
+
       - name: Build DMG from app bundle
         run: |
           APP_VERSION="${{ steps.tauri.outputs.appVersion }}"
