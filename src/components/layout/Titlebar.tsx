@@ -1,8 +1,7 @@
+import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
-  ChevronLeft,
-  ChevronRight,
   Focus,
   LayoutGrid,
   Loader2,
@@ -56,13 +55,45 @@ export function Titlebar({
 }: TitlebarProps) {
   const { theme, setTheme } = useTheme();
   const appWindow = getCurrentWindow();
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const projectPathLabel = projectPath
     ? projectPath.split("/").slice(-2).join("/")
     : null;
   const inspectorAvailable = viewMode === "focused";
 
+  useEffect(() => {
+    // Check initial fullscreen state
+    void appWindow.isFullscreen().then(setIsFullscreen);
+
+    // Listen for fullscreen changes (e.g. macOS native green button)
+    const unlisten = appWindow.onResized(() => {
+      void appWindow.isFullscreen().then(setIsFullscreen);
+    });
+
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, [appWindow]);
+
+  // Sync fullscreen state to a data attribute for CSS
+  useEffect(() => {
+    document.documentElement.dataset.fullscreen = isFullscreen
+      ? "true"
+      : "false";
+    return () => {
+      delete document.documentElement.dataset.fullscreen;
+    };
+  }, [isFullscreen]);
+
   const handleMaximize = async () => {
-    await appWindow.toggleMaximize();
+    const fullscreen = await appWindow.isFullscreen();
+    if (fullscreen) {
+      await appWindow.setFullscreen(false);
+      setIsFullscreen(false);
+    } else {
+      await appWindow.setFullscreen(true);
+      setIsFullscreen(true);
+    }
   };
 
   return (
@@ -70,48 +101,28 @@ export function Titlebar({
       data-tauri-drag-region
       className="flex items-center h-[52px] border-b bg-background select-none shrink-0"
     >
-      {/* Window controls — always visible */}
-      <div className="flex items-center gap-1.5 pl-3 pr-2">
-        <button
-          onClick={() => appWindow.close()}
-          className="size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
-          aria-label="Close"
-        />
-        <button
-          onClick={() => appWindow.minimize()}
-          className="size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
-          aria-label="Minimize"
-        />
-        <button
-          onClick={handleMaximize}
-          className="size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
-          aria-label="Maximize"
-        />
-      </div>
+      {/* Window controls — hidden in fullscreen */}
+      {!isFullscreen && (
+        <div className="flex items-center gap-1.5 pl-3 pr-2">
+          <button
+            onClick={() => appWindow.close()}
+            className="size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
+            aria-label="Close"
+          />
+          <button
+            onClick={() => appWindow.minimize()}
+            className="size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
+            aria-label="Minimize"
+          />
+          <button
+            onClick={handleMaximize}
+            className="size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
+            aria-label="Fullscreen"
+          />
+        </div>
+      )}
 
-      <Separator orientation="vertical" className="h-4" />
-
-      {/* Navigation */}
-      <div className="flex items-center gap-0.5 px-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-9" disabled>
-              <ChevronLeft className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Back</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-9" disabled>
-              <ChevronRight className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Forward</TooltipContent>
-        </Tooltip>
-      </div>
-
-      <Separator orientation="vertical" className="h-4" />
+      {!isFullscreen && <Separator orientation="vertical" className="h-4" />}
 
       {/* App + project identity */}
       <div className="flex min-w-0 items-center gap-2 px-3">

@@ -184,26 +184,38 @@ html[data-platform="macos"] #root {
 }
 
 .sb-window-shell {
-  padding: 10px;
+  padding: 0;
   background: transparent;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .sb-window-frame {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid
-    color-mix(in oklab, var(--border) 86%, var(--foreground) 14%);
-  border-radius: 14px;
+  border: none;
+  border-radius: 12px;
   background: var(--background);
   box-shadow:
-    0 8px 20px oklch(0 0 0 / 0.13),
-    0 1px 0 oklch(1 0 0 / 0.05) inset;
+    0 6px 16px oklch(0 0 0 / 0.06),
+    0 1px 0 oklch(1 0 0 / 0.03) inset;
 }
 
 .dark .sb-window-frame {
   box-shadow:
-    0 10px 24px oklch(0 0 0 / 0.24),
-    0 1px 0 oklch(1 0 0 / 0.06) inset;
+    0 8px 20px oklch(0 0 0 / 0.12),
+    0 1px 0 oklch(1 0 0 / 0.04) inset;
+}
+
+/* ── Fullscreen overrides ── */
+html[data-fullscreen="true"] .sb-window-shell {
+  border-radius: 0;
+}
+
+html[data-fullscreen="true"] .sb-window-frame {
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
 }
 
 /* ── Scrollbar ── */
