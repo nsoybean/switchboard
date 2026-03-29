@@ -6,11 +6,9 @@ import {
   EyeOff,
   GitPullRequest,
   Loader2,
-  Radio,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { settingsCommands, hookCommands } from "../../lib/tauri-commands";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { toast } from "sonner";
@@ -22,7 +20,7 @@ export function IntegrationSettings() {
   const [showToken, setShowToken] = useState(false);
   const [validating, setValidating] = useState(false);
   const [githubUser, setGithubUser] = useState<string | null>(null);
-  const [hookPort, setHookPort] = useState<number | null>(null);
+  const [_, setHookPort] = useState<number | null>(null);
 
   // Load existing token
   useEffect(() => {
@@ -37,7 +35,10 @@ export function IntegrationSettings() {
 
   // Load hook server port
   useEffect(() => {
-    hookCommands.getPort().then(setHookPort).catch(() => {});
+    hookCommands
+      .getPort()
+      .then((port) => setHookPort(port))
+      .catch(() => {});
   }, []);
 
   const handleSaveToken = async () => {
@@ -81,7 +82,8 @@ export function IntegrationSettings() {
           <h2 className="text-sm font-semibold">GitHub</h2>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          Add a personal access token to create pull requests directly from Switchboard.
+          Add a personal access token to create pull requests directly from
+          Switchboard.
         </p>
 
         <div className="flex flex-col gap-3">
@@ -114,7 +116,9 @@ export function IntegrationSettings() {
               <Button
                 size="sm"
                 onClick={handleSaveToken}
-                disabled={validating || token.trim() === (state.githubToken ?? "")}
+                disabled={
+                  validating || token.trim() === (state.githubToken ?? "")
+                }
               >
                 {validating ? (
                   <Loader2 className="size-3.5 animate-spin" />
@@ -130,7 +134,8 @@ export function IntegrationSettings() {
               <div className="flex items-center gap-2">
                 <Check className="size-3.5 text-green-500" />
                 <span className="text-xs">
-                  Authenticated as <span className="font-medium">{githubUser}</span>
+                  Authenticated as{" "}
+                  <span className="font-medium">{githubUser}</span>
                 </span>
               </div>
               <Button
@@ -160,7 +165,9 @@ export function IntegrationSettings() {
                 GitHub Settings
                 <ExternalLink className="inline size-2.5 ml-0.5 -mt-0.5" />
               </button>{" "}
-              with the <span className="font-mono bg-muted px-1 rounded">repo</span> scope.
+              with the{" "}
+              <span className="font-mono bg-muted px-1 rounded">repo</span>{" "}
+              scope.
             </p>
           </div>
         </div>
