@@ -1,73 +1,74 @@
+import Image from "next/image";
+import { ArrowRight } from "lucide-react";
+
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pt-32 pb-20">
-      {/* Subtle radial glow */}
-      <div className="pointer-events-none absolute inset-0 flex items-start justify-center">
-        <div className="h-[600px] w-[800px] rounded-full bg-accent/8 blur-[120px]" />
+    <section
+      id="top"
+      className="relative overflow-hidden px-0 pt-32 pb-16 sm:pt-40 sm:pb-24"
+    >
+      <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute inset-x-0 top-0 h-[38rem]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at top, color-mix(in oklch, var(--color-glow) 38%, transparent), transparent 60%)",
+          }}
+        />
       </div>
 
-      <div className="relative mx-auto max-w-5xl px-6">
-        {/* Badge */}
-        <div className="flex justify-center">
-          <a
-            href="https://github.com/nsoybean/switchboard"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-foreground/70 transition-colors hover:text-foreground"
-          >
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Open source on GitHub
-          </a>
-        </div>
+      <div className="container-shell relative">
+        <div className="grid gap-12 lg:grid-cols-[0.84fr_1.16fr] lg:items-center">
+          <div className="mx-auto flex max-w-xl flex-col items-start text-left">
+            <h1 className="max-w-2xl text-balance text-4xl leading-[1.04] font-semibold tracking-[-0.05em] sm:text-[3.35rem] lg:text-[3.55rem]">
+              Multi-agent coding workspace
+            </h1>
 
-        {/* Headline */}
-        <h1 className="mx-auto mt-6 max-w-2xl text-center text-3xl font-semibold leading-[1.15] tracking-tight sm:text-[2.75rem]">
-          The open-source
-          <br />
-          multi-agent workspace
-        </h1>
+            <p className="mt-6 max-w-xl text-pretty text-[0.96rem] leading-8 text-muted-foreground sm:text-base">
+              Run Claude Code, Codex, and Bash side by side with real terminals,
+              isolated worktrees, and built-in git review.
+            </p>
 
-        {/* Sub-headline */}
-        <p className="mx-auto mt-5 max-w-lg text-center text-[0.8125rem] leading-relaxed text-muted-foreground">
-          Run Claude Code, Codex, and Bash side by side — each in its own
-          terminal, its own branch, its own worktree. Review and ship from one
-          window.
-        </p>
-
-        {/* CTA */}
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <a
-            href="https://github.com/nsoybean/switchboard/releases"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-9 items-center rounded-md bg-foreground px-4 text-[0.8125rem] font-medium text-background transition-opacity hover:opacity-90"
-          >
-            Download for macOS
-          </a>
-          <a
-            href="https://github.com/nsoybean/switchboard"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-9 items-center rounded-md border border-border px-4 text-[0.8125rem] font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            View on GitHub
-          </a>
-        </div>
-
-        {/* Product screenshot */}
-        <div className="relative mx-auto mt-16 max-w-4xl">
-          <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/30 shadow-2xl shadow-black/40">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/switchboard/hero-shot.png"
-              alt="Switchboard — multi-agent workspace interface"
-              width={1920}
-              height={1080}
-              className="w-full"
-            />
+            <div className="mt-8 flex flex-wrap items-center gap-3 sm:flex-nowrap">
+              <a
+                href="https://github.com/nsoybean/switchboard/releases/latest"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-foreground px-5 text-sm text-background transition-opacity hover:opacity-90"
+              >
+                Download for macOS
+                <ArrowRight className="size-4" />
+              </a>
+              <a
+                href="#why-switchboard"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-border bg-panel px-5 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                Why Switchboard
+                <ArrowRight className="size-4" />
+              </a>
+            </div>
           </div>
-          {/* Reflection fade */}
-          <div className="pointer-events-none absolute -bottom-px left-0 right-0 h-40 bg-gradient-to-t from-background to-transparent" />
+
+          <div className="relative">
+            <div className="overflow-hidden rounded-[0.95rem] border border-black/8 bg-white shadow-[0_28px_90px_-42px_rgba(0,0,0,0.45)] dark:border-white/10 dark:bg-black dark:shadow-[0_28px_90px_-42px_rgba(0,0,0,0.85)]">
+              <Image
+                src="/switchboard/main_light_mode.png"
+                alt="Switchboard in light mode showing an active coding session and built-in git review"
+                width={2786}
+                height={1782}
+                className="w-full dark:hidden"
+                priority
+              />
+              <Image
+                src="/switchboard/main_dark_mode.png"
+                alt="Switchboard in dark mode showing an active coding session and built-in git review"
+                width={2786}
+                height={1782}
+                className="hidden w-full dark:block"
+                priority
+              />
+            </div>
+          </div>
         </div>
       </div>
     </section>

@@ -1,16 +1,19 @@
-import Image from "next/image";
 import { Header } from "@/components/header";
 import { Hero } from "@/components/hero";
-import { Features } from "@/components/features";
+import { HowItWorks } from "@/components/how-it-works";
+import { CTASection } from "@/components/cta";
+import { FAQ } from "@/components/faq";
 import { Footer } from "@/components/footer";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="min-h-screen bg-background text-foreground">
       <Header />
-      <main>
+      <main className="overflow-hidden">
         <Hero />
-        <Features />
+        <HowItWorks />
+        <CTASection />
+        <FAQ />
       </main>
       <Footer />
     </div>

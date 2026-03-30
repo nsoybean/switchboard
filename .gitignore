@@ -14,7 +14,7 @@ src-tauri/target/
 
 # Switchboard worktrees
 .switchboard-worktrees/
-docs/
+# docs/
 
 # Environment
 .env
