@@ -2,14 +2,33 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Switchboard — Open-Source Multi-Agent Workspace",
+  title: "Switchboard — Parallel Coding Agents Workspace",
   description:
-    "Run multiple AI coding agent sessions in parallel with isolated worktrees, live PTY terminals, and native git workflow management.",
+    "Launch coding agents in isolated worktrees, monitor progress across sessions, and review every change — all from one native macOS app.",
+  icons: {
+    icon: "/switchboard/app-icon.png",
+    apple: "/switchboard/app-icon.png",
+  },
   openGraph: {
-    title: "Switchboard — Open-Source Multi-Agent Workspace",
+    title: "Switchboard — Parallel Coding Agents Workspace",
     description:
-      "Run multiple AI coding agent sessions in parallel with isolated worktrees, live PTY terminals, and native git workflow management.",
+      "Launch coding agents in isolated worktrees, monitor progress across sessions, and review every change — all from one native macOS app.",
     type: "website",
+    images: [
+      {
+        url: "/switchboard/main_dark_mode.png",
+        width: 2786,
+        height: 1782,
+        alt: "Switchboard workspace showing parallel coding agent sessions with built-in git review",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Switchboard — Parallel Coding Agents Workspace",
+    description:
+      "Launch coding agents in isolated worktrees, monitor progress across sessions, and review every change — all from one native macOS app.",
+    images: ["/switchboard/main_dark_mode.png"],
   },
 };
 
