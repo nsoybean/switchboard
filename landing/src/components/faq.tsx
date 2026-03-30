@@ -8,13 +8,17 @@ const faqs = [
   },
   {
     question: "Which agents does it support today?",
+    answer: "Claude Code, Codex, and Bash.",
+  },
+  {
+    question: "Must I pay?",
     answer:
-      "Today the app is centered around Claude Code, Codex, and Bash sessions. The product model is terminal-native, so the important part is that each session runs as a real PTY-backed command.",
+      "Nope, it uses your local Claude Code or Codex however you are signed in.",
   },
   {
     question: "Is it local-first?",
     answer:
-      "Yes. Session metadata is persisted locally, Claude and Codex history are read from local storage on your machine, and git operations run through the git CLI in the selected workspace.",
+      "Yes. Reads from your local Claude Code and Codex history. Git operations run through the git CLI in the selected workspace.",
   },
   {
     question: "What platforms are supported right now?",
