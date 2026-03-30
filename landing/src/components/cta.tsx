@@ -30,7 +30,7 @@ export function CTASection() {
       <div className="container-shell">
         <div className="terminal-surface overflow-hidden px-6 py-10 sm:px-10 sm:py-14">
           <h2 className="max-w-4xl text-balance text-3xl leading-tight font-semibold tracking-[-0.04em] sm:text-5xl">
-            Keep every agent moving without losing the repo.
+            Keep every agent moving without losing control.
           </h2>
           <p className="mt-5 max-w-2xl text-base leading-8 text-terminal-muted">
             Switchboard gives you the missing operating layer for coding agents:
@@ -61,7 +61,10 @@ export function CTASection() {
         </div>
       </div>
 
-      <DownloadCard open={showDownload} onClose={() => setShowDownload(false)} />
+      <DownloadCard
+        open={showDownload}
+        onClose={() => setShowDownload(false)}
+      />
     </section>
   );
 }
