@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { MoonStar, SunMedium } from "lucide-react";
 import { useEffect, useState } from "react";
+import { DownloadCard } from "./download-card";
 
 type ThemeMode = "dark" | "light";
 
@@ -33,6 +34,7 @@ function applyTheme(theme: ThemeMode) {
 
 export function Header() {
   const [theme, setTheme] = useState<ThemeMode>("light");
+  const [showDownload, setShowDownload] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("theme");
@@ -98,17 +100,18 @@ export function Header() {
             >
               <GitHubMark />
             </a>
-            <a
-              href="https://github.com/nsoybean/switchboard/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={() => setShowDownload(true)}
               className="inline-flex h-10 items-center rounded-2xl bg-foreground px-4 text-sm text-background transition-opacity hover:opacity-90"
             >
               Download
-            </a>
+            </button>
           </div>
         </div>
       </div>
+
+      <DownloadCard open={showDownload} onClose={() => setShowDownload(false)} />
     </header>
   );
 }

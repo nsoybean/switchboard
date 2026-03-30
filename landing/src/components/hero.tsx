@@ -1,7 +1,13 @@
+"use client";
+
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { DownloadCard } from "./download-card";
 
 export function Hero() {
+  const [showDownload, setShowDownload] = useState(false);
+
   return (
     <section
       id="top"
@@ -30,15 +36,14 @@ export function Hero() {
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3 sm:flex-nowrap">
-              <a
-                href="https://github.com/nsoybean/switchboard/releases/latest"
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => setShowDownload(true)}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-foreground px-5 text-sm text-background transition-opacity hover:opacity-90"
               >
                 Download for macOS
                 <ArrowRight className="size-4" />
-              </a>
+              </button>
               <a
                 href="#why-switchboard"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-border bg-panel px-5 text-sm text-foreground transition-colors hover:bg-muted"
@@ -71,6 +76,8 @@ export function Hero() {
           </div>
         </div>
       </div>
+
+      <DownloadCard open={showDownload} onClose={() => setShowDownload(false)} />
     </section>
   );
 }

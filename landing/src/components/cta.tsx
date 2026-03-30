@@ -1,4 +1,8 @@
+"use client";
+
 import { ArrowRight, Download } from "lucide-react";
+import { useState } from "react";
+import { DownloadCard } from "./download-card";
 
 function GitHubMark() {
   return (
@@ -19,6 +23,8 @@ function GitHubMark() {
 }
 
 export function CTASection() {
+  const [showDownload, setShowDownload] = useState(false);
+
   return (
     <section className="py-20 sm:py-28">
       <div className="container-shell">
@@ -33,15 +39,14 @@ export function CTASection() {
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <a
-              href="https://github.com/nsoybean/switchboard/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={() => setShowDownload(true)}
               className="inline-flex h-12 items-center gap-2 rounded-2xl bg-terminal-foreground px-5 text-sm text-terminal transition-opacity hover:opacity-90"
             >
               <Download className="size-4" />
               Download the latest release
-            </a>
+            </button>
             <a
               href="https://github.com/nsoybean/switchboard"
               target="_blank"
@@ -55,6 +60,8 @@ export function CTASection() {
           </div>
         </div>
       </div>
+
+      <DownloadCard open={showDownload} onClose={() => setShowDownload(false)} />
     </section>
   );
 }
