@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Apple, Download, X } from "lucide-react";
+import { Download, X } from "lucide-react";
 
 interface ReleaseAsset {
   name: string;
@@ -86,7 +86,6 @@ export function DownloadCard({
             href={getDownloadUrl(release, "aarch64")}
             className="flex items-center gap-3 rounded-xl bg-foreground px-5 py-3.5 text-background transition-opacity hover:opacity-90"
           >
-            <Apple className="size-5 shrink-0" />
             <div className="flex-1">
               <div className="text-sm font-medium">Download for Mac</div>
               <div className="text-xs opacity-70">Apple Silicon</div>
@@ -98,7 +97,6 @@ export function DownloadCard({
             href={getDownloadUrl(release, "x86_64")}
             className="flex items-center gap-3 rounded-xl border border-border bg-background px-5 py-3.5 text-foreground transition-colors hover:bg-muted"
           >
-            <Apple className="size-5 shrink-0" />
             <div className="flex-1">
               <div className="text-sm font-medium">Download for Mac</div>
               <div className="text-xs text-muted-foreground">Intel</div>
