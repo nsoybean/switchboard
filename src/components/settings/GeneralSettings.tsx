@@ -1,4 +1,6 @@
-import { Focus, FolderOpen, LayoutGrid } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { useState } from "react";
+import { Focus, FolderOpen, LayoutGrid, Trash2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -9,6 +11,8 @@ import { useAppState, useAppDispatch } from "../../state/context";
 export function GeneralSettings() {
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   return (
     <>
@@ -79,6 +83,51 @@ export function GeneralSettings() {
             ? "Shows one terminal at a time."
             : "Shows all active terminals in a grid layout."}
         </p>
+      </section>
+
+      <section className="mt-12 border-t pt-8">
+        <div className="flex items-center gap-2 mb-1">
+          <Trash2 className="size-4 text-destructive" />
+          <h2 className="text-sm font-semibold">Delete All Data</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Remove all Switchboard data from your machine. This deletes sessions,
+          metadata, configuration, and preferences. This action cannot be undone.
+        </p>
+
+        {!confirmDelete ? (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="px-4 py-2 rounded-lg border border-destructive/30 text-sm text-destructive transition-colors hover:bg-destructive/10"
+          >
+            Delete my data
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true);
+                try {
+                  await invoke("delete_all_data");
+                  window.location.reload();
+                } catch {
+                  setDeleting(false);
+                  setConfirmDelete(false);
+                }
+              }}
+              className="px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {deleting ? "Deleting..." : "Yes, delete everything"}
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="px-4 py-2 rounded-lg border text-sm text-muted-foreground transition-colors hover:bg-muted"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </section>
     </>
   );

@@ -1,3 +1,4 @@
+use super::session_metadata;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -48,17 +49,6 @@ struct UsageInfo {
     output_tokens: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-struct ClaudeSessionMetadata {
-    label: Option<String>,
-    deleted: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ClaudeSessionMetadataStore {
-    version: u32,
-    sessions: HashMap<String, ClaudeSessionMetadata>,
-}
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -106,53 +96,6 @@ fn find_claude_session_file(session_id: &str) -> Option<PathBuf> {
     None
 }
 
-fn metadata_store_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
-    let dir = home.join(".switchboard");
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    Ok(dir.join("claude_session_metadata.json"))
-}
-
-fn read_metadata_store() -> Result<ClaudeSessionMetadataStore, String> {
-    let path = metadata_store_path()?;
-    if !path.exists() {
-        return Ok(ClaudeSessionMetadataStore {
-            version: 1,
-            sessions: HashMap::new(),
-        });
-    }
-
-    let data = fs::read_to_string(&path).map_err(|e| format!("Read failed: {}", e))?;
-    serde_json::from_str(&data).map_err(|e| format!("Parse failed: {}", e))
-}
-
-fn write_metadata_store(store: &ClaudeSessionMetadataStore) -> Result<(), String> {
-    let path = metadata_store_path()?;
-    let data =
-        serde_json::to_string_pretty(store).map_err(|e| format!("Serialize failed: {}", e))?;
-    fs::write(&path, data).map_err(|e| format!("Write failed: {}", e))
-}
-
-fn apply_metadata(
-    summary: &mut ClaudeSessionSummary,
-    metadata: Option<&ClaudeSessionMetadata>,
-) -> bool {
-    let Some(metadata) = metadata else {
-        return true;
-    };
-
-    if metadata.deleted {
-        return false;
-    }
-
-    if let Some(label) = metadata.label.as_ref().map(|value| value.trim()) {
-        if !label.is_empty() {
-            summary.display = label.to_string();
-        }
-    }
-
-    true
-}
 
 /// Read all Claude sessions for a given project path
 #[tauri::command]
@@ -168,7 +111,7 @@ pub fn get_claude_sessions(project_path: String) -> Result<Vec<ClaudeSessionSumm
     }
 
     let mut summaries = Vec::new();
-    let metadata_store = read_metadata_store()?;
+    let metadata_store = session_metadata::read_store()?;
 
     let entries = fs::read_dir(&session_dir).map_err(|e| format!("Read dir failed: {}", e))?;
 
@@ -186,7 +129,10 @@ pub fn get_claude_sessions(project_path: String) -> Result<Vec<ClaudeSessionSumm
             .to_string();
 
         if let Some(mut summary) = parse_session_summary(&path, &session_id, &project_path) {
-            if !apply_metadata(&mut summary, metadata_store.sessions.get(&session_id)) {
+            if !session_metadata::apply_metadata_label(
+                &mut summary.display,
+                metadata_store.sessions.get(&session_id),
+            ) {
                 continue;
             }
             summaries.push(summary);
@@ -291,7 +237,7 @@ pub fn get_claude_history() -> Result<Vec<ClaudeSessionSummary>, String> {
     let file = fs::File::open(&history_path).map_err(|e| format!("Open failed: {}", e))?;
     let reader = BufReader::new(file);
     let mut entries = Vec::new();
-    let metadata_store = read_metadata_store()?;
+    let metadata_store = session_metadata::read_store()?;
 
     for line in reader.lines() {
         let line = match line {
@@ -332,7 +278,10 @@ pub fn get_claude_history() -> Result<Vec<ClaudeSessionSummary>, String> {
             };
 
             let session_id = summary.session_id.clone();
-            if apply_metadata(&mut summary, metadata_store.sessions.get(&session_id)) {
+            if session_metadata::apply_metadata_label(
+                &mut summary.display,
+                metadata_store.sessions.get(&session_id),
+            ) {
                 entries.push(summary);
             }
         }
@@ -341,26 +290,6 @@ pub fn get_claude_history() -> Result<Vec<ClaudeSessionSummary>, String> {
     Ok(entries)
 }
 
-#[tauri::command]
-pub fn rename_claude_session(session_id: String, label: String) -> Result<(), String> {
-    let next_label = label.trim();
-    if next_label.is_empty() {
-        return Err("Session label cannot be empty".to_string());
-    }
-
-    let mut store = read_metadata_store()?;
-    let metadata = store.sessions.entry(session_id).or_default();
-    metadata.label = Some(next_label.to_string());
-    write_metadata_store(&store)
-}
-
-#[tauri::command]
-pub fn delete_claude_session(session_id: String) -> Result<(), String> {
-    let mut store = read_metadata_store()?;
-    let metadata = store.sessions.entry(session_id).or_default();
-    metadata.deleted = true;
-    write_metadata_store(&store)
-}
 
 #[tauri::command]
 pub fn get_claude_session_transcript(

@@ -723,17 +723,10 @@ export function AppLayout() {
       const historySessionId = session.resumeTargetId ?? session.id;
       if (!localSession) {
         try {
-          if (session.agent === "codex") {
-            await invoke("rename_codex_session", {
-              sessionId: historySessionId,
-              label,
-            });
-          } else {
-            await invoke("rename_claude_session", {
-              sessionId: historySessionId,
-              label,
-            });
-          }
+          await invoke("rename_session_metadata", {
+            sessionId: historySessionId,
+            label,
+          });
         } catch (err) {
           toast.error("Failed to rename session", {
             description: String(err),
@@ -765,15 +758,9 @@ export function AppLayout() {
       const historySessionId = session.resumeTargetId ?? session.id;
       if (!localSession) {
         try {
-          if (session.agent === "codex") {
-            await invoke("delete_codex_session", {
-              sessionId: historySessionId,
-            });
-          } else {
-            await invoke("delete_claude_session", {
-              sessionId: historySessionId,
-            });
-          }
+          await invoke("delete_session_metadata", {
+            sessionId: historySessionId,
+          });
         } catch (err) {
           toast.error("Failed to delete session", {
             description: String(err),
