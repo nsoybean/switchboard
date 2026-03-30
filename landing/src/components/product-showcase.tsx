@@ -78,21 +78,21 @@ export function ProductShowcase() {
                   height={1788}
                   className="w-full"
                 />
-                <div className="pointer-events-none absolute left-4 top-4 rounded-2xl border border-white/10 bg-black/65 px-3 py-2 text-[0.72rem] text-white/80 shadow-xl">
-                  <p className="uppercase tracking-[0.18em] text-white/45">
+                <div className="pointer-events-none absolute left-4 top-4 rounded-2xl border border-border bg-background/80 px-3 py-2 text-[0.72rem] text-muted-foreground shadow-xl dark:border-white/10 dark:bg-black/65 dark:text-white/80">
+                  <p className="uppercase tracking-[0.18em] text-muted-foreground/60 dark:text-white/45">
                     session
                   </p>
-                  <p className="mt-1">codex/archive-in-repo-details</p>
+                  <p className="mt-1 text-foreground dark:text-white/80">codex/archive-in-repo-details</p>
                 </div>
-                <div className="pointer-events-none absolute bottom-4 right-4 rounded-2xl border border-white/10 bg-black/70 px-4 py-3 text-[0.72rem] text-white/80 shadow-xl">
-                  <p className="uppercase tracking-[0.18em] text-white/45">
+                <div className="pointer-events-none absolute bottom-4 right-4 rounded-2xl border border-border bg-background/80 px-4 py-3 text-[0.72rem] text-muted-foreground shadow-xl dark:border-white/10 dark:bg-black/70 dark:text-white/80">
+                  <p className="uppercase tracking-[0.18em] text-muted-foreground/60 dark:text-white/45">
                     review surface
                   </p>
                   <div className="mt-2 flex gap-2">
-                    <span className="rounded-full border border-white/10 px-2 py-1">
+                    <span className="rounded-full border border-border px-2 py-1 dark:border-white/10">
                       10 changes
                     </span>
-                    <span className="rounded-full border border-white/10 px-2 py-1">
+                    <span className="rounded-full border border-border px-2 py-1 dark:border-white/10">
                       ready to merge
                     </span>
                   </div>

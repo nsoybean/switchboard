@@ -30,12 +30,10 @@ export function CTASection() {
       <div className="container-shell">
         <div className="terminal-surface overflow-hidden px-6 py-10 sm:px-10 sm:py-14">
           <h2 className="max-w-4xl text-balance text-3xl leading-tight font-semibold tracking-[-0.04em] sm:text-5xl">
-            Keep every agent moving without losing the repo.
+            Keep every agent moving without losing control.
           </h2>
           <p className="mt-5 max-w-2xl text-base leading-8 text-terminal-muted">
-            Switchboard gives you the missing operating layer for coding agents:
-            real terminals, visible workspaces, local history, and a built-in
-            place to review what shipped.
+            Switchboard gives you the missing operating layer for coding agents
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -45,13 +43,13 @@ export function CTASection() {
               className="inline-flex h-12 items-center gap-2 rounded-2xl bg-terminal-foreground px-5 text-sm text-terminal transition-opacity hover:opacity-90"
             >
               <Download className="size-4" />
-              Download the latest release
+              Download
             </button>
             <a
               href="https://github.com/nsoybean/switchboard"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/10 px-5 text-sm text-terminal-foreground transition-colors hover:bg-white/5"
+              className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/15 px-5 text-sm text-terminal-foreground transition-colors hover:bg-white/5"
             >
               <GitHubMark />
               Star on GitHub
@@ -61,7 +59,10 @@ export function CTASection() {
         </div>
       </div>
 
-      <DownloadCard open={showDownload} onClose={() => setShowDownload(false)} />
+      <DownloadCard
+        open={showDownload}
+        onClose={() => setShowDownload(false)}
+      />
     </section>
   );
 }
