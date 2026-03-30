@@ -1,3 +1,4 @@
+use super::session_metadata;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -27,17 +28,6 @@ struct CodexTranscriptRow {
     rollout_path: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-struct CodexSessionMetadata {
-    label: Option<String>,
-    deleted: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct CodexSessionMetadataStore {
-    version: u32,
-    sessions: HashMap<String, CodexSessionMetadata>,
-}
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -81,32 +71,6 @@ fn codex_archived_sessions_dir() -> Option<PathBuf> {
     candidates.into_iter().find(|path| path.exists())
 }
 
-fn metadata_store_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
-    let dir = home.join(".switchboard");
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    Ok(dir.join("codex_session_metadata.json"))
-}
-
-fn read_metadata_store() -> Result<CodexSessionMetadataStore, String> {
-    let path = metadata_store_path()?;
-    if !path.exists() {
-        return Ok(CodexSessionMetadataStore {
-            version: 1,
-            sessions: HashMap::new(),
-        });
-    }
-
-    let data = fs::read_to_string(&path).map_err(|e| format!("Read failed: {}", e))?;
-    serde_json::from_str(&data).map_err(|e| format!("Parse failed: {}", e))
-}
-
-fn write_metadata_store(store: &CodexSessionMetadataStore) -> Result<(), String> {
-    let path = metadata_store_path()?;
-    let data =
-        serde_json::to_string_pretty(store).map_err(|e| format!("Serialize failed: {}", e))?;
-    fs::write(&path, data).map_err(|e| format!("Write failed: {}", e))
-}
 
 fn run_codex_query(query: &str) -> Result<Vec<CodexThreadRow>, String> {
     let db_path =
@@ -222,26 +186,6 @@ fn to_summary(row: &CodexThreadRow) -> CodexSessionSummary {
     }
 }
 
-fn apply_metadata(
-    summary: &mut CodexSessionSummary,
-    metadata: Option<&CodexSessionMetadata>,
-) -> bool {
-    let Some(metadata) = metadata else {
-        return true;
-    };
-
-    if metadata.deleted {
-        return false;
-    }
-
-    if let Some(label) = metadata.label.as_ref().map(|value| value.trim()) {
-        if !label.is_empty() {
-            summary.display = label.to_string();
-        }
-    }
-
-    true
-}
 
 #[tauri::command]
 pub fn get_codex_sessions(project_path: String) -> Result<Vec<CodexSessionSummary>, String> {
@@ -255,13 +199,16 @@ pub fn get_codex_sessions(project_path: String) -> Result<Vec<CodexSessionSummar
     );
 
     let rows = run_codex_query(&query)?;
-    let metadata_store = read_metadata_store()?;
+    let metadata_store = session_metadata::read_store()?;
     let mut summaries = Vec::new();
 
     for row in rows {
         let mut summary = to_summary(&row);
         let session_id = summary.session_id.clone();
-        if !apply_metadata(&mut summary, metadata_store.sessions.get(&session_id)) {
+        if !session_metadata::apply_metadata_label(
+            &mut summary.display,
+            metadata_store.sessions.get(&session_id),
+        ) {
             continue;
         }
         summaries.push(summary);
@@ -314,26 +261,6 @@ pub fn find_codex_session(
     Ok(best)
 }
 
-#[tauri::command]
-pub fn rename_codex_session(session_id: String, label: String) -> Result<(), String> {
-    let next_label = label.trim();
-    if next_label.is_empty() {
-        return Err("Session label cannot be empty".to_string());
-    }
-
-    let mut store = read_metadata_store()?;
-    let metadata = store.sessions.entry(session_id).or_default();
-    metadata.label = Some(next_label.to_string());
-    write_metadata_store(&store)
-}
-
-#[tauri::command]
-pub fn delete_codex_session(session_id: String) -> Result<(), String> {
-    let mut store = read_metadata_store()?;
-    let metadata = store.sessions.entry(session_id).or_default();
-    metadata.deleted = true;
-    write_metadata_store(&store)
-}
 
 #[tauri::command]
 pub fn get_codex_session_transcript(

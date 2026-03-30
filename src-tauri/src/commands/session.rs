@@ -78,6 +78,17 @@ pub fn delete_session(id: String) -> Result<(), String> {
     write_store(&store)
 }
 
+/// Delete all Switchboard data (~/.switchboard directory)
+#[tauri::command]
+pub fn delete_all_data() -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let dir = home.join(".switchboard");
+    if dir.exists() {
+        fs::remove_dir_all(&dir).map_err(|e| format!("Failed to delete data: {}", e))?;
+    }
+    Ok(())
+}
+
 /// Check if first-run onboarding has been completed
 #[tauri::command]
 pub fn is_first_run() -> Result<bool, String> {
