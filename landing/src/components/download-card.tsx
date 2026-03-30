@@ -89,7 +89,7 @@ export function DownloadCard({
             <Apple className="size-5 shrink-0" />
             <div className="flex-1">
               <div className="text-sm font-medium">Download for Mac</div>
-              <div className="text-xs opacity-70">Apple Silicon (M1/M2/M3/M4)</div>
+              <div className="text-xs opacity-70">Apple Silicon</div>
             </div>
             <Download className="size-4 shrink-0 opacity-70" />
           </a>
@@ -101,7 +101,7 @@ export function DownloadCard({
             <Apple className="size-5 shrink-0" />
             <div className="flex-1">
               <div className="text-sm font-medium">Download for Mac</div>
-              <div className="text-xs text-muted-foreground">Intel (pre-November 2020)</div>
+              <div className="text-xs text-muted-foreground">Intel</div>
             </div>
             <Download className="size-4 shrink-0 text-muted-foreground" />
           </a>
