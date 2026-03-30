@@ -116,7 +116,6 @@ export const GitPanel = memo(function GitPanel({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <GitToolbar
-        branch={git.branch}
         branchActionPending={git.branchActionPending}
         cwd={cwd}
         githubToken={githubToken ?? null}

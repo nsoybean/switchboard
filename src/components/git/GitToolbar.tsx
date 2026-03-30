@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
-import { GitBranch, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CreatePrDialog } from "./CreatePrDialog";
 interface GitToolbarProps {
-  branch: string;
   branchActionPending: boolean;
   cwd: string;
   githubToken: string | null;
@@ -33,7 +32,6 @@ interface GitToolbarProps {
 }
 
 export function GitToolbar({
-  branch,
   branchActionPending,
   cwd,
   githubToken,
@@ -117,12 +115,6 @@ export function GitToolbar({
 
   return (
     <div className="flex flex-col gap-2 p-3 border-b overflow-hidden">
-      {/* Branch label */}
-      <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
-        <GitBranch className="size-3 shrink-0" />
-        <span className="truncate">{branch || "\u2014"}</span>
-      </span>
-
       {/* Action buttons */}
       <div className="flex gap-1.5">
         <DropdownMenu>
