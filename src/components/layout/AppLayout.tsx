@@ -511,7 +511,7 @@ export function AppLayout() {
         id,
         agent: config.agent,
         label: config.label,
-        status: "running",
+        status: "idle",
         resumeTargetId,
         ptyId: null,
         worktreePath,
@@ -612,7 +612,7 @@ export function AppLayout() {
       const nextSession: Session = {
         ...session,
         id: resumeTargetId ?? session.id,
-        status: "running",
+        status: "idle",
         resumeTargetId,
         ptyId: null,
         createdAt: new Date().toISOString(),
