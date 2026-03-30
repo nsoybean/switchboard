@@ -18,9 +18,26 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const themeInitScript = `
+    (() => {
+      try {
+        const storedTheme = window.localStorage.getItem("theme");
+        const theme = storedTheme === "dark" ? "dark" : "light";
+        const root = document.documentElement;
+        root.classList.remove("light", "dark");
+        root.classList.add(theme);
+        root.style.colorScheme = theme;
+      } catch {
+        document.documentElement.classList.add("light");
+        document.documentElement.style.colorScheme = "light";
+      }
+    })();
+  `;
+
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
