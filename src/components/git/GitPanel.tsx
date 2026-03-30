@@ -118,7 +118,6 @@ export const GitPanel = memo(function GitPanel({
       <GitToolbar
         branch={git.branch}
         branchActionPending={git.branchActionPending}
-        stats={git.stats}
         cwd={cwd}
         githubToken={githubToken ?? null}
         onCommit={git.commit}
