@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, type Dispatch } from "react";
 import type { AppAction, Session, SessionStatus } from "@/state/types";
 
-interface ClaudeHookEvent {
+interface AgentHookEvent {
   session_id: string;
   event_name: string;
 }
@@ -14,13 +14,14 @@ const EVENT_TO_STATUS: Record<string, SessionStatus> = {
   Elicitation: "needs-input",
   Notification: "needs-input",
   UserPromptSubmit: "running",
+  SessionStart: "running", // Codex
 };
 
 /**
- * Listen for Claude hook events and dispatch status updates.
+ * Listen for agent hook events (Claude Code + Codex) and dispatch status updates.
  * Accepts sessions + dispatch as params to avoid subscribing to full AppState.
  */
-export function useClaudeHooks(
+export function useAgentHooks(
   sessions: Record<string, Session>,
   dispatch: Dispatch<AppAction>,
 ) {
@@ -32,12 +33,12 @@ export function useClaudeHooks(
   }, [sessions]);
 
   useEffect(() => {
-    const unlisten = listen<ClaudeHookEvent>("claude-hook", (event) => {
+    const unlisten = listen<AgentHookEvent>("agent-hook", (event) => {
       const { session_id, event_name } = event.payload;
       const status = EVENT_TO_STATUS[event_name];
       if (!status) return;
 
-      // Find the Switchboard session matching this Claude session_id.
+      // Find the Switchboard session matching this agent session_id.
       const currentSessions = sessionsRef.current;
       const session = Object.values(currentSessions).find(
         (s) => s.resumeTargetId === session_id || s.id === session_id,

@@ -114,6 +114,8 @@ export const hookCommands = {
   getToken: () => invoke<string>("get_hook_token"),
   writeConfig: (cwd: string, port: number) =>
     invoke<void>("write_claude_hook_config", { cwd, port }),
+  writeCodexConfig: (cwd: string, port: number) =>
+    invoke<void>("write_codex_hook_config", { cwd, port }),
 };
 
 export const worktreeCommands = {

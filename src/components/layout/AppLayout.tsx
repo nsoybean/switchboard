@@ -16,7 +16,7 @@ import {
   type WorkspaceTab,
 } from "../workspace/WorkspacePanel";
 import { useAppUpdater } from "../../hooks/useAppUpdater";
-import { useClaudeHooks } from "../../hooks/useClaudeHooks";
+import { useAgentHooks } from "../../hooks/useClaudeHooks";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
 import { getBranchPrefix } from "../../lib/branches";
@@ -281,7 +281,13 @@ export function AppLayout() {
     const cwd = state.projectPath;
     hookConfigReady.current = hookCommands
       .getPort()
-      .then((port) => hookCommands.writeConfig(cwd, port))
+      .then((port) =>
+        Promise.all([
+          hookCommands.writeConfig(cwd, port),
+          hookCommands.writeCodexConfig(cwd, port),
+        ]),
+      )
+      .then(() => {})
       .catch((err) => console.warn("Failed to write hook config on startup:", err));
   }, [state.projectPath]);
 
@@ -494,16 +500,19 @@ export function AppLayout() {
         id,
       );
 
-      // For Claude sessions, ensure hook config is written before spawning,
-      // then inject the current token as an env var.
+      // Ensure hook config is written before spawning, then inject env vars.
       let env: Record<string, string> | undefined;
-      if (config.agent === "claude-code") {
+      if (config.agent === "claude-code" || config.agent === "codex") {
         try {
           await hookConfigReady.current;
           const token = await hookCommands.getToken();
-          env = { SWITCHBOARD_HOOK_TOKEN: token };
+          const port = await hookCommands.getPort();
+          env = {
+            SWITCHBOARD_HOOK_TOKEN: token,
+            SWITCHBOARD_HOOK_PORT: String(port),
+          };
         } catch (err) {
-          console.warn("Failed to configure Claude hooks:", err);
+          console.warn("Failed to configure agent hooks:", err);
         }
       }
 
@@ -597,15 +606,16 @@ export function AppLayout() {
         return;
       }
 
-      // Refresh hook token so resumed sessions use the current Switchboard
-      // instance's token, not a stale one from a prior launch.
+      // Refresh hook token/port so resumed sessions use the current Switchboard
+      // instance's values, not stale ones from a prior launch.
       let env = session.env;
-      if (session.agent === "claude-code") {
+      if (session.agent === "claude-code" || session.agent === "codex") {
         try {
           const token = await hookCommands.getToken();
-          env = { ...env, SWITCHBOARD_HOOK_TOKEN: token };
+          const port = await hookCommands.getPort();
+          env = { ...env, SWITCHBOARD_HOOK_TOKEN: token, SWITCHBOARD_HOOK_PORT: String(port) };
         } catch (err) {
-          console.warn("Failed to refresh Claude hook token on resume:", err);
+          console.warn("Failed to refresh agent hook env on resume:", err);
         }
       }
 
@@ -829,7 +839,7 @@ export function AppLayout() {
     [sortedSessionIds, state.activeSessionId, state.viewMode, dispatch],
   );
   useKeyboardShortcuts(shortcutHandlers);
-  useClaudeHooks(state.sessions, dispatch);
+  useAgentHooks(state.sessions, dispatch);
 
   return (
     <div className="flex flex-col h-full bg-background">

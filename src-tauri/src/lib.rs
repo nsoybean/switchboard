@@ -88,6 +88,7 @@ pub fn run() {
             commands::session::get_notification_prefs,
             commands::session::set_notification_prefs,
             commands::hooks::write_claude_hook_config,
+            commands::hooks::write_codex_hook_config,
             hook_server::get_hook_port,
             hook_server::get_hook_token,
         ])
