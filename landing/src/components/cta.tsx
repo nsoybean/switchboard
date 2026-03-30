@@ -33,9 +33,7 @@ export function CTASection() {
             Keep every agent moving without losing control.
           </h2>
           <p className="mt-5 max-w-2xl text-base leading-8 text-terminal-muted">
-            Switchboard gives you the missing operating layer for coding agents:
-            real terminals, visible workspaces, local history, and a built-in
-            place to review what shipped.
+            Switchboard gives you the missing operating layer for coding agents
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -45,13 +43,13 @@ export function CTASection() {
               className="inline-flex h-12 items-center gap-2 rounded-2xl bg-terminal-foreground px-5 text-sm text-terminal transition-opacity hover:opacity-90"
             >
               <Download className="size-4" />
-              Download the latest release
+              Download
             </button>
             <a
               href="https://github.com/nsoybean/switchboard"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/10 px-5 text-sm text-terminal-foreground transition-colors hover:bg-white/5"
+              className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/15 px-5 text-sm text-terminal-foreground transition-colors hover:bg-white/5"
             >
               <GitHubMark />
               Star on GitHub

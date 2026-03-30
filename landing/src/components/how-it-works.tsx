@@ -32,10 +32,10 @@ function AttentionVisual() {
   return (
     <MonoVisualFrame>
       <div className="flex min-h-40 items-center justify-center gap-5 py-4">
-        <span className="size-6 rounded-full bg-emerald-500 shadow-[0_0_0_5px_rgba(255,255,255,0.9)]" />
-        <span className="size-6 rounded-full bg-sky-500 shadow-[0_0_0_5px_rgba(255,255,255,0.9)]" />
-        <span className="size-7 rounded-full bg-amber-400 shadow-[0_0_0_6px_rgba(255,255,255,0.92)] animate-[attention-bob_1.15s_ease-in-out_infinite]" />
-        <span className="size-6 rounded-full bg-rose-500 shadow-[0_0_0_5px_rgba(255,255,255,0.9)]" />
+        <span className="size-6 rounded-full bg-emerald-500 shadow-[0_0_0_5px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_5px_rgba(255,255,255,0.1)]" />
+        <span className="size-6 rounded-full bg-sky-500 shadow-[0_0_0_5px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_5px_rgba(255,255,255,0.1)]" />
+        <span className="size-7 rounded-full bg-amber-400 shadow-[0_0_0_6px_rgba(255,255,255,0.92)] dark:shadow-[0_0_0_6px_rgba(255,255,255,0.12)] animate-[attention-bob_1.15s_ease-in-out_infinite]" />
+        <span className="size-6 rounded-full bg-rose-500 shadow-[0_0_0_5px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_5px_rgba(255,255,255,0.1)]" />
       </div>
     </MonoVisualFrame>
   );

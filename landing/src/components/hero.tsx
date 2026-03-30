@@ -31,8 +31,9 @@ export function Hero() {
             </h1>
 
             <p className="mt-6 max-w-xl text-pretty text-[0.96rem] leading-8 text-muted-foreground sm:text-base">
-              Launch agents in isolated worktrees, monitor progress across sessions,
-              and review every change &mdash; all from one native macOS app.
+              Launch agents in isolated worktrees, monitor progress across
+              sessions, and review every change &mdash; all from one native
+              macOS app.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3 sm:flex-nowrap">
@@ -41,7 +42,7 @@ export function Hero() {
                 onClick={() => setShowDownload(true)}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-foreground px-5 text-sm text-background transition-opacity hover:opacity-90"
               >
-                Download Switchboard
+                Download
                 <ArrowRight className="size-4" />
               </button>
               <a
@@ -77,7 +78,10 @@ export function Hero() {
         </div>
       </div>
 
-      <DownloadCard open={showDownload} onClose={() => setShowDownload(false)} />
+      <DownloadCard
+        open={showDownload}
+        onClose={() => setShowDownload(false)}
+      />
     </section>
   );
 }
