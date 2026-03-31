@@ -76,21 +76,26 @@ If no previous tag exists, use all commits: `git log --oneline --no-merges`.
 Analyse the commits and write a concise, **user-facing** changelog in Markdown.
 
 Rules:
-- Group entries under headers: `### Features`, `### Improvements`, `### Bug Fixes`. Omit empty groups.
+
+- Group entries under headers: `## Features`, `## Improvements`, `## Bug Fixes`. Omit empty groups.
 - Each bullet should describe **what changed and why it matters to the user**, not the internal implementation.
 - Skip pure chore/build/version-bump commits (e.g. "bump version", "update lock file", CI config changes).
 - Keep bullets short — one line each.
 - Do not include commit hashes.
 
 Example format:
+
 ```markdown
-### Features
+## Features
+
 - Sessions now reopen at the exact scroll position you left them
 
-### Improvements
+## Improvements
+
 - Git diff panel loads 40% faster on large repos
 
-### Bug Fixes
+## Bug Fixes
+
 - Fixed crash when closing a session with an active PTY
 ```
 
@@ -113,8 +118,11 @@ npm run version:sync -- <next_version>
 git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
 git commit -m "chore: bump version to <next_version>"
 
-# 4. Create annotated tag with the changelog as the message
-git tag -a "v<next_version>" -m "<changelog>"
+# 4. Create annotated tag with the changelog as the message (use heredoc to preserve formatting)
+git tag -a "v<next_version>" -m "$(cat <<'EOF'
+<changelog>
+EOF
+)"
 
 # 5. Push the commit and the tag
 git push origin HEAD
