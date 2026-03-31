@@ -171,6 +171,12 @@ export function createViewport(
     e.preventDefault();
     if (!state) return;
 
+    // Cancel any in-flight panToRect animation on manual input
+    if (panToRaf) {
+      cancelAnimationFrame(panToRaf);
+      panToRaf = null;
+    }
+
     if (shouldZoom(e)) {
       const rect = canvasEl.getBoundingClientRect();
       applyZoom(e.deltaY, e.clientX - rect.left, e.clientY - rect.top);
