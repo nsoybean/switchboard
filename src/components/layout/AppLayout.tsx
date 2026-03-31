@@ -47,6 +47,11 @@ import type {
   SessionWorkspaceIdentity,
   SessionWorkspaceKind,
 } from "../../state/types";
+import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
+import {
+  type CanvasState,
+  defaultCanvasState,
+} from "../canvas/canvas-state";
 
 const MAX_ALIVE_TERMINALS = 8;
 
@@ -147,6 +152,9 @@ export function AppLayout() {
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const sessionsRef = useRef(state.sessions);
   const hookConfigReady = useRef<Promise<void>>(Promise.resolve());
+  const [canvasState, setCanvasState] = useState<CanvasState>(defaultCanvasState());
+  const canvasSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canvasViewRef = useRef<CanvasViewHandle>(null);
   const {
     currentVersion,
     availableUpdate,
@@ -295,6 +303,44 @@ export function AppLayout() {
       .then(() => {})
       .catch((err) => console.warn("Failed to write hook config on startup:", err));
   }, [state.projectPath]);
+
+  // Load canvas state when project changes
+  useEffect(() => {
+    if (!state.projectPath) return;
+    invoke<string | null>("load_canvas_state", {
+      projectPath: state.projectPath,
+    })
+      .then((raw) => {
+        if (raw) {
+          try {
+            setCanvasState(JSON.parse(raw));
+          } catch {
+            console.warn("Failed to parse canvas state, using default");
+            setCanvasState(defaultCanvasState());
+          }
+        } else {
+          setCanvasState(defaultCanvasState());
+        }
+      })
+      .catch(() => setCanvasState(defaultCanvasState()));
+  }, [state.projectPath]);
+
+  // Debounced canvas state save
+  const handleCanvasStateChange = useCallback(
+    (newState: CanvasState) => {
+      setCanvasState(newState);
+      if (canvasSaveTimerRef.current) clearTimeout(canvasSaveTimerRef.current);
+      if (!state.projectPath) return;
+      const projectPath = state.projectPath;
+      canvasSaveTimerRef.current = setTimeout(() => {
+        invoke("save_canvas_state", {
+          projectPath,
+          state: JSON.stringify(newState),
+        }).catch(console.error);
+      }, 500);
+    },
+    [state.projectPath],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -834,11 +880,21 @@ export function AppLayout() {
         const termEl = document.querySelector(".xterm-helper-textarea");
         if (termEl instanceof HTMLElement) termEl.focus();
       },
+      onEscape: () => {
+        if (state.viewMode === "canvas" && canvasViewRef.current) {
+          canvasViewRef.current.unfocusTile();
+          return true;
+        }
+        return false;
+      },
       onToggleViewMode: () => {
-        dispatch({
-          type: "SET_VIEW_MODE",
-          mode: state.viewMode === "focused" ? "grid" : "focused",
-        });
+        const next =
+          state.viewMode === "focused"
+            ? "grid"
+            : state.viewMode === "grid"
+              ? "canvas"
+              : "focused";
+        dispatch({ type: "SET_VIEW_MODE", mode: next });
       },
     }),
     [sortedSessionIds, state.activeSessionId, state.viewMode, dispatch],
@@ -862,12 +918,15 @@ export function AppLayout() {
         installingUpdate={installingUpdate}
         updateProgress={updateProgress}
         onInstallUpdate={() => void installUpdate()}
-        onToggleViewMode={() =>
-          dispatch({
-            type: "SET_VIEW_MODE",
-            mode: state.viewMode === "focused" ? "grid" : "focused",
-          })
-        }
+        onToggleViewMode={() => {
+          const next =
+            state.viewMode === "focused"
+              ? "grid"
+              : state.viewMode === "grid"
+                ? "canvas"
+                : "focused";
+          dispatch({ type: "SET_VIEW_MODE", mode: next });
+        }}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -920,7 +979,12 @@ export function AppLayout() {
                     }
                     setViewingSession(session);
                   }}
-                  onSelectActiveSession={() => setViewingSession(null)}
+                  onSelectActiveSession={(sessionId) => {
+                    setViewingSession(null);
+                    if (state.viewMode === "canvas" && sessionId) {
+                      canvasViewRef.current?.panToSession(sessionId);
+                    }
+                  }}
                   onResumeSession={handleResumeSession}
                   onStopSession={handleStopSession}
                   onRenameSession={handleRenameSession}
@@ -970,6 +1034,28 @@ export function AppLayout() {
                       </Button>
                     </div>
                   </div>
+                ) : state.viewMode === "canvas" ? (
+                  <CanvasView
+                    ref={canvasViewRef}
+                    sessions={liveSessions}
+                    activeSessionId={state.activeSessionId}
+                    aliveSessionIds={aliveSessionIds}
+                    onSessionSpawn={(sessionId, ptyId) =>
+                      handleSessionSpawn(sessionId, ptyId)
+                    }
+                    onSessionExit={(sessionId) =>
+                      handleSessionExit(sessionId)
+                    }
+                    onSelectSession={(sessionId) => {
+                      dispatch({ type: "SET_ACTIVE", id: sessionId });
+                      setViewingSession(null);
+                    }}
+                    onStopSession={(sessionId) =>
+                      void handleStopSession(sessionId)
+                    }
+                    canvasState={canvasState}
+                    onCanvasStateChange={handleCanvasStateChange}
+                  />
                 ) : (
                   <div
                     className={

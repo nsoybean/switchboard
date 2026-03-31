@@ -11,6 +11,7 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
+import { DotsNine } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -27,7 +28,7 @@ interface TitlebarProps {
   onToggleInspector: () => void;
   projectPath?: string | null;
   onProjectClick?: () => void;
-  viewMode?: "focused" | "grid";
+  viewMode?: "focused" | "grid" | "canvas";
   onToggleViewMode?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
@@ -183,13 +184,19 @@ export function Titlebar({
             >
               {viewMode === "focused" ? (
                 <LayoutGrid className="size-4" />
+              ) : viewMode === "grid" ? (
+                <DotsNine className="size-4" />
               ) : (
                 <Focus className="size-4" />
               )}
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {viewMode === "grid" ? "Focused View (⌘⇧S)" : "Grid View (⌘⇧S)"}
+            {viewMode === "focused"
+              ? "Grid View (⌘⇧S)"
+              : viewMode === "grid"
+                ? "Canvas View (⌘⇧S)"
+                : "Focused View (⌘⇧S)"}
           </TooltipContent>
         </Tooltip>
 

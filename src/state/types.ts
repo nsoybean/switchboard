@@ -51,7 +51,7 @@ export interface AppState {
   gitPanelOpen: boolean;
   projectPath: string | null;
   projects: string[];
-  viewMode: "focused" | "grid";
+  viewMode: "focused" | "grid" | "canvas";
   previewFilePath: string | null;
   githubToken: string | null;
 }
@@ -73,6 +73,6 @@ export type AppAction =
   | { type: "TOGGLE_GIT_PANEL" }
   | { type: "SET_PROJECT_PATH"; path: string | null }
   | { type: "SET_PROJECTS"; paths: string[] }
-  | { type: "SET_VIEW_MODE"; mode: "focused" | "grid" }
+  | { type: "SET_VIEW_MODE"; mode: "focused" | "grid" | "canvas" }
   | { type: "SET_PREVIEW_FILE"; path: string | null }
   | { type: "SET_GITHUB_TOKEN"; token: string | null };

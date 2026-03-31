@@ -1,0 +1,236 @@
+/* Canvas container fills parent */
+.canvas-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background);
+}
+
+#grid-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#tile-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── Tiles — matches grid view card style ── */
+
+.canvas-tile {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  overflow: hidden;
+  background: var(--background);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.canvas-tile:hover {
+  border-color: color-mix(in oklch, var(--primary), transparent 50%);
+}
+
+.canvas-tile.tile-focused {
+  border-color: var(--primary);
+}
+
+/* ── Title bar — matches grid view compact header ── */
+
+.tile-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  position: relative;
+  z-index: 1;
+  user-select: none;
+  flex-shrink: 0;
+  min-height: 28px;
+  gap: 4px;
+}
+
+.tile-title-bar:active {
+  cursor: grabbing;
+}
+
+.tile-title-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tile-btn-group {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tile-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.tile-action-btn:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.tile-close-btn:hover {
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+}
+
+/* ── Tile content ── */
+
+.tile-content {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  /* Match xterm background so no black bars show below terminal rows */
+  background: var(--background);
+}
+
+/* Side padding for terminal inside canvas tiles */
+.canvas-tile[data-tile-type="terminal"] .tile-content > div {
+  padding: 0 4px !important;
+}
+
+/* Ensure xterm viewport matches tile background — prevents black bars
+   below terminal rows when WebGL canvas doesn't fill the full area */
+.canvas-tile .xterm-viewport {
+  background-color: var(--background) !important;
+}
+.canvas-tile .xterm-screen {
+  background-color: var(--background) !important;
+}
+
+/* Content overlay: blocks terminal interaction by default.
+   Hidden only when the tile has .tile-interactive (double-click to focus).
+   pointer-events: none for wheel so scroll passes through to canvas for panning. */
+.tile-content-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  cursor: grab;
+  touch-action: none;
+}
+
+.tile-content-overlay:active {
+  cursor: grabbing;
+}
+
+/* Block all interaction on terminal content when not interactive */
+.canvas-tile:not(.tile-interactive) .xterm,
+.canvas-tile:not(.tile-interactive) .xterm-viewport {
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+/* When tile is interactive (focused via double-click), hide overlay */
+.canvas-tile.tile-interactive .tile-content-overlay {
+  display: none;
+}
+
+/* ── Resize handles ── */
+
+.tile-resize-handle {
+  position: absolute;
+  z-index: 2;
+}
+
+/* Edges */
+.edge-n { top: -3px; left: 8px; right: 8px; height: 6px; cursor: n-resize; }
+.edge-s { bottom: -3px; left: 8px; right: 8px; height: 6px; cursor: s-resize; }
+.edge-e { right: -3px; top: 8px; bottom: 8px; width: 6px; cursor: e-resize; }
+.edge-w { left: -3px; top: 8px; bottom: 8px; width: 6px; cursor: w-resize; }
+
+/* Corners */
+.corner-nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nw-resize; }
+.corner-ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
+.corner-sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
+.corner-se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }
+
+/* ── Label tiles ── */
+
+.canvas-tile[data-tile-type="label"] {
+  background: transparent;
+  border: 1px dashed var(--border);
+  box-shadow: none;
+}
+
+.canvas-tile[data-tile-type="label"] .tile-title-bar {
+  display: none;
+}
+
+.canvas-tile[data-tile-type="label"] .tile-content {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+}
+
+.label-tile-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: "Inter", sans-serif;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+/* ── Marquee selection ── */
+
+.selection-marquee {
+  border: 1px solid var(--primary);
+  background: color-mix(in oklch, var(--primary), transparent 92%);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Zoom indicator ── */
+
+.zoom-indicator {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.zoom-indicator.visible {
+  opacity: 1;
+}

@@ -10,6 +10,8 @@ interface ShortcutHandlers {
   onFocusTerminal: () => void;
   onToggleFileTree?: () => void;
   onToggleViewMode?: () => void;
+  /** Called on Escape. Return true if handled (suppresses default onFocusTerminal). */
+  onEscape?: () => boolean;
 }
 
 /**
@@ -81,8 +83,9 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return;
       }
 
-      // Escape — focus terminal
+      // Escape — custom handler first, then focus terminal
       if (e.key === "Escape") {
+        if (handlers.onEscape?.()) return;
         handlers.onFocusTerminal();
         return;
       }

@@ -340,6 +340,37 @@ pub struct DetectedAgent {
     pub version: Option<String>,
 }
 
+// -- Canvas state persistence --
+
+fn canvas_state_path(project_path: &str) -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let dir = home.join(".switchboard");
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+    // Use a simple hash of the project path for the filename
+    let hash = project_path
+        .bytes()
+        .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+    Ok(dir.join(format!("canvas-{:x}.json", hash)))
+}
+
+#[tauri::command]
+pub fn save_canvas_state(project_path: String, state: String) -> Result<(), String> {
+    let path = canvas_state_path(&project_path)?;
+    fs::write(&path, state).map_err(|e| format!("Write failed: {}", e))
+}
+
+#[tauri::command]
+pub fn load_canvas_state(project_path: String) -> Result<Option<String>, String> {
+    let path = canvas_state_path(&project_path)?;
+    if path.exists() {
+        fs::read_to_string(&path)
+            .map(Some)
+            .map_err(|e| format!("Read failed: {}", e))
+    } else {
+        Ok(None)
+    }
+}
+
 // -- Notification preferences (commented out — re-enable with dock bounce feature) --
 
 // #[tauri::command]

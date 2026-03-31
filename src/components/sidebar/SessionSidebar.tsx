@@ -22,7 +22,7 @@ interface SessionSidebarProps {
   onAddProject?: () => void;
   onSelectProject?: (path: string) => void;
   onViewSession?: (session: Session) => void;
-  onSelectActiveSession?: () => void;
+  onSelectActiveSession?: (sessionId?: string) => void;
   onResumeSession?: (session: Session) => Promise<void> | void;
   onStopSession?: (sessionId: string) => Promise<void>;
   onRenameSession?: (session: Session, label: string) => Promise<void>;
@@ -326,7 +326,7 @@ export function SessionSidebar({
               }}
               onDelete={() => setDeleteTarget({ session, source: "local" })}
               onClick={() => {
-                onSelectActiveSession?.();
+                onSelectActiveSession?.(session.id);
                 dispatch({ type: "SET_ACTIVE", id: session.id });
                 dispatch({ type: "SET_PREVIEW_FILE", path: null });
               }}

@@ -86,6 +86,8 @@ pub fn run() {
             commands::session::get_github_token,
             commands::session::set_github_token,
             commands::session::validate_github_token,
+            commands::session::save_canvas_state,
+            commands::session::load_canvas_state,
             commands::files::list_directory,
             commands::files::inspect_directory,
             commands::files::read_file_contents,
