@@ -73,6 +73,15 @@ export function createTileDOM(
 
 
 
+  // When tile is interactive, stop wheel events from bubbling to canvas.
+  // This prevents scroll overflow from panning the canvas when the user
+  // reaches the top/bottom of the terminal scrollback.
+  container.addEventListener("wheel", (e) => {
+    if (container.classList.contains("tile-interactive")) {
+      e.stopPropagation();
+    }
+  }, { passive: true });
+
   container.appendChild(titleBar);
   container.appendChild(contentArea);
   contentArea.appendChild(contentOverlay);

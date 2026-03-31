@@ -880,6 +880,13 @@ export function AppLayout() {
         const termEl = document.querySelector(".xterm-helper-textarea");
         if (termEl instanceof HTMLElement) termEl.focus();
       },
+      onEscape: () => {
+        if (state.viewMode === "canvas" && canvasViewRef.current) {
+          canvasViewRef.current.unfocusTile();
+          return true;
+        }
+        return false;
+      },
       onToggleViewMode: () => {
         const next =
           state.viewMode === "focused"

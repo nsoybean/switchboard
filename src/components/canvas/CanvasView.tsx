@@ -42,6 +42,7 @@ interface CanvasViewProps {
 
 export interface CanvasViewHandle {
   panToSession: (sessionId: string) => void;
+  unfocusTile: () => void;
 }
 
 // Error boundary for individual tile portals
@@ -265,14 +266,6 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
       notifyChange();
     });
 
-    // Escape key exits interactive mode
-    function handleKeyDown(e: KeyboardEvent): void {
-      if (e.key === "Escape" && interactiveTileIdRef.current) {
-        setInteractiveTile(null);
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-
     // Clicking canvas background exits interactive mode
     function handleCanvasClick(e: MouseEvent): void {
       const tileLayer = tileLayerRef.current;
@@ -286,7 +279,6 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
     return () => {
       vp.destroy();
       viewportRef.current = null;
-      document.removeEventListener("keydown", handleKeyDown);
       container.removeEventListener("mousedown", handleCanvasClick);
     };
   }, [repositionAll, notifyChange, setInteractiveTile]);
@@ -391,7 +383,10 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
 
       viewportRef.current.panToRect(tile.x, tile.y, tile.width, tile.height);
     },
-  }), []);
+    unfocusTile() {
+      setInteractiveTile(null);
+    },
+  }), [setInteractiveTile]);
 
   // Highlight active session's tile
   useEffect(() => {
