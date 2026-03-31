@@ -1,0 +1,204 @@
+/* Canvas container fills parent */
+.canvas-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: hsl(var(--background));
+}
+
+#grid-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#tile-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── Tiles ── */
+
+.canvas-tile {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+  background: hsl(var(--background));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.15s;
+}
+
+.canvas-tile:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.canvas-tile.tile-focused {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 1px hsl(var(--primary)), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Title bar ── */
+
+.tile-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  cursor: grab;
+  user-select: none;
+  flex-shrink: 0;
+  min-height: 28px;
+  gap: 4px;
+}
+
+.tile-title-bar:active {
+  cursor: grabbing;
+}
+
+.tile-title-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tile-btn-group {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tile-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.tile-action-btn:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.tile-close-btn:hover {
+  background: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
+}
+
+/* ── Tile content ── */
+
+.tile-content {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tile-content-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+}
+
+.tile-dragging .tile-content-overlay,
+.canvas-container.is-dragging .tile-content-overlay {
+  display: block;
+}
+
+/* ── Resize handles ── */
+
+.tile-resize-handle {
+  position: absolute;
+  z-index: 2;
+}
+
+/* Edges */
+.edge-n { top: -3px; left: 8px; right: 8px; height: 6px; cursor: n-resize; }
+.edge-s { bottom: -3px; left: 8px; right: 8px; height: 6px; cursor: s-resize; }
+.edge-e { right: -3px; top: 8px; bottom: 8px; width: 6px; cursor: e-resize; }
+.edge-w { left: -3px; top: 8px; bottom: 8px; width: 6px; cursor: w-resize; }
+
+/* Corners */
+.corner-nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nw-resize; }
+.corner-ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
+.corner-sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
+.corner-se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }
+
+/* ── Label tiles ── */
+
+.canvas-tile[data-tile-type="label"] {
+  background: transparent;
+  border: 1px dashed hsl(var(--border));
+  box-shadow: none;
+}
+
+.canvas-tile[data-tile-type="label"] .tile-title-bar {
+  display: none;
+}
+
+.canvas-tile[data-tile-type="label"] .tile-content {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+}
+
+.label-tile-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: "Inter", sans-serif;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── Marquee selection ── */
+
+.selection-marquee {
+  border: 1px solid hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Zoom indicator ── */
+
+.zoom-indicator {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.zoom-indicator.visible {
+  opacity: 1;
+}

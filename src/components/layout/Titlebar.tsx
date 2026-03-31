@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   Focus,
   LayoutGrid,
+  Layout,
   Loader2,
   PanelLeft,
   PanelRight,
@@ -27,7 +28,7 @@ interface TitlebarProps {
   onToggleInspector: () => void;
   projectPath?: string | null;
   onProjectClick?: () => void;
-  viewMode?: "focused" | "grid";
+  viewMode?: "focused" | "grid" | "canvas";
   onToggleViewMode?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
@@ -183,13 +184,19 @@ export function Titlebar({
             >
               {viewMode === "focused" ? (
                 <LayoutGrid className="size-4" />
+              ) : viewMode === "grid" ? (
+                <Layout className="size-4" />
               ) : (
                 <Focus className="size-4" />
               )}
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {viewMode === "grid" ? "Focused View (⌘⇧S)" : "Grid View (⌘⇧S)"}
+            {viewMode === "focused"
+              ? "Grid View (⌘⇧S)"
+              : viewMode === "grid"
+                ? "Canvas View (⌘⇧S)"
+                : "Focused View (⌘⇧S)"}
           </TooltipContent>
         </Tooltip>
 
