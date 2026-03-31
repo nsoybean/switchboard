@@ -47,7 +47,7 @@ import type {
   SessionWorkspaceIdentity,
   SessionWorkspaceKind,
 } from "../../state/types";
-import { CanvasView } from "../canvas/CanvasView";
+import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
 import {
   type CanvasState,
   defaultCanvasState,
@@ -154,6 +154,7 @@ export function AppLayout() {
   const hookConfigReady = useRef<Promise<void>>(Promise.resolve());
   const [canvasState, setCanvasState] = useState<CanvasState>(defaultCanvasState());
   const canvasSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canvasViewRef = useRef<CanvasViewHandle>(null);
   const {
     currentVersion,
     availableUpdate,
@@ -971,7 +972,12 @@ export function AppLayout() {
                     }
                     setViewingSession(session);
                   }}
-                  onSelectActiveSession={() => setViewingSession(null)}
+                  onSelectActiveSession={(sessionId) => {
+                    setViewingSession(null);
+                    if (state.viewMode === "canvas" && sessionId) {
+                      canvasViewRef.current?.panToSession(sessionId);
+                    }
+                  }}
                   onResumeSession={handleResumeSession}
                   onStopSession={handleStopSession}
                   onRenameSession={handleRenameSession}
@@ -1023,6 +1029,7 @@ export function AppLayout() {
                   </div>
                 ) : state.viewMode === "canvas" ? (
                   <CanvasView
+                    ref={canvasViewRef}
                     sessions={liveSessions}
                     activeSessionId={state.activeSessionId}
                     aliveSessionIds={aliveSessionIds}
@@ -1036,6 +1043,9 @@ export function AppLayout() {
                       dispatch({ type: "SET_ACTIVE", id: sessionId });
                       setViewingSession(null);
                     }}
+                    onStopSession={(sessionId) =>
+                      void handleStopSession(sessionId)
+                    }
                     canvasState={canvasState}
                     onCanvasStateChange={handleCanvasStateChange}
                   />

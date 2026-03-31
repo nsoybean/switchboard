@@ -15,6 +15,8 @@ export interface TileDOM {
 export interface TileCallbacks {
   onClose: (id: string) => void;
   onFocus: (id: string, e?: MouseEvent) => void;
+  /** Double-click on content overlay to enter interactive mode */
+  onInteract: (id: string) => void;
 }
 
 export function createTileDOM(
@@ -51,11 +53,25 @@ export function createTileDOM(
   btnGroup.appendChild(closeBtn);
   titleBar.appendChild(btnGroup);
 
+  // Clicking anywhere on the tile (including terminal content) activates it.
+  // Use capture phase so this fires even when xterm stops propagation.
+  container.addEventListener("pointerdown", () => {
+    callbacks.onFocus(tile.id);
+  }, true);
+
   const contentArea = document.createElement("div");
   contentArea.className = "tile-content";
 
   const contentOverlay = document.createElement("div");
   contentOverlay.className = "tile-content-overlay";
+
+  // Double-click on overlay enters interactive mode (allows typing/scrolling)
+  contentOverlay.addEventListener("dblclick", (e) => {
+    e.stopPropagation();
+    callbacks.onInteract(tile.id);
+  });
+
+
 
   container.appendChild(titleBar);
   container.appendChild(contentArea);

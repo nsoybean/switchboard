@@ -19,6 +19,7 @@ export function attachDrag(
   titleBar: HTMLElement,
   tile: CanvasTile,
   opts: DragOptions,
+  contentOverlay?: HTMLElement,
 ): () => void {
   function startDrag(e: MouseEvent): void {
     if (e.button !== 0) return;
@@ -61,9 +62,15 @@ export function attachDrag(
   }
 
   titleBar.addEventListener("mousedown", startDrag);
+  if (contentOverlay) {
+    contentOverlay.addEventListener("mousedown", startDrag);
+  }
 
   return () => {
     titleBar.removeEventListener("mousedown", startDrag);
+    if (contentOverlay) {
+      contentOverlay.removeEventListener("mousedown", startDrag);
+    }
   };
 }
 

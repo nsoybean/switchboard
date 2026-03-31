@@ -22,6 +22,8 @@ export interface ViewportController {
   init(state: CanvasViewport, callback: () => void): void;
   updateCanvas(): void;
   applyZoom(deltaY: number, focalX: number, focalY: number): void;
+  /** Animate pan/zoom so the given canvas-space rect is centered and visible. */
+  panToRect(x: number, y: number, width: number, height: number): void;
   destroy(): void;
 }
 
@@ -200,6 +202,59 @@ export function createViewport(
 
   resizeGridCanvas();
 
+  let panToRaf: number | null = null;
+
+  function panToRect(x: number, y: number, width: number, height: number): void {
+    if (!state) return;
+    if (panToRaf) cancelAnimationFrame(panToRaf);
+
+    const viewW = canvasEl.clientWidth;
+    const viewH = canvasEl.clientHeight;
+
+    // Calculate zoom to fit tile with 15% padding
+    const padFactor = 0.85;
+    const zoomToFitW = (viewW * padFactor) / width;
+    const zoomToFitH = (viewH * padFactor) / height;
+    let targetZoom = Math.min(zoomToFitW, zoomToFitH);
+    // Clamp to valid range, don't zoom in past 1.0
+    targetZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, targetZoom));
+
+    // Calculate pan to center the tile at the target zoom
+    const tileCenterX = x + width / 2;
+    const tileCenterY = y + height / 2;
+    const targetPanX = viewW / 2 - tileCenterX * targetZoom;
+    const targetPanY = viewH / 2 - tileCenterY * targetZoom;
+
+    const LERP = 0.12;
+    const EPSILON = 0.5;
+
+    function animate(): void {
+      if (!state) return;
+
+      state.panX += (targetPanX - state.panX) * LERP;
+      state.panY += (targetPanY - state.panY) * LERP;
+      state.zoom += (targetZoom - state.zoom) * LERP;
+
+      updateCanvas();
+
+      const dPan = Math.hypot(targetPanX - state.panX, targetPanY - state.panY);
+      const dZoom = Math.abs(targetZoom - state.zoom);
+
+      if (dPan < EPSILON && dZoom < 0.001) {
+        state.panX = targetPanX;
+        state.panY = targetPanY;
+        state.zoom = targetZoom;
+        updateCanvas();
+        panToRaf = null;
+        return;
+      }
+
+      panToRaf = requestAnimationFrame(animate);
+    }
+
+    panToRaf = requestAnimationFrame(animate);
+  }
+
   return {
     init(viewportState: CanvasViewport, callback: () => void) {
       state = viewportState;
@@ -208,11 +263,13 @@ export function createViewport(
     },
     updateCanvas,
     applyZoom,
+    panToRect,
     destroy() {
       canvasEl.removeEventListener("wheel", handleWheel);
       resizeObserver.disconnect();
       if (zoomSnapRaf) cancelAnimationFrame(zoomSnapRaf);
       if (zoomSnapTimer) clearTimeout(zoomSnapTimer);
+      if (panToRaf) cancelAnimationFrame(panToRaf);
     },
   };
 }

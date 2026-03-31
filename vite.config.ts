@@ -12,6 +12,10 @@ export default defineConfig(async () => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  optimizeDeps: {
+    exclude: ["collab-public"],
+    entries: ["index.html", "src/**/*.{ts,tsx}"],
+  },
   clearScreen: false,
   server: {
     port: 1420,
@@ -25,7 +29,7 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      ignored: ["**/src-tauri/**", "**/.claude/**", "**/.codex/**"],
+      ignored: ["**/src-tauri/**", "**/.claude/**", "**/.codex/**", "**/collab-public/**"],
     },
   },
 }));

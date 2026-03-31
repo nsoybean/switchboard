@@ -1,8 +1,10 @@
-import {
+import React, {
   useEffect,
   useRef,
   useCallback,
   useState,
+  useImperativeHandle,
+  forwardRef,
   type ReactPortal,
 } from "react";
 import { createPortal } from "react-dom";
@@ -33,8 +35,13 @@ interface CanvasViewProps {
   onSessionSpawn: (sessionId: string, ptyId: number) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
   onSelectSession: (sessionId: string) => void;
+  onStopSession: (sessionId: string) => void;
   canvasState: CanvasState;
   onCanvasStateChange: (state: CanvasState) => void;
+}
+
+export interface CanvasViewHandle {
+  panToSession: (sessionId: string) => void;
 }
 
 // Error boundary for individual tile portals
@@ -58,17 +65,17 @@ class TileErrorBoundary extends React.Component<
   }
 }
 
-import React from "react";
-
-export function CanvasView({
+export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function CanvasView({
   sessions,
+  activeSessionId,
   aliveSessionIds,
   onSessionSpawn,
   onSessionExit,
   onSelectSession,
+  onStopSession,
   canvasState,
   onCanvasStateChange,
-}: CanvasViewProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const tileLayerRef = useRef<HTMLDivElement>(null);
@@ -77,8 +84,28 @@ export function CanvasView({
   const cleanupFnsRef = useRef<Map<string, (() => void)[]>>(new Map());
   const stateRef = useRef(canvasState);
   const [, forceRender] = useState(0);
+  const interactiveTileIdRef = useRef<string | null>(null);
 
   stateRef.current = canvasState;
+
+  const setInteractiveTile = useCallback((tileId: string | null) => {
+    // Remove interactive class from previous
+    if (interactiveTileIdRef.current) {
+      const prevDom = tileDOMsRef.current.get(interactiveTileIdRef.current);
+      if (prevDom) prevDom.container.classList.remove("tile-interactive");
+    }
+    interactiveTileIdRef.current = tileId;
+    // Add interactive class to new
+    if (tileId) {
+      const dom = tileDOMsRef.current.get(tileId);
+      if (dom) {
+        dom.container.classList.add("tile-interactive");
+        // Focus the xterm textarea so keyboard input works
+        const textarea = dom.contentArea.querySelector(".xterm-helper-textarea") as HTMLElement | null;
+        textarea?.focus();
+      }
+    }
+  }, []);
 
   const notifyChange = useCallback(() => {
     onCanvasStateChange({ ...stateRef.current });
@@ -119,7 +146,13 @@ export function CanvasView({
 
       const dom = createTileDOM(tile, {
         onClose: (id) => {
-          // Remove tile from state (portal unmounts via React render, then DOM removed)
+          // For terminal tiles, stop the session (tile auto-removed when session exits)
+          const closedTile = stateRef.current.tiles.find((t) => t.id === id);
+          if (closedTile?.type === "terminal" && closedTile.sessionId) {
+            onStopSession(closedTile.sessionId);
+            return;
+          }
+          // For label tiles, remove directly
           const tiles = stateRef.current.tiles.filter((t) => t.id !== id);
           stateRef.current = { ...stateRef.current, tiles };
           removeTileDOM(id);
@@ -138,10 +171,17 @@ export function CanvasView({
               stateRef.current.viewport.zoom,
             );
           }
-          // Also select the session in sidebar
+          // Also select the session in sidebar, and unfocus interactive tile
+          // if clicking a different tile
           if (tile?.sessionId) {
             onSelectSession(tile.sessionId);
           }
+          if (interactiveTileIdRef.current !== id) {
+            setInteractiveTile(null);
+          }
+        },
+        onInteract: (id) => {
+          setInteractiveTile(id);
         },
       });
 
@@ -168,8 +208,13 @@ export function CanvasView({
               t.zIndex = nextZIndex(stateRef.current.tiles);
             }
             if (t?.sessionId) onSelectSession(t.sessionId);
+            if (interactiveTileIdRef.current !== id) {
+              setInteractiveTile(null);
+            }
           },
-        }),
+        },
+        dom.contentOverlay,  // overlay acts as drag surface when not interactive
+        ),
       );
 
       cleanups.push(
@@ -203,7 +248,7 @@ export function CanvasView({
         stateRef.current.viewport.zoom,
       );
     },
-    [disablePointerEvents, enablePointerEvents, notifyChange, onSelectSession, removeTileDOM],
+    [disablePointerEvents, enablePointerEvents, notifyChange, onSelectSession, onStopSession, removeTileDOM, setInteractiveTile],
   );
 
   // Initialize viewport on mount
@@ -220,11 +265,31 @@ export function CanvasView({
       notifyChange();
     });
 
+    // Escape key exits interactive mode
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (e.key === "Escape" && interactiveTileIdRef.current) {
+        setInteractiveTile(null);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+
+    // Clicking canvas background exits interactive mode
+    function handleCanvasClick(e: MouseEvent): void {
+      const tileLayer = tileLayerRef.current;
+      const gridCanvas = gridCanvasRef.current;
+      if (e.target === container || e.target === tileLayer || e.target === gridCanvas) {
+        setInteractiveTile(null);
+      }
+    }
+    container.addEventListener("mousedown", handleCanvasClick);
+
     return () => {
       vp.destroy();
       viewportRef.current = null;
+      document.removeEventListener("keydown", handleKeyDown);
+      container.removeEventListener("mousedown", handleCanvasClick);
     };
-  }, [repositionAll, notifyChange]);
+  }, [repositionAll, notifyChange, setInteractiveTile]);
 
   // Sync tiles: create DOM for new tiles, remove DOM for deleted tiles
   useEffect(() => {
@@ -303,6 +368,40 @@ export function CanvasView({
       });
     }
   }, [sessions, canvasState, onCanvasStateChange]);
+
+  // Expose panToSession to parent via ref
+  useImperativeHandle(ref, () => ({
+    panToSession(sessionId: string) {
+      const tile = stateRef.current.tiles.find(
+        (t) => t.type === "terminal" && t.sessionId === sessionId,
+      );
+      if (!tile || !viewportRef.current) return;
+
+      tile.zIndex = nextZIndex(stateRef.current.tiles);
+      const dom = tileDOMsRef.current.get(tile.id);
+      if (dom) {
+        positionTile(
+          dom.container,
+          tile,
+          stateRef.current.viewport.panX,
+          stateRef.current.viewport.panY,
+          stateRef.current.viewport.zoom,
+        );
+      }
+
+      viewportRef.current.panToRect(tile.x, tile.y, tile.width, tile.height);
+    },
+  }), []);
+
+  // Highlight active session's tile
+  useEffect(() => {
+    for (const tile of canvasState.tiles) {
+      const dom = tileDOMsRef.current.get(tile.id);
+      if (!dom) continue;
+      const isActive = tile.type === "terminal" && tile.sessionId === activeSessionId;
+      dom.container.classList.toggle("tile-focused", isActive);
+    }
+  }, [activeSessionId, canvasState.tiles]);
 
   // Update tile title texts when session labels change
   useEffect(() => {
@@ -384,4 +483,4 @@ export function CanvasView({
       {portals}
     </div>
   );
-}
+});
