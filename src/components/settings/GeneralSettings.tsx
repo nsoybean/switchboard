@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { Focus, FolderOpen, LayoutGrid, Trash2 } from "lucide-react";
+import { DotsNine } from "@phosphor-icons/react";
 import {
   Tooltip,
   TooltipContent,
@@ -77,11 +78,24 @@ export function GeneralSettings() {
             <LayoutGrid className="size-4" />
             Grid
           </button>
+          <button
+            onClick={() => dispatch({ type: "SET_VIEW_MODE", mode: "canvas" })}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm transition-colors ${
+              state.viewMode === "canvas"
+                ? "bg-accent text-accent-foreground border-accent-foreground/20 font-medium"
+                : "bg-muted/30 text-muted-foreground hover:bg-accent/50"
+            }`}
+          >
+            <DotsNine className="size-4" />
+            Canvas
+          </button>
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
           {state.viewMode === "focused"
             ? "Shows one terminal at a time."
-            : "Shows all active terminals in a grid layout."}
+            : state.viewMode === "grid"
+              ? "Shows all active terminals in a grid layout."
+              : "Free-form canvas with draggable, resizable terminal tiles."}
         </p>
       </section>
 

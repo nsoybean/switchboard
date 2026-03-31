@@ -79,7 +79,6 @@ export function XTermContainer({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const fitFrameRef = useRef<number | null>(null);
-  const lastSizeRef = useRef<string | null>(null);
   const shouldFitRef = useRef(shouldFit);
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   const [ready, setReady] = useState(false);
@@ -105,70 +104,52 @@ export function XTermContainer({
     }
   }, []);
 
-  const fitTerminal = useCallback(
-    (syncPty: boolean) => {
-      const element = containerRef.current;
-      const term = terminalRef.current;
-      const fitAddon = fitAddonRef.current;
+  // Simple fit: just call fitAddon.fit(). No scroll hacks, no sizeKey
+  // deduplication. PTY resize is handled by term.onResize listener (below),
+  // matching collab-public's approach exactly.
+  const doFit = useCallback(() => {
+    const element = containerRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!shouldFitRef.current || !element || !fitAddon) return;
+    if (element.clientWidth === 0 || element.clientHeight === 0) return;
+    try {
+      fitAddon.fit();
+    } catch {
+      // ignore
+    }
+  }, []);
 
-      if (!shouldFitRef.current || !element || !term || !fitAddon) return false;
-      if (element.clientWidth === 0 || element.clientHeight === 0) return false;
-
-      try {
-        fitAddon.fit();
-      } catch {
-        return false;
-      }
-
-      if (term.cols === 0 || term.rows === 0) return false;
-
-      const sizeKey = `${element.clientWidth}x${element.clientHeight}:${term.cols}x${term.rows}`;
-
-      if (spawnedRef.current) {
-        if (syncPty && lastSizeRef.current !== sizeKey) {
-          lastSizeRef.current = sizeKey;
-          resize(term.cols, term.rows).catch(console.error);
-        }
-        return true;
-      }
-
-      lastSizeRef.current = sizeKey;
-      // Double-RAF: first frame lets layout settle, second confirms stability (~32ms)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const liveElement = containerRef.current;
-          const liveTerminal = terminalRef.current;
-
-          if (!shouldFitRef.current || !liveElement || !liveTerminal) return;
-
-          const stableSizeKey = `${liveElement.clientWidth}x${liveElement.clientHeight}:${liveTerminal.cols}x${liveTerminal.rows}`;
-          if (stableSizeKey === sizeKey) {
-            setReady(true);
-          }
-        });
-      });
-
-      return true;
-    },
-    [resize],
-  );
-
+  // Schedule initial fit with retry for layout settling
   const scheduleFit = useCallback(
-    (syncPty: boolean, attempts = 2) => {
+    (attempts = 2) => {
       cancelScheduledFit();
 
       const run = (remainingAttempts: number) => {
         fitFrameRef.current = requestAnimationFrame(() => {
           fitFrameRef.current = null;
+          doFit();
 
-          if (fitTerminal(syncPty)) return;
+          // Before first spawn, confirm layout is stable via double-RAF
+          if (!spawnedRef.current) {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                const el = containerRef.current;
+                const term = terminalRef.current;
+                if (shouldFitRef.current && el && term && el.clientWidth > 0 && term.cols > 0) {
+                  setReady(true);
+                }
+              });
+            });
+            return;
+          }
+
           if (remainingAttempts > 0) run(remainingAttempts - 1);
         });
       };
 
       run(attempts);
     },
-    [cancelScheduledFit, fitTerminal],
+    [cancelScheduledFit, doFit],
   );
 
   // Initialize xterm.js
@@ -210,39 +191,42 @@ export function XTermContainer({
     terminalRef.current = term;
     fitAddonRef.current = fitAddon;
     setTerminal(term);
-    scheduleFit(false);
+    scheduleFit();
 
     // rAF-coalesced resize: cancels pending frame and schedules a new one,
     // so rapid resize events (panel drags) collapse to a single fit per frame
-    // (~16ms). Calls fitTerminal directly to avoid the double-rAF latency
-    // that scheduleFit would add.
+    // (~16ms). Calls doFit directly — no wrapper overhead.
     let resizeRafId = 0;
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
       if (width > 0 && height > 0) {
         cancelAnimationFrame(resizeRafId);
-        resizeRafId = requestAnimationFrame(() => {
-          fitTerminal(true);
-        });
+        resizeRafId = requestAnimationFrame(() => doFit());
       }
     });
     observer.observe(containerRef.current);
 
+    // PTY resize via term.onResize — fires synchronously after fit()
+    // changes cols/rows. Matches collab-public's approach. This is the
+    // fastest path: no sizeKey checks, no async wrapper overhead.
+    const resizeDisposable = term.onResize(({ cols, rows }) => {
+      resize(cols, rows).catch(console.error);
+    });
+
     if ("fonts" in document) {
-      document.fonts.ready.then(() => {
-        scheduleFit(true);
-      });
+      document.fonts.ready.then(() => scheduleFit());
     }
 
     return () => {
       cancelScheduledFit();
       cancelAnimationFrame(resizeRafId);
+      resizeDisposable.dispose();
       observer.disconnect();
       term.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [cancelScheduledFit, scheduleFit]);
+  }, [cancelScheduledFit, scheduleFit, doFit, resize]);
 
   // Update theme dynamically
   useEffect(() => {
@@ -255,7 +239,7 @@ export function XTermContainer({
   // the terminal is actually visible and measured before first spawn.
   useEffect(() => {
     if (!terminal || !shouldFit) return;
-    scheduleFit(true);
+    scheduleFit();
   }, [terminal, shouldFit, scheduleFit]);
 
   // Spawn PTY only after terminal is fitted with correct dimensions
@@ -280,10 +264,6 @@ export function XTermContainer({
     };
     doSpawn();
   }, [terminal, ready, command, args, cwd, env, spawn, onSpawn]);
-
-  // Note: PTY resize is handled inside fitTerminal(syncPty=true) which
-  // deduplicates by sizeKey. No separate terminal.onResize listener needed —
-  // that would cause a redundant second pty_resize IPC call per resize.
 
   return (
     <div className="relative size-full bg-background p-2 border-0">

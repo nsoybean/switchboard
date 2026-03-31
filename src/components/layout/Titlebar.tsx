@@ -4,7 +4,6 @@ import {
   ArrowDownToLine,
   Focus,
   LayoutGrid,
-  Layout,
   Loader2,
   PanelLeft,
   PanelRight,
@@ -12,6 +11,7 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
+import { DotsNine } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -185,7 +185,7 @@ export function Titlebar({
               {viewMode === "focused" ? (
                 <LayoutGrid className="size-4" />
               ) : viewMode === "grid" ? (
-                <Layout className="size-4" />
+                <DotsNine className="size-4" />
               ) : (
                 <Focus className="size-4" />
               )}
