@@ -53,9 +53,14 @@ export function createTileDOM(
   btnGroup.appendChild(closeBtn);
   titleBar.appendChild(btnGroup);
 
+  // Track whether tile was focused before this pointer interaction starts.
+  // Used by the overlay click handler to implement two-click-to-enter flow.
+  let wasFocusedBeforePointerDown = false;
+
   // Clicking anywhere on the tile (including terminal content) activates it.
   // Use capture phase so this fires even when xterm stops propagation.
   container.addEventListener("pointerdown", () => {
+    wasFocusedBeforePointerDown = container.classList.contains("tile-focused");
     callbacks.onFocus(tile.id);
   }, true);
 
@@ -69,6 +74,16 @@ export function createTileDOM(
   contentOverlay.addEventListener("dblclick", (e) => {
     e.stopPropagation();
     callbacks.onInteract(tile.id);
+  });
+
+  // Two-click flow: first click activates tile, second click enters
+  // interactive mode. Uses wasFocusedBeforePointerDown which is set
+  // in the container's capture-phase pointerdown BEFORE onFocus runs.
+  contentOverlay.addEventListener("click", (e) => {
+    if (wasFocusedBeforePointerDown) {
+      e.stopPropagation();
+      callbacks.onInteract(tile.id);
+    }
   });
 
 
