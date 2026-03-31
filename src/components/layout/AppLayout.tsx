@@ -5,7 +5,12 @@ import { Titlebar } from "./Titlebar";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
-import { GridView } from "../terminal/GridView";
+import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
 import { FilePreview } from "../files/FilePreview";
@@ -33,7 +38,7 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
-import { FolderOpen, Plus, Square } from "lucide-react";
+import { Circle, FolderOpen, Plus, Square } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import type {
   AgentType,
@@ -965,74 +970,188 @@ export function AppLayout() {
                       </Button>
                     </div>
                   </div>
-                ) : state.viewMode === "grid" ? (
-                  <GridView
-                    sessions={liveSessions.filter((s) =>
-                      aliveSessionIds.has(s.id),
-                    )}
-                    activeSessionId={state.activeSessionId}
-                    onSessionSelect={(id) => {
-                      dispatch({ type: "SET_ACTIVE", id });
-                      setViewingSession(null);
-                    }}
-                    onStopSession={handleStopSession}
-                    onSessionSpawn={handleSessionSpawn}
-                    onSessionExit={handleSessionExit}
-                  />
                 ) : (
-                  liveSessions.map((session) => {
-                    if (!aliveSessionIds.has(session.id)) return null;
-                    const isActive = session.id === state.activeSessionId;
-
-                    return (
-                      <div
-                        key={session.id}
-                        className="absolute inset-0 flex flex-col bg-background"
-                        style={{ display: isActive ? "flex" : "none" }}
-                      >
-                        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
-                          <AgentIcon agent={session.agent} className="size-4 shrink-0" />
-                          <span
-                            className="min-w-0 max-w-[40ch] truncate font-semibold"
-                            title={session.label}
-                          >
-                            {session.label}
-                          </span>
-                          <div className="ml-auto flex shrink-0 items-center gap-2">
-                            {session.ptyId !== null &&
-                              (session.status === "running" ||
-                                session.status === "idle" ||
-                                session.status === "needs-input") && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                  onClick={() =>
-                                    void handleStopSession(session.id)
-                                  }
-                                >
-                                  <Square data-icon="inline-start" />
-                                  Stop
-                                </Button>
-                              )}
-                          </div>
-                        </div>
-                        <div className="flex-1 min-h-0">
-                          <XTermContainer
-                            command={session.command}
-                            args={session.args}
-                            cwd={session.cwd}
-                            env={session.env}
-                            isActive={isActive}
-                            onSpawn={(ptyId) =>
-                              handleSessionSpawn(session.id, ptyId)
+                  <div
+                    className={
+                      state.viewMode === "grid"
+                        ? "h-full overflow-auto p-2"
+                        : "relative h-full"
+                    }
+                  >
+                    <div
+                      className={
+                        state.viewMode === "grid"
+                          ? "grid gap-2 h-full"
+                          : "contents"
+                      }
+                      style={
+                        state.viewMode === "grid"
+                          ? {
+                              gridTemplateColumns:
+                                "repeat(auto-fit, minmax(400px, 1fr))",
+                              gridAutoRows: "minmax(300px, 1fr)",
                             }
-                            onExit={handleSessionExit(session.id)}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
+                          : undefined
+                      }
+                    >
+                      {liveSessions.map((session) => {
+                        if (!aliveSessionIds.has(session.id)) return null;
+                        const isActive =
+                          session.id === state.activeSessionId;
+                        const isGrid = state.viewMode === "grid";
+                        const canStop =
+                          session.ptyId !== null &&
+                          (session.status === "running" ||
+                            session.status === "idle" ||
+                            session.status === "needs-input");
+
+                        return (
+                          <div
+                            key={session.id}
+                            className={cn(
+                              "flex flex-col bg-background",
+                              isGrid
+                                ? cn(
+                                    "overflow-hidden rounded-md border transition-colors",
+                                    isActive
+                                      ? "border-primary shadow-sm"
+                                      : "hover:border-primary/50",
+                                  )
+                                : "absolute inset-0",
+                            )}
+                            style={
+                              !isGrid
+                                ? {
+                                    display: isActive ? "flex" : "none",
+                                  }
+                                : undefined
+                            }
+                            onClick={
+                              isGrid
+                                ? () => {
+                                    dispatch({
+                                      type: "SET_ACTIVE",
+                                      id: session.id,
+                                    });
+                                    setViewingSession(null);
+                                  }
+                                : undefined
+                            }
+                          >
+                            {/* Header — compact in grid, full in focused */}
+                            {isGrid ? (
+                              <div className="flex shrink-0 items-center gap-2 border-b bg-card px-3 py-1.5">
+                                <AgentIcon
+                                  agent={session.agent}
+                                  className="size-3.5"
+                                />
+                                <span className="text-xs font-medium truncate flex-1">
+                                  {session.label}
+                                </span>
+                                {canStop && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          void handleStopSession(
+                                            session.id,
+                                          );
+                                        }}
+                                      >
+                                        <Square />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      Stop session
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                                <Circle
+                                  className={cn(
+                                    "size-2.5 fill-current",
+                                    session.status === "running" &&
+                                      "text-[var(--sb-status-running)]",
+                                    session.status === "idle" &&
+                                      "text-[var(--sb-status-done)]",
+                                    session.status === "needs-input" &&
+                                      "text-[var(--sb-status-warning)] animate-pulse",
+                                    session.status === "done" &&
+                                      "text-[var(--sb-status-done)]",
+                                    session.status === "stopped" &&
+                                      "text-muted-foreground",
+                                    session.status === "error" &&
+                                      "text-destructive",
+                                  )}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
+                                <AgentIcon
+                                  agent={session.agent}
+                                  className="size-4 shrink-0"
+                                />
+                                <span
+                                  className="min-w-0 max-w-[40ch] truncate font-semibold"
+                                  title={session.label}
+                                >
+                                  {session.label}
+                                </span>
+                                <div className="ml-auto flex shrink-0 items-center gap-2">
+                                  {canStop && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                      onClick={() =>
+                                        void handleStopSession(
+                                          session.id,
+                                        )
+                                      }
+                                    >
+                                      <Square data-icon="inline-start" />
+                                      Stop
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {/* Terminal — pointer-events disabled on inactive grid tiles */}
+                            <div
+                              className="flex-1 min-h-0"
+                              style={
+                                isGrid && !isActive
+                                  ? { pointerEvents: "none" }
+                                  : undefined
+                              }
+                            >
+                              <XTermContainer
+                                command={session.command}
+                                args={session.args}
+                                cwd={session.cwd}
+                                env={session.env}
+                                isActive={
+                                  isGrid ? true : isActive
+                                }
+                                onSpawn={(ptyId) =>
+                                  handleSessionSpawn(
+                                    session.id,
+                                    ptyId,
+                                  )
+                                }
+                                onExit={handleSessionExit(
+                                  session.id,
+                                )}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
 
                 {viewingSession && (

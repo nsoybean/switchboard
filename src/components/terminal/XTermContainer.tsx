@@ -77,7 +77,6 @@ export function XTermContainer({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const fitFrameRef = useRef<number | null>(null);
-  const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSizeRef = useRef<string | null>(null);
   const shouldFitRef = useRef(shouldFit);
   const [terminal, setTerminal] = useState<Terminal | null>(null);
@@ -100,10 +99,6 @@ export function XTermContainer({
       cancelAnimationFrame(fitFrameRef.current);
       fitFrameRef.current = null;
     }
-    if (readyTimerRef.current) {
-      clearTimeout(readyTimerRef.current);
-      readyTimerRef.current = null;
-    }
   }, []);
 
   const fitTerminal = useCallback(
@@ -123,8 +118,6 @@ export function XTermContainer({
 
       if (term.cols === 0 || term.rows === 0) return false;
 
-      term.refresh(0, Math.max(term.rows - 1, 0));
-
       const sizeKey = `${element.clientWidth}x${element.clientHeight}:${term.cols}x${term.rows}`;
 
       if (spawnedRef.current) {
@@ -136,18 +129,20 @@ export function XTermContainer({
       }
 
       lastSizeRef.current = sizeKey;
-      if (readyTimerRef.current) clearTimeout(readyTimerRef.current);
-      readyTimerRef.current = setTimeout(() => {
-        const liveElement = containerRef.current;
-        const liveTerminal = terminalRef.current;
+      // Double-RAF: first frame lets layout settle, second confirms stability (~32ms)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const liveElement = containerRef.current;
+          const liveTerminal = terminalRef.current;
 
-        if (!shouldFitRef.current || !liveElement || !liveTerminal) return;
+          if (!shouldFitRef.current || !liveElement || !liveTerminal) return;
 
-        const stableSizeKey = `${liveElement.clientWidth}x${liveElement.clientHeight}:${liveTerminal.cols}x${liveTerminal.rows}`;
-        if (stableSizeKey === sizeKey) {
-          setReady(true);
-        }
-      }, 80);
+          const stableSizeKey = `${liveElement.clientWidth}x${liveElement.clientHeight}:${liveTerminal.cols}x${liveTerminal.rows}`;
+          if (stableSizeKey === sizeKey) {
+            setReady(true);
+          }
+        });
+      });
 
       return true;
     },
@@ -155,7 +150,7 @@ export function XTermContainer({
   );
 
   const scheduleFit = useCallback(
-    (syncPty: boolean, attempts = 8) => {
+    (syncPty: boolean, attempts = 2) => {
       cancelScheduledFit();
 
       const run = (remainingAttempts: number) => {
@@ -182,6 +177,7 @@ export function XTermContainer({
       lineHeight: 1.4,
       cursorBlink: true,
       cursorStyle: "block",
+      scrollback: 200_000,
       theme: isDark ? DARK_THEME : LIGHT_THEME,
     });
 
