@@ -25,6 +25,7 @@ interface PtyExit {
 export function usePty(
   terminal: Terminal | null,
   onExit?: (code: number | null) => void,
+  onFirstOutput?: () => void,
 ) {
   const ptyIdRef = useRef<number | null>(null);
   const unlistenOutputRef = useRef<UnlistenFn | null>(null);
@@ -32,6 +33,7 @@ export function usePty(
   const writeQueueRef = useRef<Uint8Array[]>([]);
   const rafRef = useRef<number | null>(null);
   const flushTimerRef = useRef<number | undefined>(undefined);
+  const firstOutputFiredRef = useRef(false);
 
   // Forward user input from xterm to PTY.
   // Lives in its own effect so it is set up exactly once per terminal instance
@@ -50,6 +52,7 @@ export function usePty(
     async (options: SpawnOptions): Promise<number> => {
       const id = await invoke<number>("pty_spawn", { options });
       ptyIdRef.current = id;
+      firstOutputFiredRef.current = false;
 
       // Batch incoming output and flush with a 5ms timer (matches VS Code).
       // This coalesces rapid PTY data into fewer terminal.write() calls while
@@ -86,6 +89,10 @@ export function usePty(
         `pty-output-${id}`,
         (event) => {
           if (!terminal) return;
+          if (!firstOutputFiredRef.current) {
+            firstOutputFiredRef.current = true;
+            onFirstOutput?.();
+          }
           writeQueueRef.current.push(new Uint8Array(event.payload.data));
           // Schedule flush: 5ms timer ensures low latency for interactive use;
           // rAF ensures we don't flush mid-frame during high-throughput bursts.
@@ -104,7 +111,7 @@ export function usePty(
 
       return id;
     },
-    [terminal, onExit],
+    [terminal, onExit, onFirstOutput],
   );
 
   const resize = useCallback(async (cols: number, rows: number) => {

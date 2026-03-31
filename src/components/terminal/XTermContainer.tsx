@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { usePty } from "../../hooks/usePty";
 import { useTheme } from "@/components/theme-provider";
+import { Spinner } from "@/components/ui/spinner";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
 
@@ -81,7 +82,9 @@ export function XTermContainer({
   const shouldFitRef = useRef(shouldFit);
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   const [ready, setReady] = useState(false);
-  const { spawn, resize } = usePty(terminal, onExit);
+  const [hasOutput, setHasOutput] = useState(false);
+  const handleFirstOutput = useCallback(() => setHasOutput(true), []);
+  const { spawn, resize } = usePty(terminal, onExit, handleFirstOutput);
   const spawnedRef = useRef(false);
   const { theme } = useTheme();
 
@@ -274,11 +277,19 @@ export function XTermContainer({
   // that would cause a redundant second pty_resize IPC call per resize.
 
   return (
-    <div className="size-full bg-background p-2 border-0">
+    <div className="relative size-full bg-background p-2 border-0">
       <div
         ref={containerRef}
         className="size-full border-0"
       />
+      {!hasOutput && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <Spinner className="size-5" />
+            <span className="text-xs">Starting session…</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
