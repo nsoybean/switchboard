@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { ArrowLeft, Bell, Info, Puzzle, Settings2 } from "lucide-react";
+import { ArrowLeft, Info, Puzzle, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GeneralSettings } from "./GeneralSettings";
-import { NotificationSettings } from "./NotificationSettings";
+// import { NotificationSettings } from "./NotificationSettings";
 import { IntegrationSettings } from "./IntegrationSettings";
 import { AboutSettings } from "./AboutSettings";
 
 const TABS = [
   { id: "general", label: "General", icon: Settings2 },
-  { id: "notifications", label: "Notifications", icon: Bell },
+  // { id: "notifications", label: "Notifications", icon: Bell },
   { id: "integrations", label: "Integrations", icon: Puzzle },
   { id: "about", label: "About", icon: Info },
 ] as const;
@@ -74,7 +74,7 @@ export function SettingsPage({
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-xl py-8 px-6">
             {activeTab === "general" && <GeneralSettings />}
-            {activeTab === "notifications" && <NotificationSettings />}
+            {/* {activeTab === "notifications" && <NotificationSettings />} */}
             {activeTab === "integrations" && <IntegrationSettings />}
             {activeTab === "about" && (
               <AboutSettings

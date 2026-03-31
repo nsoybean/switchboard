@@ -102,6 +102,7 @@ export interface NotificationPrefs {
   notch_enabled: boolean;
   sound_enabled: boolean;
   statuses: {
+    idle: boolean;
     done: boolean;
     error: boolean;
     needs_input: boolean;

@@ -10,6 +10,7 @@ const DEFAULT_PREFS: NotificationPrefs = {
   notch_enabled: true,
   sound_enabled: false,
   statuses: {
+    idle: true,
     done: true,
     error: true,
     needs_input: true,
@@ -104,6 +105,15 @@ export function NotificationSettings() {
         </p>
 
         <div className="space-y-3">
+          <StatusToggle
+            label="Idle"
+            description="Session finished and is waiting"
+            color="var(--sb-status-done)"
+            checked={prefs.statuses.idle}
+            onChange={(v) =>
+              update({ ...prefs, statuses: { ...prefs.statuses, idle: v } })
+            }
+          />
           <StatusToggle
             label="Turn complete"
             description="Session finished its turn"
