@@ -127,7 +127,7 @@ export function usePty(
     }
   }, []);
 
-  // Cleanup listeners, pending RAF, and flush timer on unmount
+  // Cleanup listeners, pending RAF, and flush remaining data on unmount
   useEffect(() => {
     return () => {
       if (rafRef.current !== null) {
@@ -137,11 +137,28 @@ export function usePty(
       if (flushTimerRef.current !== undefined) {
         clearTimeout(flushTimerRef.current);
         flushTimerRef.current = undefined;
+        // Flush remaining buffered data so the last batch isn't lost
+        const queue = writeQueueRef.current;
+        if (queue.length > 0 && terminal) {
+          writeQueueRef.current = [];
+          if (queue.length === 1) {
+            terminal.write(queue[0]!);
+          } else {
+            const totalLength = queue.reduce((sum, c) => sum + c.length, 0);
+            const combined = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const chunk of queue) {
+              combined.set(chunk, offset);
+              offset += chunk.length;
+            }
+            terminal.write(combined);
+          }
+        }
       }
       unlistenOutputRef.current?.();
       unlistenExitRef.current?.();
     };
-  }, []);
+  }, [terminal]);
 
   return { spawn, resize, kill, ptyId: ptyIdRef };
 }

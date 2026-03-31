@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { usePty } from "../../hooks/usePty";
 import { useTheme } from "@/components/theme-provider";
 import { Spinner } from "@/components/ui/spinner";
@@ -182,6 +183,7 @@ export function XTermContainer({
       cursorStyle: "block",
       scrollback: 200_000,
       theme: isDark ? DARK_THEME : LIGHT_THEME,
+      allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();
@@ -189,6 +191,12 @@ export function XTermContainer({
 
     term.open(containerRef.current);
 
+    const unicode11 = new Unicode11Addon();
+    term.loadAddon(unicode11);
+    term.unicode.activeVersion = "11";
+
+    // WebGL renderer: double-buffered canvas avoids partial-paint
+    // artifacts the DOM renderer can show during rapid sequential writes.
     try {
       const webglAddon = new WebglAddon();
       webglAddon.onContextLoss(() => {
@@ -196,7 +204,7 @@ export function XTermContainer({
       });
       term.loadAddon(webglAddon);
     } catch {
-      // Canvas renderer fallback
+      // DOM renderer fallback
     }
 
     terminalRef.current = term;
@@ -206,14 +214,15 @@ export function XTermContainer({
 
     // rAF-coalesced resize: cancels pending frame and schedules a new one,
     // so rapid resize events (panel drags) collapse to a single fit per frame
-    // (~16ms) instead of the previous 50ms setTimeout debounce.
+    // (~16ms). Calls fitTerminal directly to avoid the double-rAF latency
+    // that scheduleFit would add.
     let resizeRafId = 0;
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
       if (width > 0 && height > 0) {
         cancelAnimationFrame(resizeRafId);
         resizeRafId = requestAnimationFrame(() => {
-          scheduleFit(true, 1);
+          fitTerminal(true);
         });
       }
     });
