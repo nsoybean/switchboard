@@ -77,6 +77,12 @@ pub fn pty_spawn(
     if let Some(cwd) = &options.cwd {
         cmd.cwd(cwd);
     }
+    // Inherit PATH so spawned commands (claude, codex, etc.) are discoverable.
+    // portable-pty's CommandBuilder::new() uses a minimal default PATH on macOS
+    // (/usr/bin:/bin:/usr/sbin:/sbin) which won't include user-installed tools.
+    if let Ok(path) = std::env::var("PATH") {
+        cmd.env("PATH", path);
+    }
     // Set TERM for proper terminal rendering
     cmd.env("TERM", "xterm-256color");
     if let Some(env) = &options.env {

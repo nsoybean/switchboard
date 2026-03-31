@@ -6,8 +6,8 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { ThemeProvider } from "./components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
-import { NotchNotification } from "./components/layout/NotchNotification";
-import { useNotchNotifications } from "./hooks/useNotchNotifications";
+// TODO: dock bounce + badge when session needs attention (idle/needs-input) while unfocused
+// import { useDockAttention } from "./hooks/useNotchNotifications";
 
 type ResizeDirection =
   | "East"
@@ -68,18 +68,10 @@ const RESIZE_HANDLES: ResizeHandle[] = [
   },
 ];
 
-function NotchNotificationLayer() {
-  const { notifications, dismissNotification, handleNotificationClick } =
-    useNotchNotifications();
-
-  return (
-    <NotchNotification
-      notifications={notifications}
-      onDismiss={dismissNotification}
-      onClick={handleNotificationClick}
-    />
-  );
-}
+// function DockAttentionLayer() {
+//   useDockAttention();
+//   return null;
+// }
 
 function App() {
   const isMacOS =
@@ -150,7 +142,7 @@ function App() {
               <AppLayout />
             </div>
           </div>
-          <NotchNotificationLayer />
+          {/* <DockAttentionLayer /> */}
           <Toaster position="bottom-right" richColors />
         </AppProvider>
       </TooltipProvider>

@@ -23,16 +23,19 @@ struct HandlerState {
     app_handle: AppHandle,
 }
 
-/// Incoming hook payload from Claude Code (only the fields we need).
+/// Incoming hook payload (shared fields used by both Claude and Codex).
+/// Claude uses snake_case, Codex may use camelCase — accept both.
 #[derive(Deserialize)]
-struct ClaudeHookPayload {
+struct AgentHookPayload {
+    #[serde(alias = "sessionId")]
     session_id: String,
+    #[serde(alias = "hookEventName")]
     hook_event_name: String,
 }
 
 /// Event emitted to the Tauri frontend.
 #[derive(Serialize, Clone)]
-pub struct ClaudeHookEvent {
+pub struct AgentHookEvent {
     pub session_id: String,
     pub event_name: String,
 }
@@ -72,6 +75,7 @@ pub fn spawn_hook_server(
 
         let app = Router::new()
             .route("/claude-hooks", post(handle_hook))
+            .route("/codex-hooks", post(handle_hook))
             .with_state(handler_state);
 
         axum::serve(listener, app)
@@ -96,17 +100,26 @@ async fn handle_hook(
     }
 
     // Parse payload
-    let payload: ClaudeHookPayload = match serde_json::from_str(&body) {
+    let payload: AgentHookPayload = match serde_json::from_str(&body) {
         Ok(p) => p,
-        Err(_) => return StatusCode::BAD_REQUEST,
+        Err(e) => {
+            log::warn!("Failed to parse hook payload: {e}. Body: {body}");
+            return StatusCode::BAD_REQUEST;
+        }
     };
 
-    // Emit Tauri event to frontend
-    let event = ClaudeHookEvent {
+    log::info!(
+        "Hook received: session={} event={}",
+        payload.session_id,
+        payload.hook_event_name
+    );
+
+    // Emit Tauri event to frontend (single event name for all agents)
+    let event = AgentHookEvent {
         session_id: payload.session_id,
         event_name: payload.hook_event_name,
     };
-    let _ = state.app_handle.emit("claude-hook", event);
+    let _ = state.app_handle.emit("agent-hook", event);
 
     StatusCode::OK
 }

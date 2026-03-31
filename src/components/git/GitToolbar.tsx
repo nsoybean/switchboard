@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
-import { GitBranch, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
@@ -19,12 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CreatePrDialog } from "./CreatePrDialog";
-import type { DiffStats } from "../../lib/tauri-commands";
-
 interface GitToolbarProps {
-  branch: string;
   branchActionPending: boolean;
-  stats: DiffStats;
   cwd: string;
   githubToken: string | null;
   onCommit: (message: string) => Promise<void>;
@@ -36,9 +32,7 @@ interface GitToolbarProps {
 }
 
 export function GitToolbar({
-  branch,
   branchActionPending,
-  stats,
   cwd,
   githubToken,
   onCommit,
@@ -121,19 +115,6 @@ export function GitToolbar({
 
   return (
     <div className="flex flex-col gap-2 p-3 border-b overflow-hidden">
-      {/* Branch label + stats */}
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
-          <GitBranch className="size-3 shrink-0" />
-          <span className="truncate">{branch || "\u2014"}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-1.5 text-[11px]">
-          <span className="text-[var(--sb-diff-add-fg)]">+{stats.additions}</span>
-          <span className="text-[var(--sb-diff-del-fg)]">-{stats.deletions}</span>
-          <span className="text-muted-foreground">{stats.files_changed} files</span>
-        </span>
-      </div>
-
       {/* Action buttons */}
       <div className="flex gap-1.5">
         <DropdownMenu>

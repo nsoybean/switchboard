@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderTree } from "lucide-react";
+import { File, FolderTree } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getBranchPrefix } from "@/lib/branches";
 import { useGitState } from "@/hooks/useGitState";
@@ -140,7 +140,33 @@ export function WorkspacePanel({
                   : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
-              {tab === "files" ? "Files" : "Changes"}
+              {tab === "files" ? (
+                "Files"
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  Changes
+                  {hasRoot && (
+                    <span className="flex items-center gap-1 text-[10px] font-normal tabular-nums">
+                      {git.stats.additions === 0 && git.stats.deletions === 0 && git.stats.files_changed === 0 ? (
+                        <span className="flex items-center gap-0.5 text-muted-foreground">
+                          <span className="flex flex-col leading-[0.85] text-[8px]">
+                            <span>+</span>
+                            <span>-</span>
+                          </span>
+                          0
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-[var(--sb-diff-add-fg)]">+{git.stats.additions}</span>
+                          <span className="text-[var(--sb-diff-del-fg)]">-{git.stats.deletions}</span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="inline-flex items-center gap-0.5 text-muted-foreground"><File className="size-2.5" />{git.stats.files_changed}</span>
+                        </>
+                      )}
+                    </span>
+                  )}
+                </span>
+              )}
             </button>
           ))}
         </div>

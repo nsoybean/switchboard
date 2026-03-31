@@ -4530,6 +4530,7 @@ dependencies = [
  "tempfile",
  "time",
  "tokio",
+ "toml 0.8.2",
  "ureq",
  "uuid",
 ]

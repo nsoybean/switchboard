@@ -102,6 +102,7 @@ export interface NotificationPrefs {
   notch_enabled: boolean;
   sound_enabled: boolean;
   statuses: {
+    idle: boolean;
     done: boolean;
     error: boolean;
     needs_input: boolean;
@@ -114,6 +115,8 @@ export const hookCommands = {
   getToken: () => invoke<string>("get_hook_token"),
   writeConfig: (cwd: string, port: number) =>
     invoke<void>("write_claude_hook_config", { cwd, port }),
+  writeCodexConfig: (cwd: string, port: number) =>
+    invoke<void>("write_codex_hook_config", { cwd, port }),
 };
 
 export const worktreeCommands = {

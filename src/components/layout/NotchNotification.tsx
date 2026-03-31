@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { CircleCheck, CircleAlert, MessageCircleQuestion } from "lucide-react";
+import { CircleCheck, CircleAlert, CirclePause, MessageCircleQuestion } from "lucide-react";
 import type { SessionStatus } from "@/state/types";
 
 export interface NotchNotificationItem {
@@ -18,6 +18,8 @@ interface NotchNotificationProps {
 
 function statusIcon(status: SessionStatus) {
   switch (status) {
+    case "idle":
+      return <CirclePause className="size-3.5 shrink-0 text-blue-400" />;
     case "done":
       return <CircleCheck className="size-3.5 shrink-0 text-emerald-400" />;
     case "error":
@@ -34,6 +36,8 @@ function statusIcon(status: SessionStatus) {
 
 function statusLabel(status: SessionStatus) {
   switch (status) {
+    case "idle":
+      return "idle";
     case "done":
       return "finished";
     case "error":
