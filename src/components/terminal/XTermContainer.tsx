@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { usePty } from "../../hooks/usePty";
 import { useTheme } from "@/components/theme-provider";
-import { Spinner } from "@/components/ui/spinner";
+// import { Spinner } from "@/components/ui/spinner";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
 
@@ -82,7 +82,7 @@ export function XTermContainer({
   const shouldFitRef = useRef(shouldFit);
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   const [ready, setReady] = useState(false);
-  const [hasOutput, setHasOutput] = useState(false);
+  const [_hasOutput, setHasOutput] = useState(false);
   const handleFirstOutput = useCallback(() => setHasOutput(true), []);
   const { spawn, resize } = usePty(terminal, onExit, handleFirstOutput);
   const spawnedRef = useRef(false);
@@ -282,6 +282,7 @@ export function XTermContainer({
         ref={containerRef}
         className="size-full border-0"
       />
+      {/* temporarily hidden to check for errors
       {!hasOutput && (
         <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -290,6 +291,7 @@ export function XTermContainer({
           </div>
         </div>
       )}
+      */}
     </div>
   );
 }
