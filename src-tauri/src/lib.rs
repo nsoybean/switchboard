@@ -3,8 +3,12 @@ mod hook_server;
 
 use commands::pty::PtyState;
 
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // macOS and Linux GUI apps lose access to your shell's $PATH env
+    let _ = fix_path_env::fix();
+
     // Bind hook server port synchronously so state is always available
     let (hook_state, hook_listener) = hook_server::init_hook_server();
     let hook_token = hook_state.token.clone();

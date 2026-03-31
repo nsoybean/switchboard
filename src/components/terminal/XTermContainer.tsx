@@ -278,10 +278,7 @@ export function XTermContainer({
 
   return (
     <div className="relative size-full bg-background p-2 border-0">
-      <div
-        ref={containerRef}
-        className="size-full border-0"
-      />
+      <div ref={containerRef} className="size-full border-0" />
       {!hasOutput && (
         <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
