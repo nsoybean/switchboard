@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://nsoybean.github.io"),
   title: "Switchboard — Parallel Coding Agents Workspace",
   description:
     "Launch coding agents in isolated worktrees, monitor progress across sessions, and review every change — all from one native macOS app.",
