@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/switchboard/main_dark_mode.png",
+        url: "/switchboard/og_image_main_dark_mode.png",
         width: 2786,
         height: 1782,
         alt: "Switchboard workspace showing parallel coding agent sessions with built-in git review",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     title: "Switchboard — Parallel Coding Agents Workspace",
     description:
       "Launch coding agents in isolated worktrees, monitor progress across sessions, and review every change — all from one native macOS app.",
-    images: ["/switchboard/main_dark_mode.png"],
+    images: ["/switchboard/og_image_main_dark_mode.png"],
   },
 };
 
