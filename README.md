@@ -7,7 +7,7 @@
 **The open-source multi-agent workspace.** Run Claude Code, Codex, and Bash side by side — each in its own terminal, its own branch, its own worktree. Review and ship from one window.
 
 <p align="center">
-  <img src="./public/hero-shot.png" alt="Switchboard showing multiple Claude Code and Codex sessions in one desktop window" width="1120" />
+  <img src="./public/main_dark_mode.png" alt="Switchboard showing multiple Claude Code and Codex sessions in one desktop window" width="1120" />
 </p>
 
 Switchboard is an open-source desktop app for running Claude Code, Codex, and Bash side by side without giving up the native terminal workflow. Each session gets a real interactive terminal, optional git worktree isolation, and a built-in git panel for reviewing and shipping changes from the same window.
@@ -31,9 +31,11 @@ curl -fsSL https://raw.githubusercontent.com/nsoybean/switchboard/main/scripts/i
 You'll also need at least one of: [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex).
 
 > **macOS Gatekeeper notice:** Since the app is not yet code-signed with an Apple Developer certificate, macOS may block it from opening. To bypass this, run:
+>
 > ```bash
 > xattr -cr /Applications/Switchboard.app
 > ```
+>
 > Then open the app normally.
 
 ## Why
@@ -75,14 +77,14 @@ Early alpha. The core works — you can spawn Claude Code and Codex sessions, in
 
 ## Tech Stack
 
-| Layer              | Technology                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------------- |
-| Desktop framework  | [Tauri v2](https://v2.tauri.app/) (Rust)                                                       |
-| Frontend           | React 19 + TypeScript + Tailwind CSS                                                           |
-| Terminal emulation | [xterm.js](https://xtermjs.org/) v6 + WebGL addon                                              |
-| PTY management     | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands)                  |
-| Git operations     | Git CLI subprocess                                                                             |
-| State management   | React Context + useReducer                                                                     |
+| Layer              | Technology                                                                    |
+| ------------------ | ----------------------------------------------------------------------------- |
+| Desktop framework  | [Tauri v2](https://v2.tauri.app/) (Rust)                                      |
+| Frontend           | React 19 + TypeScript + Tailwind CSS                                          |
+| Terminal emulation | [xterm.js](https://xtermjs.org/) v6 + WebGL addon                             |
+| PTY management     | [portable-pty](https://crates.io/crates/portable-pty) (custom Tauri commands) |
+| Git operations     | Git CLI subprocess                                                            |
+| State management   | React Context + useReducer                                                    |
 
 ## Architecture
 
