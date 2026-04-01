@@ -1,6 +1,6 @@
 [package]
 name = "switchboard"
-version = "0.1.4"
+version = "0.1.5"
 description = "Open-source multi-agent orchestrator for AI coding agents"
 authors = ["nyangshawbin"]
 license = "MIT"
