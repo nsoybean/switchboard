@@ -181,10 +181,11 @@ fn parse_session_summary(
                 if t == "user" {
                     if let Some(ref message) = msg.message {
                         if let Some(ref content) = message.content {
-                            first_user_message = match content {
-                                serde_json::Value::String(s) => Some(truncate(s, 100)),
-                                _ => Some(truncate(&content.to_string(), 100)),
-                            };
+                            let text = extract_json_text(content);
+                            if !text.trim().is_empty() {
+                                let first_line = text.lines().next().unwrap_or("");
+                                first_user_message = Some(truncate(first_line.trim(), 100));
+                            }
                         }
                     }
                     timestamp = msg.timestamp.clone();
