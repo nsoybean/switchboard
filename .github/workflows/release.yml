@@ -81,7 +81,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_MESSAGE=$(git show -s --format=%b ${{ github.ref_name }} 2>/dev/null || echo "")
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${{ github.ref_name }} 2>/dev/null || echo "")
           if [ -n "$TAG_MESSAGE" ]; then
             gh release edit ${{ github.ref_name }} --notes "$TAG_MESSAGE"
           fi
