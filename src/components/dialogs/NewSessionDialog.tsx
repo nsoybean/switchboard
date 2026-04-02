@@ -34,7 +34,7 @@ interface NewSessionDialogProps {
 const AGENTS: { id: AgentType; name: string }[] = [
   { id: "claude-code", name: "Claude Code" },
   { id: "codex", name: "Codex" },
-  { id: "bash", name: "Bash" },
+  { id: "bash", name: "Shell" },
 ];
 
 export function NewSessionDialog({

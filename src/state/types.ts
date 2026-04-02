@@ -36,7 +36,7 @@ export interface Session {
   cwd: string;
   createdAt: string;
   exitCode: number | null;
-  /** CLI command to spawn (e.g., "claude", "codex", "/bin/bash") */
+  /** CLI command to spawn (e.g., "claude", "codex", "/bin/zsh") */
   command: string;
   /** CLI arguments */
   args: string[];

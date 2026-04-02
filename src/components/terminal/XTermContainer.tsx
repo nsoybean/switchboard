@@ -64,7 +64,7 @@ interface XTermContainerProps {
 
 export function XTermContainer({
   tileId,
-  command = "/bin/bash",
+  command = "/bin/zsh",
   args = [],
   cwd,
   env,
