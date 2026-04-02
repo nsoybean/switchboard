@@ -8,11 +8,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronRight, FolderGit2, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderGit2, MoreHorizontal, Plus } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { SessionCard } from "./SessionCard";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatCompactRelativeTime, formatTimestampTitle } from "@/lib/time";
 import type { Session } from "../../state/types";
 
@@ -20,6 +27,8 @@ interface SessionSidebarProps {
   onNewSession: () => void;
   onAddProject?: () => void;
   onSelectProject?: (path: string) => Promise<void> | void;
+  onOpenProject?: (path: string) => Promise<void> | void;
+  onRemoveProject?: (path: string) => Promise<void> | void;
   onViewSession?: (session: Session) => void;
   onSelectActiveSession?: (sessionId?: string) => void;
   onResumeSession?: (session: Session) => Promise<void> | void;
@@ -43,6 +52,8 @@ export function SessionSidebar({
   onNewSession,
   onAddProject,
   onSelectProject,
+  onOpenProject,
+  onRemoveProject,
   onViewSession,
   onSelectActiveSession,
   onResumeSession,
@@ -69,12 +80,9 @@ export function SessionSidebar({
       sessionsByProject.set(projectPath, current);
     });
 
-    const orderedProjectPaths = [
-      ...state.projects,
-      ...Array.from(sessionsByProject.keys()).filter(
-        (path) => !state.projects.includes(path),
-      ),
-    ];
+    const orderedProjectPaths = state.projectPath
+      ? Array.from(new Set([...state.projects, state.projectPath]))
+      : state.projects;
 
     return orderedProjectPaths.map((path) => ({
       path,
@@ -84,7 +92,7 @@ export function SessionSidebar({
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       ),
     }));
-  }, [state.projects, state.sessions]);
+  }, [state.projectPath, state.projects, state.sessions]);
 
   const totalSessionCount = useMemo(
     () => projectGroups.reduce((count, group) => count + group.sessions.length, 0),
@@ -264,6 +272,40 @@ export function SessionSidebar({
                           {group.sessions.length}
                         </span>
                       </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            className="mr-1 size-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/project:opacity-100 group-focus-within/project:opacity-100 data-[state=open]:opacity-100"
+                            onClick={(event) => event.stopPropagation()}
+                            title={`${group.name} actions`}
+                          >
+                            <MoreHorizontal className="size-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            disabled={!onOpenProject}
+                            onSelect={() => {
+                              void onOpenProject?.(group.path);
+                            }}
+                          >
+                            Open in Finder
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={!onRemoveProject}
+                            className="text-destructive focus:text-destructive"
+                            onSelect={() => {
+                              void onRemoveProject?.(group.path);
+                            }}
+                          >
+                            Remove
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
 
                     {!isCollapsed ? (

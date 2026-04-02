@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PersistedSession {
@@ -260,6 +261,39 @@ pub fn remove_project_path(path: String) -> Result<(), String> {
     }
 
     write_config(&config)
+}
+
+/// Open a project directory in the platform file manager
+#[tauri::command]
+pub fn open_project_in_finder(path: String) -> Result<(), String> {
+    let canonical = validate_repo_path(&path)?;
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(&canonical);
+        command
+    };
+
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(&canonical);
+        command
+    };
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer");
+        command.arg(&canonical);
+        command
+    };
+
+    command
+        .spawn()
+        .map_err(|e| format!("Failed to open project: {}", e))?;
+
+    Ok(())
 }
 
 /// Get the stored GitHub token

@@ -2,7 +2,7 @@ use super::session_metadata;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 
 /// Summary of a Claude Code session extracted from JSONL
@@ -96,6 +96,33 @@ fn find_claude_session_file(session_id: &str) -> Option<PathBuf> {
     None
 }
 
+fn claude_history_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(".claude").join("history.jsonl"))
+}
+
+fn rewrite_jsonl_file(
+    path: &PathBuf,
+    should_keep: impl Fn(&str) -> bool,
+) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let content = fs::read_to_string(path).map_err(|e| format!("Read failed: {}", e))?;
+    let mut next = String::new();
+
+    for line in content.lines() {
+        if should_keep(line) {
+            next.push_str(line);
+            next.push('\n');
+        }
+    }
+
+    let mut file = fs::File::create(path).map_err(|e| format!("Write failed: {}", e))?;
+    file.write_all(next.as_bytes())
+        .map_err(|e| format!("Write failed: {}", e))
+}
+
 
 /// Read all Claude sessions for a given project path
 #[tauri::command]
@@ -143,6 +170,41 @@ pub fn get_claude_sessions(project_path: String) -> Result<Vec<ClaudeSessionSumm
     summaries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
     Ok(summaries)
+}
+
+#[tauri::command]
+pub fn delete_claude_session(session_id: String) -> Result<(), String> {
+    if let Some(session_file) = find_claude_session_file(&session_id) {
+        if session_file.exists() {
+            fs::remove_file(&session_file)
+                .map_err(|e| format!("Failed to delete Claude session file: {}", e))?;
+        }
+
+        let bundle_dir = session_file.with_extension("");
+        if bundle_dir.exists() {
+            fs::remove_dir_all(&bundle_dir)
+                .map_err(|e| format!("Failed to delete Claude session bundle: {}", e))?;
+        }
+    }
+
+    if let Some(history_path) = claude_history_path() {
+        rewrite_jsonl_file(&history_path, |line| {
+            if line.trim().is_empty() {
+                return false;
+            }
+
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                return true;
+            };
+
+            value
+                .get("sessionId")
+                .and_then(|value| value.as_str())
+                != Some(session_id.as_str())
+        })?;
+    }
+
+    Ok(())
 }
 
 /// Parse a session JSONL file to extract the first user message and usage stats

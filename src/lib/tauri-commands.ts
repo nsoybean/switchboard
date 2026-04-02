@@ -107,6 +107,7 @@ export const projectCommands = {
   listPaths: () => invoke<string[]>("list_project_paths"),
   addPath: (path: string) => invoke<void>("add_project_path", { path }),
   removePath: (path: string) => invoke<void>("remove_project_path", { path }),
+  openInFinder: (path: string) => invoke<void>("open_project_in_finder", { path }),
 };
 
 export const sessionCommands = {

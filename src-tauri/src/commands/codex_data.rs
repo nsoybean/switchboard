@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::io::Write;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct CodexSessionSummary {
@@ -69,6 +70,69 @@ fn codex_archived_sessions_dir() -> Option<PathBuf> {
     ];
 
     candidates.into_iter().find(|path| path.exists())
+}
+
+fn codex_history_path() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    let candidates = [
+        home.join(".Codex").join("history.jsonl"),
+        home.join(".codex").join("history.jsonl"),
+    ];
+
+    candidates.into_iter().find(|path| path.exists())
+}
+
+fn codex_session_index_path() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    let candidates = [
+        home.join(".Codex").join("session_index.jsonl"),
+        home.join(".codex").join("session_index.jsonl"),
+    ];
+
+    candidates.into_iter().find(|path| path.exists())
+}
+
+fn rewrite_jsonl_file(
+    path: &PathBuf,
+    should_keep: impl Fn(&str) -> bool,
+) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let content = fs::read_to_string(path).map_err(|e| format!("Read failed: {}", e))?;
+    let mut next = String::new();
+
+    for line in content.lines() {
+        if should_keep(line) {
+            next.push_str(line);
+            next.push('\n');
+        }
+    }
+
+    let mut file = fs::File::create(path).map_err(|e| format!("Write failed: {}", e))?;
+    file.write_all(next.as_bytes())
+        .map_err(|e| format!("Write failed: {}", e))
+}
+
+fn run_codex_statement(statement: &str) -> Result<(), String> {
+    let db_path =
+        codex_state_db_path().ok_or_else(|| "Could not find Codex state database".to_string())?;
+    let db_str = db_path
+        .to_str()
+        .ok_or_else(|| "Invalid Codex state database path".to_string())?;
+
+    let output = Command::new("sqlite3")
+        .args([db_str, statement])
+        .output()
+        .map_err(|e| format!("Failed to run sqlite3: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("sqlite3 statement failed: {}", stderr.trim()));
+    }
+
+    Ok(())
 }
 
 
@@ -259,6 +323,61 @@ pub fn find_codex_session(
         .map(|(_, row)| to_summary(&row));
 
     Ok(best)
+}
+
+#[tauri::command]
+pub fn delete_codex_session(session_id: String) -> Result<(), String> {
+    let transcript_path = find_codex_transcript_path(&session_id).ok();
+    let escaped = escape_sql(&session_id);
+    let statement = format!(
+        "BEGIN IMMEDIATE;\
+         UPDATE agent_job_items SET assigned_thread_id = NULL WHERE assigned_thread_id = '{escaped}';\
+         DELETE FROM logs WHERE thread_id = '{escaped}';\
+         DELETE FROM thread_spawn_edges WHERE parent_thread_id = '{escaped}' OR child_thread_id = '{escaped}';\
+         DELETE FROM threads WHERE id = '{escaped}';\
+         COMMIT;"
+    );
+    run_codex_statement(&statement)?;
+
+    if let Some(path) = transcript_path {
+        if path.exists() {
+            fs::remove_file(&path)
+                .map_err(|e| format!("Failed to delete Codex transcript file: {}", e))?;
+        }
+    }
+
+    if let Some(history_path) = codex_history_path() {
+        rewrite_jsonl_file(&history_path, |line| {
+            if line.trim().is_empty() {
+                return false;
+            }
+
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                return true;
+            };
+
+            value
+                .get("session_id")
+                .and_then(|value| value.as_str())
+                != Some(session_id.as_str())
+        })?;
+    }
+
+    if let Some(index_path) = codex_session_index_path() {
+        rewrite_jsonl_file(&index_path, |line| {
+            if line.trim().is_empty() {
+                return false;
+            }
+
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                return true;
+            };
+
+            value.get("id").and_then(|value| value.as_str()) != Some(session_id.as_str())
+        })?;
+    }
+
+    Ok(())
 }
 
 

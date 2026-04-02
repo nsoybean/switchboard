@@ -636,6 +636,76 @@ export function AppLayout() {
 
   const openSettings = useCallback(() => setSettingsOpen(true), []);
 
+  const handleSelectProject = useCallback(
+    async (path: string) => {
+      try {
+        await projectCommands.setPath(path);
+        dispatch({ type: "SET_PROJECT_PATH", path });
+        setViewingSession(null);
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      } catch (err) {
+        toast.error("Failed to switch project", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch],
+  );
+
+  const handleOpenProject = useCallback(async (path: string) => {
+    try {
+      await projectCommands.openInFinder(path);
+    } catch (err) {
+      toast.error("Failed to open project", {
+        description: String(err),
+      });
+    }
+  }, []);
+
+  const handleRemoveProject = useCallback(
+    async (path: string) => {
+      try {
+        await projectCommands.removePath(path);
+        const [nextProjectPath, projectPaths] = await Promise.all([
+          projectCommands.getPath(),
+          projectCommands.listPaths(),
+        ]);
+
+        dispatch({ type: "SET_PROJECTS", paths: projectPaths });
+        dispatch({ type: "SET_PROJECT_PATH", path: nextProjectPath });
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+
+        const nextActiveSessionId = nextProjectPath
+          ? Object.values(sessionsRef.current)
+              .filter(
+                (session) =>
+                  sessionBelongsToProject(session, nextProjectPath) &&
+                  (session.status === "running" ||
+                    session.status === "idle" ||
+                    session.status === "needs-input"),
+              )
+              .sort(
+                (a, b) =>
+                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+              )[0]?.id ?? null
+          : null;
+
+        dispatch({ type: "SET_ACTIVE", id: nextActiveSessionId });
+        setViewingSession((current) => {
+          if (!current || sessionBelongsToProject(current, nextProjectPath)) {
+            return current;
+          }
+          return null;
+        });
+      } catch (err) {
+        toast.error("Failed to remove project", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch],
+  );
+
   const handleSessionBranchChange = useCallback(
     async (sessionId: string, branch: string | null) => {
       const session = state.sessions[sessionId];
@@ -771,26 +841,41 @@ export function AppLayout() {
     async (session: Session) => {
       const localSession = state.sessions[session.id];
       const historySessionId = session.resumeTargetId ?? session.id;
-      if (!localSession) {
-        try {
-          await invoke("delete_session_metadata", {
-            sessionId: historySessionId,
-          });
-        } catch (err) {
-          toast.error("Failed to delete session", {
-            description: String(err),
-          });
-        }
-        return;
-      }
-
-      await invoke("close_terminal", { tileId: localSession.id }).catch((err) => {
-        console.warn("Failed to close terminal during session deletion:", err);
-      });
 
       try {
-        await invoke("delete_session", { id: localSession.id });
-        dispatch({ type: "REMOVE_SESSION", id: localSession.id });
+        if (localSession) {
+          await invoke("close_terminal", { tileId: localSession.id }).catch((err) => {
+            console.warn("Failed to close terminal during session deletion:", err);
+          });
+        }
+
+        if (session.agent === "claude-code") {
+          await invoke("delete_claude_session", {
+            sessionId: historySessionId,
+          });
+        } else if (session.agent === "codex") {
+          const codexSessionId =
+            historySessionId || (localSession ? await syncCodexResumeTarget(localSession) : null);
+          if (codexSessionId) {
+            await invoke("delete_codex_session", {
+              sessionId: codexSessionId,
+            });
+          }
+        }
+
+        if (localSession) {
+          await invoke("delete_session", { id: localSession.id });
+          dispatch({ type: "REMOVE_SESSION", id: localSession.id });
+        }
+
+        if (!localSession) {
+          await invoke("delete_session_metadata", {
+            sessionId: historySessionId,
+          }).catch(() => {
+            // Ignore missing overlay metadata when the real source deletion succeeded.
+          });
+        }
+
         dispatch({ type: "SET_PREVIEW_FILE", path: null });
       } catch (err) {
         toast.error("Failed to delete session", {
@@ -798,7 +883,7 @@ export function AppLayout() {
         });
       }
     },
-    [dispatch, state.sessions],
+    [dispatch, state.sessions, syncCodexResumeTarget],
   );
 
   const shortcutHandlers = useMemo(
@@ -919,18 +1004,9 @@ export function AppLayout() {
                 <SessionSidebar
                   onNewSession={() => setDialogOpen(true)}
                   onAddProject={() => setProjectPickerOpen(true)}
-                  onSelectProject={async (path) => {
-                    try {
-                      await projectCommands.setPath(path);
-                      dispatch({ type: "SET_PROJECT_PATH", path });
-                      setViewingSession(null);
-                      dispatch({ type: "SET_PREVIEW_FILE", path: null });
-                    } catch (err) {
-                      toast.error("Failed to switch project", {
-                        description: String(err),
-                      });
-                    }
-                  }}
+                  onSelectProject={handleSelectProject}
+                  onOpenProject={handleOpenProject}
+                  onRemoveProject={handleRemoveProject}
                   onViewSession={(session) => {
                     dispatch({ type: "SET_PREVIEW_FILE", path: null });
                     if (state.sessions[session.id]) {
