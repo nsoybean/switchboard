@@ -227,7 +227,7 @@ export function XTermContainer({
         // App shutdown can race with Tauri teardown; ignore cleanup failures.
       });
     };
-  }, [args, command, cwd, env, isDark, tileId]);
+  }, [args, command, cwd, env, tileId]);
 
   useEffect(() => {
     if (terminalRef.current) {
