@@ -6,7 +6,6 @@ export const initialState: AppState = {
   gitPanelOpen: false,
   projectPath: null,
   projects: [],
-  viewMode: "focused",
   previewFilePath: null,
   githubToken: null,
 };
@@ -92,18 +91,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
-    case "SET_PTY_ID": {
-      const session = state.sessions[action.id];
-      if (!session) return state;
-      return {
-        ...state,
-        sessions: {
-          ...state.sessions,
-          [action.id]: { ...session, ptyId: action.ptyId },
-        },
-      };
-    }
-
     case "SET_RESUME_TARGET": {
       const session = state.sessions[action.id];
       if (!session) return state;
@@ -134,13 +121,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         projects: action.paths,
-      };
-    }
-
-    case "SET_VIEW_MODE": {
-      return {
-        ...state,
-        viewMode: action.mode,
       };
     }
 

@@ -9,7 +9,6 @@ interface ShortcutHandlers {
   onToggleGitPanel: () => void;
   onFocusTerminal: () => void;
   onToggleFileTree?: () => void;
-  onToggleViewMode?: () => void;
   /** Called on Escape. Return true if handled (suppresses default onFocusTerminal). */
   onEscape?: () => boolean;
 }
@@ -73,13 +72,6 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if ((e.ctrlKey || e.metaKey) && e.key === "e") {
         e.preventDefault();
         handlers.onToggleFileTree?.();
-        return;
-      }
-
-      // Ctrl+Shift+S — toggle view mode
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
-        e.preventDefault();
-        handlers.onToggleViewMode?.();
         return;
       }
 

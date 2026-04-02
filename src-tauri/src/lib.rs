@@ -1,7 +1,7 @@
 mod commands;
 mod hook_server;
 
-use commands::pty::PtyState;
+use commands::pty::SessionRegistry;
 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -14,7 +14,7 @@ pub fn run() {
     let hook_token = hook_state.token.clone();
 
     tauri::Builder::default()
-        .manage(PtyState::new())
+        .manage(SessionRegistry::new())
         .manage(hook_state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -44,10 +44,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::pty::pty_spawn,
-            commands::pty::pty_write,
-            commands::pty::pty_resize,
-            commands::pty::pty_kill,
+            commands::pty::create_terminal,
+            commands::pty::write_terminal,
+            commands::pty::resize_terminal,
+            commands::pty::close_terminal,
             commands::claude_data::get_claude_sessions,
             commands::claude_data::get_claude_history,
             commands::claude_data::get_claude_session_transcript,

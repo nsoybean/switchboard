@@ -1,6 +1,4 @@
-// Canvas tile data model. Pure data, no DOM.
-
-export type TileType = "terminal" | "label";
+export type TileType = "terminal";
 
 export interface CanvasTile {
   id: string;
@@ -10,12 +8,7 @@ export interface CanvasTile {
   width: number;
   height: number;
   zIndex: number;
-  /** Terminal tiles: session ID */
-  sessionId?: string;
-  /** Label tiles: display text */
-  text?: string;
-  /** Label tiles: font size in px */
-  fontSize?: number;
+  sessionId: string;
 }
 
 export interface CanvasViewport {
@@ -34,16 +27,11 @@ export const CELL = 20;
 export const MAJOR = 80;
 
 export const MIN_SIZES: Record<TileType, { width: number; height: number }> = {
-  terminal: { width: 300, height: 200 },
-  label: { width: 100, height: 40 },
+  terminal: { width: 360, height: 220 },
 };
 
-export const DEFAULT_SIZES: Record<
-  TileType,
-  { width: number; height: number }
-> = {
-  terminal: { width: 480, height: 400 },
-  label: { width: 200, height: 40 },
+export const DEFAULT_SIZES: Record<TileType, { width: number; height: number }> = {
+  terminal: { width: 640, height: 420 },
 };
 
 let idCounter = 0;

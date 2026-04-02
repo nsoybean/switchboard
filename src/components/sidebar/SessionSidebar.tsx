@@ -138,7 +138,6 @@ export function SessionSidebar({
           label: cs.display,
           status: "done" as const,
           resumeTargetId: cs.session_id,
-          ptyId: null,
           worktreePath: null,
           branch: null,
           workspace: {
@@ -172,7 +171,6 @@ export function SessionSidebar({
           label: cs.display,
           status: "done" as const,
           resumeTargetId: cs.session_id,
-          ptyId: null,
           worktreePath: null,
           branch: null,
           workspace: {
@@ -313,7 +311,6 @@ export function SessionSidebar({
               )}
               timestampTitle={formatTimestampTitle(session.createdAt)}
               onStop={
-                session.ptyId !== null &&
                 (session.status === "running" ||
                   session.status === "idle" ||
                   session.status === "needs-input")

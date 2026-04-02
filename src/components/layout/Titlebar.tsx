@@ -2,8 +2,6 @@ import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
-  Focus,
-  LayoutGrid,
   Loader2,
   PanelLeft,
   PanelRight,
@@ -11,7 +9,6 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
-import { DotsNine } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -28,8 +25,6 @@ interface TitlebarProps {
   onToggleInspector: () => void;
   projectPath?: string | null;
   onProjectClick?: () => void;
-  viewMode?: "focused" | "grid" | "canvas";
-  onToggleViewMode?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
@@ -45,8 +40,6 @@ export function Titlebar({
   onToggleInspector,
   projectPath,
   onProjectClick,
-  viewMode = "focused",
-  onToggleViewMode,
   onOpenSettings,
   updateVersion = null,
   checkingForUpdates = false,
@@ -60,7 +53,6 @@ export function Titlebar({
   const projectPathLabel = projectPath
     ? projectPath.split("/").slice(-2).join("/")
     : null;
-  const inspectorAvailable = viewMode === "focused";
 
   useEffect(() => {
     // Check initial fullscreen state
@@ -174,34 +166,6 @@ export function Titlebar({
           </>
         )}
 
-          <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9"
-              onClick={onToggleViewMode}
-            >
-              {viewMode === "focused" ? (
-                <LayoutGrid className="size-4" />
-              ) : viewMode === "grid" ? (
-                <DotsNine className="size-4" />
-              ) : (
-                <Focus className="size-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {viewMode === "focused"
-              ? "Grid View (⌘⇧S)"
-              : viewMode === "grid"
-                ? "Canvas View (⌘⇧S)"
-                : "Focused View (⌘⇧S)"}
-          </TooltipContent>
-        </Tooltip>
-
-        <Separator orientation="vertical" className="h-4 mx-0.5" />
-
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -217,25 +181,18 @@ export function Titlebar({
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-9"
-                disabled={!inspectorAvailable}
-                onClick={onToggleInspector}
-              >
-                <PanelRight
-                  className={inspectorOpen ? "size-4" : "size-4 opacity-40"}
-                />
-              </Button>
-            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              onClick={onToggleInspector}
+            >
+              <PanelRight
+                className={inspectorOpen ? "size-4" : "size-4 opacity-40"}
+              />
+            </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            {inspectorAvailable
-              ? "Toggle Inspector (⌘G)"
-              : "Only available in focused view"}
-          </TooltipContent>
+          <TooltipContent>Toggle Inspector (⌘G)</TooltipContent>
         </Tooltip>
 
         <Separator orientation="vertical" className="h-4 mx-1" />
