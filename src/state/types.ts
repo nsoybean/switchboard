@@ -46,6 +46,7 @@ export interface Session {
 
 export interface AppState {
   sessions: Record<string, Session>;
+  sessionsLoaded: boolean;
   activeSessionId: string | null;
   gitPanelOpen: boolean;
   projectPath: string | null;
@@ -55,6 +56,11 @@ export interface AppState {
 }
 
 export type AppAction =
+  | {
+      type: "HYDRATE_SESSIONS";
+      sessions: Record<string, Session>;
+      activeSessionId?: string | null;
+    }
   | { type: "ADD_SESSION"; session: Session }
   | { type: "REMOVE_SESSION"; id: string }
   | { type: "SET_ACTIVE"; id: string | null }

@@ -425,6 +425,8 @@ export function AppLayout() {
           id: session.id,
           agent: session.agent,
           label: session.label,
+          status: session.status,
+          exit_code: session.exitCode,
           resume_target_id: session.resumeTargetId,
           worktree_path: session.worktreePath,
           branch: session.branch,
@@ -672,18 +674,33 @@ export function AppLayout() {
         exitCode: code,
       });
 
+      if (session) {
+        void persistSession({
+          ...session,
+          status,
+          exitCode: code,
+        });
+      }
+
       if (session?.agent === "codex") {
         void syncCodexResumeTarget(session);
       }
     },
-    [dispatch, syncCodexResumeTarget],
+    [dispatch, persistSession, syncCodexResumeTarget],
   );
 
   const handleSessionStart = useCallback(
     (sessionId: string) => {
+      const session = sessionsRef.current[sessionId];
       dispatch({ type: "UPDATE_STATUS", id: sessionId, status: "running" });
+      if (session) {
+        void persistSession({
+          ...session,
+          status: "running",
+        });
+      }
     },
-    [dispatch],
+    [dispatch, persistSession],
   );
 
   const handleStopSession = useCallback(
@@ -699,6 +716,10 @@ export function AppLayout() {
           status: "stopped",
           exitCode: session.exitCode,
         });
+        void persistSession({
+          ...session,
+          status: "stopped",
+        });
         if (session.agent === "codex") {
           void syncCodexResumeTarget(session);
         }
@@ -708,7 +729,7 @@ export function AppLayout() {
         });
       }
     },
-    [dispatch, syncCodexResumeTarget],
+    [dispatch, persistSession, syncCodexResumeTarget],
   );
 
   const handleRenameSession = useCallback(
@@ -898,19 +919,17 @@ export function AppLayout() {
                 <SessionSidebar
                   onNewSession={() => setDialogOpen(true)}
                   onAddProject={() => setProjectPickerOpen(true)}
-                  onSelectProject={(path) => {
-                    void projectCommands
-                      .setPath(path)
-                      .then(() => {
-                        dispatch({ type: "SET_PROJECT_PATH", path });
-                        setViewingSession(null);
-                        dispatch({ type: "SET_PREVIEW_FILE", path: null });
-                      })
-                      .catch((err) => {
-                        toast.error("Failed to switch project", {
-                          description: String(err),
-                        });
+                  onSelectProject={async (path) => {
+                    try {
+                      await projectCommands.setPath(path);
+                      dispatch({ type: "SET_PROJECT_PATH", path });
+                      setViewingSession(null);
+                      dispatch({ type: "SET_PREVIEW_FILE", path: null });
+                    } catch (err) {
+                      toast.error("Failed to switch project", {
+                        description: String(err),
                       });
+                    }
                   }}
                   onViewSession={(session) => {
                     dispatch({ type: "SET_PREVIEW_FILE", path: null });

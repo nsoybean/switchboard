@@ -2,6 +2,7 @@ import type { AppState, AppAction } from "./types";
 
 export const initialState: AppState = {
   sessions: {},
+  sessionsLoaded: false,
   activeSessionId: null,
   gitPanelOpen: false,
   projectPath: null,
@@ -12,6 +13,15 @@ export const initialState: AppState = {
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case "HYDRATE_SESSIONS": {
+      return {
+        ...state,
+        sessions: action.sessions,
+        sessionsLoaded: true,
+        activeSessionId: action.activeSessionId ?? state.activeSessionId,
+      };
+    }
+
     case "ADD_SESSION": {
       return {
         ...state,

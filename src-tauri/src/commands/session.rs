@@ -8,14 +8,27 @@ pub struct PersistedSession {
     pub id: String,
     pub agent: String,
     pub label: String,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
     pub resume_target_id: Option<String>,
+    #[serde(default)]
     pub worktree_path: Option<String>,
+    #[serde(default)]
     pub branch: Option<String>,
+    #[serde(default)]
     pub repo_root: Option<String>,
+    #[serde(default)]
     pub launch_root: Option<String>,
+    #[serde(default)]
     pub display_path: Option<String>,
+    #[serde(default)]
     pub workspace_kind: Option<String>,
+    #[serde(default)]
     pub base_branch: Option<String>,
+    #[serde(default)]
     pub head_kind: Option<String>,
     pub cwd: String,
     pub created_at: String,
