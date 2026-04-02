@@ -35,10 +35,6 @@ import type {
   SessionWorkspaceKind,
 } from "../../state/types";
 import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
-import {
-  type CanvasState,
-  defaultCanvasState,
-} from "../canvas/canvas-state";
 
 interface HistorySessionSummary {
   session_id: string;
@@ -137,8 +133,6 @@ export function AppLayout() {
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const sessionsRef = useRef(state.sessions);
   const hookConfigReady = useRef<Promise<void>>(Promise.resolve());
-  const [canvasState, setCanvasState] = useState<CanvasState>(defaultCanvasState());
-  const canvasSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvasViewRef = useRef<CanvasViewHandle>(null);
   const {
     currentVersion,
@@ -284,44 +278,6 @@ export function AppLayout() {
       .then(() => {})
       .catch((err) => console.warn("Failed to write hook config on startup:", err));
   }, [state.projectPath]);
-
-  // Load canvas state when project changes
-  useEffect(() => {
-    if (!state.projectPath) return;
-    invoke<string | null>("load_canvas_state", {
-      projectPath: state.projectPath,
-    })
-      .then((raw) => {
-        if (raw) {
-          try {
-            setCanvasState(JSON.parse(raw));
-          } catch {
-            console.warn("Failed to parse canvas state, using default");
-            setCanvasState(defaultCanvasState());
-          }
-        } else {
-          setCanvasState(defaultCanvasState());
-        }
-      })
-      .catch(() => setCanvasState(defaultCanvasState()));
-  }, [state.projectPath]);
-
-  // Debounced canvas state save
-  const handleCanvasStateChange = useCallback(
-    (newState: CanvasState) => {
-      setCanvasState(newState);
-      if (canvasSaveTimerRef.current) clearTimeout(canvasSaveTimerRef.current);
-      if (!state.projectPath) return;
-      const projectPath = state.projectPath;
-      canvasSaveTimerRef.current = setTimeout(() => {
-        invoke("save_canvas_state", {
-          projectPath,
-          state: JSON.stringify(newState),
-        }).catch(console.error);
-      }, 500);
-    },
-    [state.projectPath],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -904,6 +860,7 @@ export function AppLayout() {
           {state.projectPath && liveSessions.length > 0 ? (
             <CanvasView
               ref={canvasViewRef}
+              projectPath={state.projectPath}
               sessions={liveSessions}
               activeSessionId={state.activeSessionId}
               onSessionStart={handleSessionStart}
@@ -913,8 +870,6 @@ export function AppLayout() {
                 setViewingSession(null);
               }}
               onStopSession={(sessionId) => void handleStopSession(sessionId)}
-              canvasState={canvasState}
-              onCanvasStateChange={handleCanvasStateChange}
             />
           ) : (
             <div className="flex h-full items-center justify-center">

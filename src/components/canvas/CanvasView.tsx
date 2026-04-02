@@ -1,11 +1,14 @@
 import {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Rnd } from "react-rnd";
 import { Circle, Square } from "lucide-react";
 import { AgentIcon } from "../agents/AgentIcon";
@@ -15,6 +18,7 @@ import {
   type CanvasState,
   type CanvasTile,
   DEFAULT_SIZES,
+  defaultCanvasState,
   nextZIndex,
 } from "./canvas-state";
 import "./CanvasView.css";
@@ -36,14 +40,13 @@ interface CanvasAnchor {
 }
 
 interface CanvasViewProps {
+  projectPath: string | null;
   sessions: Session[];
   activeSessionId: string | null;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
   onSelectSession: (sessionId: string) => void;
   onStopSession: (sessionId: string) => void;
-  canvasState: CanvasState;
-  onCanvasStateChange: (state: CanvasState) => void;
 }
 
 export interface CanvasViewHandle {
@@ -123,7 +126,7 @@ interface SessionTileProps {
   onSessionExit: (sessionId: string) => (code: number | null) => void;
 }
 
-function SessionTile({
+function SessionTileComponent({
   session,
   tile,
   zoom,
@@ -135,6 +138,12 @@ function SessionTile({
   onSessionStart,
   onSessionExit,
 }: SessionTileProps) {
+  const handleStart = useCallback(() => {
+    onSessionStart(session.id);
+  }, [onSessionStart, session.id]);
+
+  const handleExit = useMemo(() => onSessionExit(session.id), [onSessionExit, session.id]);
+
   return (
     <Rnd
       position={{ x: tile.x, y: tile.y }}
@@ -188,8 +197,8 @@ function SessionTile({
             args={session.args}
             cwd={session.cwd}
             env={session.env}
-            onStart={() => onSessionStart(session.id)}
-            onExit={onSessionExit(session.id)}
+            onStart={handleStart}
+            onExit={handleExit}
           />
         </div>
       </article>
@@ -197,22 +206,78 @@ function SessionTile({
   );
 }
 
+const SessionTile = memo(SessionTileComponent);
+
 export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function CanvasView(
   {
+    projectPath,
     sessions,
     activeSessionId,
     onSessionStart,
     onSessionExit,
     onSelectSession,
     onStopSession,
-    canvasState,
-    onCanvasStateChange,
   },
   ref,
 ) {
   const viewportRef = useRef<HTMLElement | null>(null);
+  const [canvasState, setCanvasState] = useState<CanvasState>(defaultCanvasState());
   const stateRef = useRef(canvasState);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   stateRef.current = canvasState;
+
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!projectPath) {
+      setCanvasState(defaultCanvasState());
+      stateRef.current = defaultCanvasState();
+      return;
+    }
+
+    let cancelled = false;
+
+    invoke<string | null>("load_canvas_state", {
+      projectPath,
+    })
+      .then((raw) => {
+        if (cancelled) {
+          return;
+        }
+
+        let nextState = defaultCanvasState();
+        if (raw) {
+          try {
+            nextState = JSON.parse(raw) as CanvasState;
+          } catch {
+            console.warn("Failed to parse canvas state, using default");
+          }
+        }
+
+        stateRef.current = nextState;
+        setCanvasState(nextState);
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        const nextState = defaultCanvasState();
+        stateRef.current = nextState;
+        setCanvasState(nextState);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectPath]);
 
   const sessionMap = useMemo(
     () => new Map(sessions.map((session) => [session.id, session])),
@@ -222,10 +287,29 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
   const updateState = useCallback(
     (updater: (state: CanvasState) => CanvasState) => {
       const nextState = updater(stateRef.current);
+      if (nextState === stateRef.current) {
+        return;
+      }
       stateRef.current = nextState;
-      onCanvasStateChange(nextState);
+      setCanvasState(nextState);
+
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+
+      if (!projectPath) {
+        return;
+      }
+
+      const persistProjectPath = projectPath;
+      saveTimerRef.current = setTimeout(() => {
+        invoke("save_canvas_state", {
+          projectPath: persistProjectPath,
+          state: JSON.stringify(nextState),
+        }).catch(console.error);
+      }, 500);
     },
-    [onCanvasStateChange],
+    [projectPath],
   );
 
   useEffect(() => {
@@ -320,6 +404,38 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
       }));
     },
     [onSelectSession, updateState],
+  );
+
+  const moveTile = useCallback(
+    (tileId: string, x: number, y: number) => {
+      updateState((current) => ({
+        ...current,
+        tiles: current.tiles.map((candidate) =>
+          candidate.id === tileId ? { ...candidate, x, y } : candidate,
+        ),
+      }));
+    },
+    [updateState],
+  );
+
+  const resizeTile = useCallback(
+    (tileId: string, width: number, height: number, x: number, y: number) => {
+      updateState((current) => ({
+        ...current,
+        tiles: current.tiles.map((candidate) =>
+          candidate.id === tileId
+            ? {
+                ...candidate,
+                width: Math.max(360, width),
+                height: Math.max(220, height),
+                x,
+                y,
+              }
+            : candidate,
+        ),
+      }));
+    },
+    [updateState],
   );
 
   const setViewportScaleAtAnchor = useCallback(
@@ -440,30 +556,8 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
               zoom={canvasState.viewport.zoom}
               isActive={session.id === activeSessionId}
               onFocus={focusSession}
-              onMove={(tileId, x, y) => {
-                updateState((current) => ({
-                  ...current,
-                  tiles: current.tiles.map((candidate) =>
-                    candidate.id === tileId ? { ...candidate, x, y } : candidate,
-                  ),
-                }));
-              }}
-              onResize={(tileId, width, height, x, y) => {
-                updateState((current) => ({
-                  ...current,
-                  tiles: current.tiles.map((candidate) =>
-                    candidate.id === tileId
-                      ? {
-                          ...candidate,
-                          width: Math.max(360, width),
-                          height: Math.max(220, height),
-                          x,
-                          y,
-                        }
-                      : candidate,
-                  ),
-                }));
-              }}
+              onMove={moveTile}
+              onResize={resizeTile}
               onStopSession={onStopSession}
               onSessionStart={onSessionStart}
               onSessionExit={onSessionExit}
