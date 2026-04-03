@@ -9,10 +9,10 @@ import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
 
 const DARK_THEME = {
-  background: "#12181e",
+  background: "#000000",
   foreground: "#f2f7fb",
   cursor: "#87e6ff",
-  black: "#12181e",
+  black: "#000000",
   blue: "#58c5ff",
   brightBlack: "#496476",
   brightBlue: "#89dbff",
@@ -31,7 +31,7 @@ const DARK_THEME = {
 };
 
 const LIGHT_THEME = {
-  background: "#f6f2ea",
+  background: "#ffffff",
   foreground: "#18212b",
   cursor: "#2d4759",
   black: "#18212b",
