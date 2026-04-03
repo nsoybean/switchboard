@@ -1011,7 +1011,7 @@ export function AppLayout() {
           )}
 
           {sidebarOpen ? (
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-20 p-4 pr-2">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-20 p-1.5 pr-0.5">
               <div className="pointer-events-auto h-full w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur">
                 <SessionSidebar
                   onNewSession={() => setDialogOpen(true)}
@@ -1044,7 +1044,7 @@ export function AppLayout() {
 
           {state.projectPath ? (
             <div
-              className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-4 pl-2 transition-[opacity,transform] duration-150 ${
+              className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-1.5 pl-0.5 transition-[opacity,transform] duration-150 ${
                 inspectorOpen
                   ? "translate-x-0 opacity-100"
                   : "translate-x-3 opacity-0"
