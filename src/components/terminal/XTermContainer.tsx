@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
@@ -62,7 +62,40 @@ interface XTermContainerProps {
   onExit?: (code: number | null) => void;
 }
 
-export function XTermContainer({
+function areArgsEqual(left: string[] | undefined, right: string[] | undefined) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function areEnvEqual(
+  left: Record<string, string> | undefined,
+  right: Record<string, string> | undefined,
+) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return !left && !right;
+  }
+
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+
+  return leftEntries.every(([key, value]) => right[key] === value);
+}
+
+function XTermContainerComponent({
   tileId,
   command = "/bin/zsh",
   args = [],
@@ -272,3 +305,13 @@ export function XTermContainer({
 
   return <div ref={containerRef} className="h-full w-full min-h-0 min-w-0 overflow-hidden" />;
 }
+
+export const XTermContainer = memo(
+  XTermContainerComponent,
+  (prevProps, nextProps) =>
+    prevProps.tileId === nextProps.tileId &&
+    prevProps.command === nextProps.command &&
+    prevProps.cwd === nextProps.cwd &&
+    areArgsEqual(prevProps.args, nextProps.args) &&
+    areEnvEqual(prevProps.env, nextProps.env),
+);

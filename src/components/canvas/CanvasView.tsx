@@ -19,7 +19,6 @@ import {
   type CanvasTile,
   DEFAULT_SIZES,
   defaultCanvasState,
-  nextZIndex,
 } from "./canvas-state";
 import "./CanvasView.css";
 
@@ -117,6 +116,7 @@ interface SessionTileProps {
   session: Session;
   tile: CanvasTile;
   zoom: number;
+  zIndex: number;
   isActive: boolean;
   onFocus: (sessionId: string) => void;
   onMove: (tileId: string, x: number, y: number) => void;
@@ -130,6 +130,7 @@ function SessionTileComponent({
   session,
   tile,
   zoom,
+  zIndex,
   isActive,
   onFocus,
   onMove,
@@ -138,11 +139,33 @@ function SessionTileComponent({
   onSessionStart,
   onSessionExit,
 }: SessionTileProps) {
+  const focusFrameRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (focusFrameRef.current !== null) {
+        window.cancelAnimationFrame(focusFrameRef.current);
+      }
+    },
+    [],
+  );
+
   const handleStart = useCallback(() => {
     onSessionStart(session.id);
   }, [onSessionStart, session.id]);
 
   const handleExit = useMemo(() => onSessionExit(session.id), [onSessionExit, session.id]);
+
+  const scheduleFocus = useCallback(() => {
+    if (focusFrameRef.current !== null) {
+      window.cancelAnimationFrame(focusFrameRef.current);
+    }
+
+    focusFrameRef.current = window.requestAnimationFrame(() => {
+      onFocus(session.id);
+      focusFrameRef.current = null;
+    });
+  }, [onFocus, session.id]);
 
   return (
     <Rnd
@@ -152,14 +175,14 @@ function SessionTileComponent({
       minHeight={220}
       scale={zoom}
       dragHandleClassName="sb-canvas-tile__titlebar"
-      onMouseDown={() => onFocus(session.id)}
-      onDragStart={() => onFocus(session.id)}
+      onMouseDown={scheduleFocus}
+      onDragStart={scheduleFocus}
       onDrag={(_event, data) => onMove(tile.id, data.x, data.y)}
-      onResizeStart={() => onFocus(session.id)}
+      onResizeStart={scheduleFocus}
       onResize={(_event, _direction, ref, _delta, position) => {
         onResize(tile.id, ref.offsetWidth, ref.offsetHeight, position.x, position.y);
       }}
-      style={{ zIndex: tile.zIndex }}
+      style={{ zIndex }}
     >
       <article className={`sb-canvas-tile ${isActive ? "is-active" : ""}`}>
         <header className="sb-canvas-tile__titlebar">
@@ -222,6 +245,7 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
 ) {
   const viewportRef = useRef<HTMLElement | null>(null);
   const [canvasState, setCanvasState] = useState<CanvasState>(defaultCanvasState());
+  const [tileStack, setTileStack] = useState<string[]>([]);
   const stateRef = useRef(canvasState);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   stateRef.current = canvasState;
@@ -239,6 +263,7 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
     if (!projectPath) {
       setCanvasState(defaultCanvasState());
       stateRef.current = defaultCanvasState();
+      setTileStack([]);
       return;
     }
 
@@ -263,6 +288,11 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
 
         stateRef.current = nextState;
         setCanvasState(nextState);
+        setTileStack(
+          [...nextState.tiles]
+            .sort((left, right) => left.zIndex - right.zIndex)
+            .map((tile) => tile.id),
+        );
       })
       .catch(() => {
         if (cancelled) {
@@ -272,6 +302,7 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
         const nextState = defaultCanvasState();
         stateRef.current = nextState;
         setCanvasState(nextState);
+        setTileStack([]);
       });
 
     return () => {
@@ -334,9 +365,38 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
     });
   }, [sessions, updateState]);
 
+  useEffect(() => {
+    setTileStack((current) => {
+      const persistedOrder = [...canvasState.tiles]
+        .sort((left, right) => left.zIndex - right.zIndex)
+        .map((tile) => tile.id);
+      const existing = current.filter((tileId) =>
+        persistedOrder.includes(tileId),
+      );
+      const missing = persistedOrder.filter((tileId) => !existing.includes(tileId));
+      const next = [...existing, ...missing];
+
+      if (
+        next.length === current.length &&
+        next.every((tileId, index) => tileId === current[index])
+      ) {
+        return current;
+      }
+
+      return next;
+    });
+  }, [canvasState.tiles]);
+
   const orderedTiles = useMemo(
-    () => [...canvasState.tiles].sort((left, right) => left.zIndex - right.zIndex),
-    [canvasState.tiles],
+    () => {
+      const stackIndex = new Map(tileStack.map((tileId, index) => [tileId, index]));
+
+      return canvasState.tiles.map((tile) => ({
+        tile,
+        zIndex: (stackIndex.get(tile.id) ?? 0) + 1,
+      }));
+    },
+    [canvasState.tiles, tileStack],
   );
 
   const getViewportPoint = useCallback((clientX: number, clientY: number) => {
@@ -394,16 +454,31 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
   const focusSession = useCallback(
     (sessionId: string) => {
       onSelectSession(sessionId);
-      updateState((current) => ({
-        ...current,
-        tiles: current.tiles.map((tile) =>
-          tile.sessionId === sessionId
-            ? { ...tile, zIndex: nextZIndex(current.tiles) }
-            : tile,
-        ),
-      }));
+
+      const tileId = stateRef.current.tiles.find(
+        (candidate) => candidate.sessionId === sessionId,
+      )?.id;
+      if (!tileId) {
+        return;
+      }
+
+      setTileStack((current) => {
+        const next = [
+          ...current.filter((candidate) => candidate !== tileId),
+          tileId,
+        ];
+
+        if (
+          next.length === current.length &&
+          next.every((candidate, index) => candidate === current[index])
+        ) {
+          return current;
+        }
+
+        return next;
+      });
     },
-    [onSelectSession, updateState],
+    [onSelectSession],
   );
 
   const moveTile = useCallback(
@@ -542,7 +617,7 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
           transform: `translate(${canvasState.viewport.panX}px, ${canvasState.viewport.panY}px) scale(${canvasState.viewport.zoom})`,
         }}
       >
-        {orderedTiles.map((tile) => {
+        {orderedTiles.map(({ tile, zIndex }) => {
           const session = sessionMap.get(tile.sessionId);
           if (!session) {
             return null;
@@ -554,6 +629,7 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
               session={session}
               tile={tile}
               zoom={canvasState.viewport.zoom}
+              zIndex={zIndex}
               isActive={session.id === activeSessionId}
               onFocus={focusSession}
               onMove={moveTile}

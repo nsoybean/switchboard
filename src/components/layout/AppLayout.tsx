@@ -706,6 +706,14 @@ export function AppLayout() {
     [dispatch],
   );
 
+  const handleSelectCanvasSession = useCallback(
+    (sessionId: string) => {
+      dispatch({ type: "SET_ACTIVE", id: sessionId });
+      setViewingSession(null);
+    },
+    [dispatch],
+  );
+
   const handleSessionBranchChange = useCallback(
     async (sessionId: string, branch: string | null) => {
       const session = state.sessions[sessionId];
@@ -800,6 +808,13 @@ export function AppLayout() {
       }
     },
     [dispatch, persistSession, syncCodexResumeTarget],
+  );
+
+  const handleStopCanvasSession = useCallback(
+    (sessionId: string) => {
+      void handleStopSession(sessionId);
+    },
+    [handleStopSession],
   );
 
   const handleRenameSession = useCallback(
@@ -970,12 +985,9 @@ export function AppLayout() {
               sessions={liveSessions}
               activeSessionId={state.activeSessionId}
               onSessionStart={handleSessionStart}
-              onSessionExit={(sessionId) => handleSessionExit(sessionId)}
-              onSelectSession={(sessionId) => {
-                dispatch({ type: "SET_ACTIVE", id: sessionId });
-                setViewingSession(null);
-              }}
-              onStopSession={(sessionId) => void handleStopSession(sessionId)}
+              onSessionExit={handleSessionExit}
+              onSelectSession={handleSelectCanvasSession}
+              onStopSession={handleStopCanvasSession}
             />
           ) : (
             <div className="flex h-full items-center justify-center">
