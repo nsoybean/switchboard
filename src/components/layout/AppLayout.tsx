@@ -1030,12 +1030,24 @@ export function AppLayout() {
             </div>
           ) : null}
 
-          {inspectorOpen && state.projectPath ? (
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-20 p-4 pl-2">
-              <div className="pointer-events-auto h-full w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur">
+          {state.projectPath ? (
+            <div
+              className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-4 pl-2 transition-[opacity,transform] duration-150 ${
+                inspectorOpen
+                  ? "translate-x-0 opacity-100"
+                  : "translate-x-3 opacity-0"
+              }`}
+              aria-hidden={!inspectorOpen}
+            >
+              <div
+                className={`h-full w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur transition-opacity duration-150 ${
+                  inspectorOpen ? "pointer-events-auto" : "pointer-events-none"
+                }`}
+              >
                 <WorkspacePanel
                   activeTab={workspaceTab}
                   context={workspaceContext}
+                  visible={inspectorOpen}
                   session={selectedSession}
                   githubToken={state.githubToken}
                   onOpenSettings={openSettings}
