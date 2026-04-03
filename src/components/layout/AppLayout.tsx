@@ -36,6 +36,11 @@ import type {
 } from "../../state/types";
 import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
 
+const MIN_SIDEBAR_WIDTH = 260;
+const MAX_SIDEBAR_WIDTH = 520;
+const MIN_INSPECTOR_WIDTH = 300;
+const MAX_INSPECTOR_WIDTH = 640;
+
 interface HistorySessionSummary {
   session_id: string;
   display: string;
@@ -131,9 +136,12 @@ export function AppLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [inspectorWidth, setInspectorWidth] = useState(380);
   const sessionsRef = useRef(state.sessions);
   const hookConfigReady = useRef<Promise<void>>(Promise.resolve());
   const canvasViewRef = useRef<CanvasViewHandle>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const {
     currentVersion,
     availableUpdate,
@@ -261,6 +269,13 @@ export function AppLayout() {
   useEffect(() => {
     sessionsRef.current = state.sessions;
   }, [state.sessions]);
+
+  useEffect(
+    () => () => {
+      resizeCleanupRef.current?.();
+    },
+    [],
+  );
 
   // Write hook config for the current project on startup / project change.
   // Sessions await hookConfigReady before spawning to avoid a race.
@@ -706,6 +721,56 @@ export function AppLayout() {
     [dispatch],
   );
 
+  const startPanelResize = useCallback(
+    (panel: "sidebar" | "inspector", event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      resizeCleanupRef.current?.();
+
+      const startX = event.clientX;
+      const startWidth = panel === "sidebar" ? sidebarWidth : inspectorWidth;
+
+      const updateWidth = (nextWidth: number) => {
+        if (panel === "sidebar") {
+          setSidebarWidth(
+            Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, nextWidth)),
+          );
+          return;
+        }
+
+        setInspectorWidth(
+          Math.min(MAX_INSPECTOR_WIDTH, Math.max(MIN_INSPECTOR_WIDTH, nextWidth)),
+        );
+      };
+
+      const previousUserSelect = document.body.style.userSelect;
+      const previousCursor = document.body.style.cursor;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX;
+        updateWidth(panel === "sidebar" ? startWidth + delta : startWidth - delta);
+      };
+
+      const cleanup = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", cleanup);
+        window.removeEventListener("pointercancel", cleanup);
+        document.body.style.userSelect = previousUserSelect;
+        document.body.style.cursor = previousCursor;
+        resizeCleanupRef.current = null;
+      };
+
+      resizeCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", cleanup);
+      window.addEventListener("pointercancel", cleanup);
+    },
+    [inspectorWidth, sidebarWidth],
+  );
+
   const handleSelectCanvasSession = useCallback(
     (sessionId: string) => {
       dispatch({ type: "SET_ACTIVE", id: sessionId });
@@ -1012,7 +1077,10 @@ export function AppLayout() {
 
           {sidebarOpen ? (
             <div className="pointer-events-none absolute inset-y-0 left-0 z-20 p-1.5 pr-0.5">
-              <div className="pointer-events-auto h-full w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur">
+              <div
+                className="pointer-events-auto h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur"
+                style={{ width: sidebarWidth }}
+              >
                 <SessionSidebar
                   onNewSession={() => setDialogOpen(true)}
                   onAddProject={() => setProjectPickerOpen(true)}
@@ -1039,6 +1107,13 @@ export function AppLayout() {
                   selectedSessionId={selectedSessionId}
                 />
               </div>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize session sidebar"
+                className="pointer-events-auto absolute top-1.5 right-0 bottom-1.5 w-3 cursor-col-resize"
+                onPointerDown={(event) => startPanelResize("sidebar", event)}
+              />
             </div>
           ) : null}
 
@@ -1052,9 +1127,19 @@ export function AppLayout() {
               aria-hidden={!inspectorOpen}
             >
               <div
-                className={`h-full w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur transition-opacity duration-150 ${
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize inspector panel"
+                className={`pointer-events-auto absolute top-1.5 left-0 bottom-1.5 w-3 cursor-col-resize ${
+                  inspectorOpen ? "" : "pointer-events-none"
+                }`}
+                onPointerDown={(event) => startPanelResize("inspector", event)}
+              />
+              <div
+                className={`h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur transition-opacity duration-150 ${
                   inspectorOpen ? "pointer-events-auto" : "pointer-events-none"
                 }`}
+                style={{ width: inspectorWidth }}
               >
                 <WorkspacePanel
                   activeTab={workspaceTab}
