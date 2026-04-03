@@ -987,6 +987,21 @@ export function AppLayout() {
         dispatch({ type: "SET_ACTIVE", id: sortedSessionIds[prevIdx] });
       },
       onNewSession: () => setDialogOpen(true),
+      onCloseSession: () => {
+        if (viewingSessionInProject) {
+          setViewingSession(null);
+          return;
+        }
+
+        if (
+          activeSession &&
+          (activeSession.status === "running" ||
+            activeSession.status === "idle" ||
+            activeSession.status === "needs-input")
+        ) {
+          void handleStopSession(activeSession.id);
+        }
+      },
       onToggleSidebar: () => setSidebarOpen((prev) => !prev),
       onToggleGitPanel: () => setInspectorOpen((prev) => !prev),
       onToggleFileTree: () => {
@@ -1005,7 +1020,14 @@ export function AppLayout() {
         return false;
       },
     }),
-    [sortedSessionIds, state.activeSessionId, dispatch],
+    [
+      activeSession,
+      dispatch,
+      handleStopSession,
+      sortedSessionIds,
+      state.activeSessionId,
+      viewingSessionInProject,
+    ],
   );
   useKeyboardShortcuts(shortcutHandlers);
   useAgentHooks(state.sessions, dispatch);
