@@ -30,6 +30,27 @@ export interface WorktreeInfo {
   head: string;
 }
 
+export interface PersistedSession {
+  id: string;
+  agent: string;
+  label: string;
+  status?: string | null;
+  exit_code?: number | null;
+  resume_target_id?: string | null;
+  worktree_path?: string | null;
+  branch?: string | null;
+  repo_root?: string | null;
+  launch_root?: string | null;
+  display_path?: string | null;
+  workspace_kind?: string | null;
+  base_branch?: string | null;
+  head_kind?: string | null;
+  cwd: string;
+  created_at: string;
+  command: string;
+  args: string[];
+}
+
 export const gitCommands = {
   status: (cwd: string) =>
     invoke<GitStatusResult>("git_status", { cwd }),
@@ -86,6 +107,11 @@ export const projectCommands = {
   listPaths: () => invoke<string[]>("list_project_paths"),
   addPath: (path: string) => invoke<void>("add_project_path", { path }),
   removePath: (path: string) => invoke<void>("remove_project_path", { path }),
+  openInFinder: (path: string) => invoke<void>("open_project_in_finder", { path }),
+};
+
+export const sessionCommands = {
+  load: () => invoke<PersistedSession[]>("load_sessions"),
 };
 
 export const settingsCommands = {

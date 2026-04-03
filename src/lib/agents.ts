@@ -18,9 +18,9 @@ const AGENT_CONFIGS: Record<AgentType, AgentConfig> = {
     displayName: "Codex",
   },
   bash: {
-    command: "/bin/bash",
+    command: "/bin/zsh",
     defaultArgs: [],
-    displayName: "Bash",
+    displayName: "Shell",
   },
 };
 

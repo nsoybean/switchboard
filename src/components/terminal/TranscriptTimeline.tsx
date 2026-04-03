@@ -3,7 +3,6 @@ import {
   Fragment,
   isValidElement,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -19,7 +18,6 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
   buildTranscriptDisplayItems,
@@ -34,9 +32,9 @@ interface TranscriptTimelineProps {
 
 export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
   const items = useMemo(() => buildTranscriptDisplayItems(events), [events]);
-  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const sectionRefs = useRef(new Map<string, HTMLDivElement>());
-  const [activeQueryId, setActiveQueryId] = useState<string | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
   const userSections = useMemo(
     () =>
       items.flatMap((item) =>
@@ -53,9 +51,7 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
   );
 
   useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
+    const viewport = viewportRef.current;
     if (!viewport) return;
 
     const frame = requestAnimationFrame(() => {
@@ -65,46 +61,66 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
     return () => cancelAnimationFrame(frame);
   }, [items.length]);
 
-  useLayoutEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
-    if (!viewport || userSections.length === 0) {
-      setActiveQueryId(null);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
       return;
     }
 
-    const updateActiveQuery = () => {
-      const scrollTop = viewport.scrollTop;
-      let closestId: string | null = null;
-      let closestDistance = Number.POSITIVE_INFINITY;
+    let frame: number | null = null;
 
-      for (const section of userSections) {
-        const node = sectionRefs.current.get(section.id);
-        if (!node) continue;
-        const distance = Math.abs(node.offsetTop - scrollTop);
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestId = section.id;
-        }
-      }
-
-      setActiveQueryId(closestId);
+    const updateScrollTop = () => {
+      frame = null;
+      setScrollTop((current) =>
+        current === viewport.scrollTop ? current : viewport.scrollTop,
+      );
     };
 
-    updateActiveQuery();
+    const requestUpdate = () => {
+      if (frame !== null) {
+        return;
+      }
 
-    viewport.addEventListener("scroll", updateActiveQuery, { passive: true });
+      frame = requestAnimationFrame(updateScrollTop);
+    };
+
+    requestUpdate();
+
+    viewport.addEventListener("scroll", requestUpdate, { passive: true });
     const resizeObserver = new ResizeObserver(() => {
-      updateActiveQuery();
+      requestUpdate();
     });
     resizeObserver.observe(viewport);
 
     return () => {
-      viewport.removeEventListener("scroll", updateActiveQuery);
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
+      viewport.removeEventListener("scroll", requestUpdate);
       resizeObserver.disconnect();
     };
-  }, [userSections]);
+  }, []);
+
+  const activeQueryId = useMemo(() => {
+    if (userSections.length === 0) {
+      return null;
+    }
+
+    let closestId: string | null = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    for (const section of userSections) {
+      const node = sectionRefs.current.get(section.id);
+      if (!node) continue;
+      const distance = Math.abs(node.offsetTop - scrollTop);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestId = section.id;
+      }
+    }
+
+    return closestId;
+  }, [scrollTop, userSections]);
 
   const setSectionRef = (id: string, node: HTMLDivElement | null) => {
     if (node) {
@@ -115,9 +131,7 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
   };
 
   const jumpToQuery = (id: string) => {
-    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
+    const viewport = viewportRef.current;
     const node = sectionRefs.current.get(id);
     if (!viewport || !node) return;
 
@@ -129,9 +143,9 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
 
   return (
     <div className="relative h-full min-w-0 bg-background font-sans text-foreground">
-      <ScrollArea
-        ref={scrollAreaRef}
-        className="h-full [&_[data-slot=scroll-area-viewport]]:!overflow-x-hidden [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:w-3 [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:border-l-border/60 [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:bg-background/95 [&_[data-slot=scroll-area-thumb]]:rounded-none [&_[data-slot=scroll-area-thumb]]:bg-muted-foreground/35 hover:[&_[data-slot=scroll-area-thumb]]:bg-muted-foreground/50"
+      <div
+        ref={viewportRef}
+        className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain"
       >
         <div className="w-full min-w-0 px-4 py-5 pr-5 sm:px-5 sm:pr-6">
           {items.length === 0 ? (
@@ -159,7 +173,7 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
       {userSections.length > 0 && (
         <div className="absolute right-3 top-3 z-10 hidden sm:block">
           <HoverCard openDelay={0} closeDelay={80}>
@@ -188,7 +202,7 @@ export function TranscriptTimeline({ events }: TranscriptTimelineProps) {
                     type="button"
                     className={cn(
                       "px-3 py-2 text-left text-sm transition-colors hover:bg-muted/55",
-                      activeQueryId === section.id && "bg-muted/55",
+                      activeQueryId === section.id && "bg-muted",
                     )}
                     onClick={() => jumpToQuery(section.id)}
                   >

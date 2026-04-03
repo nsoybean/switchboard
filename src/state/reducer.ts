@@ -2,17 +2,26 @@ import type { AppState, AppAction } from "./types";
 
 export const initialState: AppState = {
   sessions: {},
+  sessionsLoaded: false,
   activeSessionId: null,
   gitPanelOpen: false,
   projectPath: null,
   projects: [],
-  viewMode: "focused",
   previewFilePath: null,
   githubToken: null,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case "HYDRATE_SESSIONS": {
+      return {
+        ...state,
+        sessions: action.sessions,
+        sessionsLoaded: true,
+        activeSessionId: action.activeSessionId ?? state.activeSessionId,
+      };
+    }
+
     case "ADD_SESSION": {
       return {
         ...state,
@@ -92,18 +101,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
-    case "SET_PTY_ID": {
-      const session = state.sessions[action.id];
-      if (!session) return state;
-      return {
-        ...state,
-        sessions: {
-          ...state.sessions,
-          [action.id]: { ...session, ptyId: action.ptyId },
-        },
-      };
-    }
-
     case "SET_RESUME_TARGET": {
       const session = state.sessions[action.id];
       if (!session) return state;
@@ -134,13 +131,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         projects: action.paths,
-      };
-    }
-
-    case "SET_VIEW_MODE": {
-      return {
-        ...state,
-        viewMode: action.mode,
       };
     }
 

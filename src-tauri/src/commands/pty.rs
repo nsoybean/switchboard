@@ -1,240 +1,367 @@
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
+use uuid::Uuid;
 
-/// Unique ID for each PTY session
-type PtyId = u32;
-
-/// Holds a PTY master pair: writer for input, reader for output
-struct PtyHandle {
-    writer: Box<dyn Write + Send>,
-    master: Box<dyn portable_pty::MasterPty + Send>,
-    child: Box<dyn portable_pty::Child + Send + Sync>,
+#[derive(Clone)]
+pub struct SessionRegistry {
+    sessions: Arc<Mutex<HashMap<String, SessionRecord>>>,
 }
 
-/// Global state managing all active PTY sessions
-pub struct PtyState {
-    handles: Mutex<HashMap<PtyId, PtyHandle>>,
-    next_id: Mutex<u32>,
+struct SessionRecord {
+    #[allow(dead_code)]
+    session_id: String,
+    master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
 }
 
-impl PtyState {
-    pub fn new() -> Self {
-        Self {
-            handles: Mutex::new(HashMap::new()),
-            next_id: Mutex::new(1),
-        }
-    }
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTerminalResponse {
+    pub session_id: String,
 }
 
-#[derive(Serialize, Clone)]
-struct PtyOutput {
-    id: PtyId,
-    data: Vec<u8>,
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceOutputPayload {
+    pub tile_id: String,
+    pub data: String,
 }
 
-#[derive(Serialize, Clone)]
-struct PtyExit {
-    id: PtyId,
-    code: Option<u32>,
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceExitPayload {
+    pub tile_id: String,
+    pub code: Option<u32>,
 }
 
-#[derive(Deserialize)]
-pub struct SpawnOptions {
-    pub command: String,
-    pub args: Vec<String>,
-    pub cwd: Option<String>,
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTerminalRequest {
+    pub tile_id: String,
     pub cols: u16,
     pub rows: u16,
+    pub command: Option<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    pub start_dir: Option<String>,
     pub env: Option<HashMap<String, String>>,
 }
 
-/// Spawn a new PTY process and start streaming output
-#[tauri::command]
-pub fn pty_spawn(
-    app: AppHandle,
-    state: State<'_, PtyState>,
-    options: SpawnOptions,
-) -> Result<PtyId, String> {
-    let pty_system = native_pty_system();
-
-    let pair = pty_system
-        .openpty(PtySize {
-            rows: options.rows,
-            cols: options.cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("Failed to open PTY: {}", e))?;
-
-    let mut cmd = CommandBuilder::new(&options.command);
-    for arg in &options.args {
-        cmd.arg(arg);
-    }
-    if let Some(cwd) = &options.cwd {
-        cmd.cwd(cwd);
-    }
-    // Inherit PATH so spawned commands (claude, codex, etc.) are discoverable.
-    // portable-pty's CommandBuilder::new() uses a minimal default PATH on macOS
-    // (/usr/bin:/bin:/usr/sbin:/sbin) which won't include user-installed tools.
-    if let Ok(path) = std::env::var("PATH") {
-        cmd.env("PATH", path);
-    }
-    // Set TERM for proper terminal rendering
-    cmd.env("TERM", "xterm-256color");
-    if let Some(env) = &options.env {
-        for (k, v) in env {
-            cmd.env(k, v);
+impl SessionRegistry {
+    pub fn new() -> Self {
+        Self {
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    let child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| format!("Failed to spawn command: {}", e))?;
+    pub fn create_terminal(
+        &self,
+        app: AppHandle,
+        request: CreateTerminalRequest,
+    ) -> Result<CreateTerminalResponse, String> {
+        self.close_terminal(&request.tile_id)?;
+        let (cols, rows) = clamp_dimensions(request.cols, request.rows);
 
-    let writer = pair
-        .master
-        .take_writer()
-        .map_err(|e| format!("Failed to take writer: {}", e))?;
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|error| format!("failed to allocate pty: {error}"))?;
 
-    // Assign ID
-    let id = {
-        let mut next = state.next_id.lock().unwrap();
-        let id = *next;
-        *next += 1;
-        id
-    };
+        let resolved_command = resolve_command(request.command);
+        let resolved_args = if request.args.is_empty() {
+            vec!["-l".to_string()]
+        } else {
+            request.args
+        };
+        let cwd = resolve_start_dir(request.start_dir);
 
-    // Start background reader thread that emits events to the frontend
-    let mut reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|e| format!("Failed to clone reader: {}", e))?;
+        let mut command_builder = CommandBuilder::new(&resolved_command);
+        command_builder.args(&resolved_args);
+        command_builder.cwd(cwd);
+        command_builder.env("TERM", "xterm-256color");
+        if let Some(env) = request.env {
+            for (key, value) in env {
+                command_builder.env(key, value);
+            }
+        }
 
-    let app_clone = app.clone();
-    let pty_id = id;
-    // Per-session event channels so listeners only receive their own data.
-    // Avoids broadcasting every chunk to all sessions (N-1 wasted handler
-    // invocations + deserializations per event when N sessions are alive).
-    let output_channel = format!("pty-output-{}", pty_id);
-    let exit_channel = format!("pty-exit-{}", pty_id);
+        let child = pair
+            .slave
+            .spawn_command(command_builder)
+            .map_err(|error| format!("failed to spawn command: {error}"))?;
+
+        drop(pair.slave);
+
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|error| format!("failed to clone pty reader: {error}"))?;
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|error| format!("failed to take pty writer: {error}"))?;
+
+        let session_id = Uuid::new_v4().to_string();
+        let master = Arc::new(Mutex::new(pair.master));
+        let writer = Arc::new(Mutex::new(writer));
+        let child = Arc::new(Mutex::new(child));
+
+        self.sessions
+            .lock()
+            .map_err(|_| "failed to lock session registry".to_string())?
+            .insert(
+                request.tile_id.clone(),
+                SessionRecord {
+                    session_id: session_id.clone(),
+                    master,
+                    writer,
+                    child,
+                },
+            );
+
+        spawn_reader(app, request.tile_id, reader);
+
+        Ok(CreateTerminalResponse { session_id })
+    }
+
+    pub fn write_terminal(&self, tile_id: &str, data: &str) -> Result<(), String> {
+        let writer = {
+            let sessions = self
+                .sessions
+                .lock()
+                .map_err(|_| "failed to lock session registry".to_string())?;
+            let session = sessions
+                .get(tile_id)
+                .ok_or_else(|| format!("unknown tile id: {tile_id}"))?;
+            session.writer.clone()
+        };
+
+        let mut writer = writer
+            .lock()
+            .map_err(|_| "failed to lock terminal writer".to_string())?;
+
+        writer
+            .write_all(data.as_bytes())
+            .map_err(|error| format!("failed to write to terminal: {error}"))
+    }
+
+    pub fn resize_terminal(&self, tile_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+        let (cols, rows) = clamp_dimensions(cols, rows);
+        let master = {
+            let sessions = self
+                .sessions
+                .lock()
+                .map_err(|_| "failed to lock session registry".to_string())?;
+            let session = sessions
+                .get(tile_id)
+                .ok_or_else(|| format!("unknown tile id: {tile_id}"))?;
+            session.master.clone()
+        };
+
+        let master = master
+            .lock()
+            .map_err(|_| "failed to lock master pty".to_string())?;
+
+        master
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|error| format!("failed to resize terminal: {error}"))
+    }
+
+    pub fn close_terminal(&self, tile_id: &str) -> Result<(), String> {
+        let session = self
+            .sessions
+            .lock()
+            .map_err(|_| "failed to lock session registry".to_string())?
+            .remove(tile_id);
+
+        if let Some(record) = session {
+            let _ = record
+                .child
+                .lock()
+                .map_err(|_| "failed to lock terminal child".to_string())?
+                .kill();
+        }
+
+        Ok(())
+    }
+
+    fn close_all(&self) {
+        let tile_ids = match self.sessions.lock() {
+            Ok(sessions) => sessions.keys().cloned().collect::<Vec<_>>(),
+            Err(_) => return,
+        };
+
+        for tile_id in tile_ids {
+            let _ = self.close_terminal(&tile_id);
+        }
+    }
+
+    #[cfg(test)]
+    fn insert_placeholder(&self, tile_id: &str, session_id: &str) {
+        let writer = Arc::new(Mutex::new(Box::new(std::io::sink()) as Box<dyn Write + Send>));
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 8,
+                cols: 20,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("open pty");
+        let master = Arc::new(Mutex::new(pair.master));
+        let child = pair
+            .slave
+            .spawn_command(CommandBuilder::new("/usr/bin/true"))
+            .expect("spawn");
+        self.sessions.lock().expect("registry lock").insert(
+            tile_id.to_string(),
+            SessionRecord {
+                session_id: session_id.to_string(),
+                master,
+                writer,
+                child: Arc::new(Mutex::new(child)),
+            },
+        );
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.sessions.lock().expect("registry lock").len()
+    }
+}
+
+impl Default for SessionRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for SessionRegistry {
+    fn drop(&mut self) {
+        self.close_all();
+    }
+}
+
+fn spawn_reader(app: AppHandle, tile_id: String, mut reader: Box<dyn Read + Send>) {
     std::thread::spawn(move || {
-        let mut buf = [0u8; 4096];
-        let mut batch: Vec<u8> = Vec::with_capacity(65536);
-        let flush_interval = std::time::Duration::from_millis(5);
-        let mut last_flush = std::time::Instant::now();
-
+        let mut buffer = [0_u8; 8192];
         loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break, // EOF
-                Ok(n) => {
-                    batch.extend_from_slice(&buf[..n]);
-
-                    // Flush if the batch window has elapsed or the batch is large.
-                    // For interactive/slow output, elapsed will always be >= 5ms so
-                    // there is no added latency. For high-throughput output (agent
-                    // writing lots of code) we coalesce reads into a single event.
-                    if last_flush.elapsed() >= flush_interval || batch.len() >= 65536 {
-                        let _ = app_clone.emit(
-                            &output_channel,
-                            PtyOutput {
-                                id: pty_id,
-                                data: std::mem::replace(&mut batch, Vec::with_capacity(65536)),
-                            },
-                        );
-                        last_flush = std::time::Instant::now();
-                    }
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(size) => {
+                    let data = String::from_utf8_lossy(&buffer[..size]).into_owned();
+                    let _ = app.emit(
+                        "workspace-output",
+                        WorkspaceOutputPayload {
+                            tile_id: tile_id.clone(),
+                            data,
+                        },
+                    );
                 }
                 Err(_) => break,
             }
         }
 
-        // Flush any remaining buffered data before signalling exit
-        if !batch.is_empty() {
-            let _ = app_clone.emit(&output_channel, PtyOutput { id: pty_id, data: batch });
-        }
-
-        // Process exited — notify frontend
-        let _ = app_clone.emit(
-            &exit_channel,
-            PtyExit {
-                id: pty_id,
+        let _ = app.emit(
+            "workspace-exit",
+            WorkspaceExitPayload {
+                tile_id,
                 code: None,
             },
         );
     });
+}
 
-    // Store handle
-    {
-        let mut handles = state.handles.lock().unwrap();
-        handles.insert(
-            id,
-            PtyHandle {
-                writer,
-                master: pair.master,
-                child,
-            },
-        );
+fn resolve_command(command: Option<String>) -> String {
+    match command {
+        Some(command) if !command.trim().is_empty() => command,
+        _ => std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string()),
     }
-
-    Ok(id)
 }
 
-/// Write data (user keystrokes) to a PTY
-#[tauri::command]
-pub fn pty_write(state: State<'_, PtyState>, id: PtyId, data: String) -> Result<(), String> {
-    let mut handles = state.handles.lock().unwrap();
-    let handle = handles
-        .get_mut(&id)
-        .ok_or_else(|| format!("PTY {} not found", id))?;
-    handle
-        .writer
-        .write_all(data.as_bytes())
-        .map_err(|e| format!("Write failed: {}", e))?;
-    handle
-        .writer
-        .flush()
-        .map_err(|e| format!("Flush failed: {}", e))?;
-    Ok(())
+fn resolve_start_dir(start_dir: Option<String>) -> String {
+    match start_dir {
+        Some(path) if !path.trim().is_empty() => path,
+        _ => std::env::var("HOME").unwrap_or_else(|_| "/".to_string()),
+    }
 }
 
-/// Resize a PTY
+fn clamp_dimensions(cols: u16, rows: u16) -> (u16, u16) {
+    (cols.max(20), rows.max(8))
+}
+
 #[tauri::command]
-pub fn pty_resize(
-    state: State<'_, PtyState>,
-    id: PtyId,
+pub fn create_terminal(
+    app: AppHandle,
+    sessions: State<'_, SessionRegistry>,
+    request: CreateTerminalRequest,
+) -> Result<CreateTerminalResponse, String> {
+    sessions.create_terminal(app, request)
+}
+
+#[tauri::command]
+pub fn write_terminal(
+    sessions: State<'_, SessionRegistry>,
+    tile_id: String,
+    data: String,
+) -> Result<(), String> {
+    sessions.write_terminal(&tile_id, &data)
+}
+
+#[tauri::command]
+pub fn resize_terminal(
+    sessions: State<'_, SessionRegistry>,
+    tile_id: String,
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let handles = state.handles.lock().unwrap();
-    let handle = handles
-        .get(&id)
-        .ok_or_else(|| format!("PTY {} not found", id))?;
-    handle
-        .master
-        .resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("Resize failed: {}", e))?;
-    Ok(())
+    sessions.resize_terminal(&tile_id, cols, rows)
 }
 
-/// Kill a PTY process
 #[tauri::command]
-pub fn pty_kill(state: State<'_, PtyState>, id: PtyId) -> Result<(), String> {
-    let mut handles = state.handles.lock().unwrap();
-    if let Some(mut handle) = handles.remove(&id) {
-        handle
-            .child
-            .kill()
-            .map_err(|e| format!("Kill failed: {}", e))?;
+pub fn close_terminal(
+    sessions: State<'_, SessionRegistry>,
+    tile_id: String,
+) -> Result<(), String> {
+    sessions.close_terminal(&tile_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{clamp_dimensions, SessionRegistry};
+
+    #[test]
+    fn tracks_and_removes_session_bookkeeping() {
+        let registry = SessionRegistry::new();
+        registry.insert_placeholder("tile-1", "session-1");
+
+        assert_eq!(registry.len(), 1);
+
+        registry
+            .close_terminal("tile-1")
+            .expect("close should succeed");
+
+        assert_eq!(registry.len(), 0);
     }
-    Ok(())
+
+    #[test]
+    fn clamps_zero_sized_terminal_dimensions() {
+        assert_eq!(clamp_dimensions(0, 0), (20, 8));
+        assert_eq!(clamp_dimensions(120, 32), (120, 32));
+    }
 }

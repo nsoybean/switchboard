@@ -2,20 +2,34 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PersistedSession {
     pub id: String,
     pub agent: String,
     pub label: String,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
     pub resume_target_id: Option<String>,
+    #[serde(default)]
     pub worktree_path: Option<String>,
+    #[serde(default)]
     pub branch: Option<String>,
+    #[serde(default)]
     pub repo_root: Option<String>,
+    #[serde(default)]
     pub launch_root: Option<String>,
+    #[serde(default)]
     pub display_path: Option<String>,
+    #[serde(default)]
     pub workspace_kind: Option<String>,
+    #[serde(default)]
     pub base_branch: Option<String>,
+    #[serde(default)]
     pub head_kind: Option<String>,
     pub cwd: String,
     pub created_at: String,
@@ -247,6 +261,39 @@ pub fn remove_project_path(path: String) -> Result<(), String> {
     }
 
     write_config(&config)
+}
+
+/// Open a project directory in the platform file manager
+#[tauri::command]
+pub fn open_project_in_finder(path: String) -> Result<(), String> {
+    let canonical = validate_repo_path(&path)?;
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(&canonical);
+        command
+    };
+
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(&canonical);
+        command
+    };
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer");
+        command.arg(&canonical);
+        command
+    };
+
+    command
+        .spawn()
+        .map_err(|e| format!("Failed to open project: {}", e))?;
+
+    Ok(())
 }
 
 /// Get the stored GitHub token

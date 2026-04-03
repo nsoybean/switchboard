@@ -30,14 +30,13 @@ export interface Session {
   label: string;
   status: SessionStatus;
   resumeTargetId: string | null;
-  ptyId: number | null;
   worktreePath: string | null;
   branch: string | null;
   workspace: SessionWorkspaceIdentity;
   cwd: string;
   createdAt: string;
   exitCode: number | null;
-  /** CLI command to spawn (e.g., "claude", "codex", "/bin/bash") */
+  /** CLI command to spawn (e.g., "claude", "codex", "/bin/zsh") */
   command: string;
   /** CLI arguments */
   args: string[];
@@ -47,16 +46,21 @@ export interface Session {
 
 export interface AppState {
   sessions: Record<string, Session>;
+  sessionsLoaded: boolean;
   activeSessionId: string | null;
   gitPanelOpen: boolean;
   projectPath: string | null;
   projects: string[];
-  viewMode: "focused" | "grid" | "canvas";
   previewFilePath: string | null;
   githubToken: string | null;
 }
 
 export type AppAction =
+  | {
+      type: "HYDRATE_SESSIONS";
+      sessions: Record<string, Session>;
+      activeSessionId?: string | null;
+    }
   | { type: "ADD_SESSION"; session: Session }
   | { type: "REMOVE_SESSION"; id: string }
   | { type: "SET_ACTIVE"; id: string | null }
@@ -68,11 +72,9 @@ export type AppAction =
       exitCode?: number | null;
     }
   | { type: "SET_SESSION_BRANCH"; id: string; branch: string | null }
-  | { type: "SET_PTY_ID"; id: string; ptyId: number | null }
   | { type: "SET_RESUME_TARGET"; id: string; resumeTargetId: string | null }
   | { type: "TOGGLE_GIT_PANEL" }
   | { type: "SET_PROJECT_PATH"; path: string | null }
   | { type: "SET_PROJECTS"; paths: string[] }
-  | { type: "SET_VIEW_MODE"; mode: "focused" | "grid" | "canvas" }
   | { type: "SET_PREVIEW_FILE"; path: string | null }
   | { type: "SET_GITHUB_TOKEN"; token: string | null };

@@ -1,7 +1,7 @@
 mod commands;
 mod hook_server;
 
-use commands::pty::PtyState;
+use commands::pty::SessionRegistry;
 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -14,7 +14,7 @@ pub fn run() {
     let hook_token = hook_state.token.clone();
 
     tauri::Builder::default()
-        .manage(PtyState::new())
+        .manage(SessionRegistry::new())
         .manage(hook_state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -44,16 +44,18 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::pty::pty_spawn,
-            commands::pty::pty_write,
-            commands::pty::pty_resize,
-            commands::pty::pty_kill,
+            commands::pty::create_terminal,
+            commands::pty::write_terminal,
+            commands::pty::resize_terminal,
+            commands::pty::close_terminal,
             commands::claude_data::get_claude_sessions,
             commands::claude_data::get_claude_history,
             commands::claude_data::get_claude_session_transcript,
+            commands::claude_data::delete_claude_session,
             commands::codex_data::get_codex_sessions,
             commands::codex_data::find_codex_session,
             commands::codex_data::get_codex_session_transcript,
+            commands::codex_data::delete_codex_session,
             commands::session_metadata::rename_session_metadata,
             commands::session_metadata::delete_session_metadata,
             commands::worktree::create_worktree,
@@ -83,6 +85,7 @@ pub fn run() {
             commands::session::list_project_paths,
             commands::session::add_project_path,
             commands::session::remove_project_path,
+            commands::session::open_project_in_finder,
             commands::session::get_github_token,
             commands::session::set_github_token,
             commands::session::validate_github_token,

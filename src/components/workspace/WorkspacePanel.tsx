@@ -25,6 +25,7 @@ export interface WorkspaceContext {
 interface WorkspacePanelProps {
   activeTab: WorkspaceTab;
   context: WorkspaceContext | null;
+  visible?: boolean;
   session?: Session | null;
   githubToken?: string | null;
   onOpenSettings?: () => void;
@@ -55,6 +56,7 @@ function EmptyWorkspaceState({
 export function WorkspacePanel({
   activeTab,
   context,
+  visible = true,
   session,
   githubToken,
   onOpenSettings,
@@ -67,7 +69,7 @@ export function WorkspacePanel({
 
   const git = useGitState({
     cwd: hasRoot ? context.rootPath! : "",
-    visible: hasRoot,
+    visible: hasRoot && visible,
     sessionId: context?.kind === "session" ? session?.id : null,
     onSessionBranchChange,
   });

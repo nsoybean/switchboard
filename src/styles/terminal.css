@@ -6,6 +6,17 @@
 
 .xterm {
   height: 100%;
+  background: transparent !important;
+}
+
+.xterm .xterm-viewport,
+.xterm .composition-view {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.xterm .xterm-screen {
+  background: transparent !important;
 }
 
 .xterm-viewport::-webkit-scrollbar {

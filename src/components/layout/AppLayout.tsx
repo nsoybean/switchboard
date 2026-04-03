@@ -4,13 +4,6 @@ import { useAppState, useAppDispatch } from "../../state/context";
 import { Titlebar } from "./Titlebar";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
-import { XTermContainer } from "../terminal/XTermContainer";
-import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
 import { FilePreview } from "../files/FilePreview";
@@ -33,13 +26,7 @@ import {
 } from "../../lib/tauri-commands";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
-import { Circle, FolderOpen, Plus, Square } from "lucide-react";
-import { AgentIcon } from "@/components/agents/AgentIcon";
+import { FolderOpen, Plus } from "lucide-react";
 import type {
   AgentType,
   Session,
@@ -48,12 +35,11 @@ import type {
   SessionWorkspaceKind,
 } from "../../state/types";
 import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
-import {
-  type CanvasState,
-  defaultCanvasState,
-} from "../canvas/canvas-state";
 
-const MAX_ALIVE_TERMINALS = 8;
+const MIN_SIDEBAR_WIDTH = 260;
+const MAX_SIDEBAR_WIDTH = 520;
+const MIN_INSPECTOR_WIDTH = 300;
+const MAX_INSPECTOR_WIDTH = 640;
 
 interface HistorySessionSummary {
   session_id: string;
@@ -150,11 +136,12 @@ export function AppLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [inspectorWidth, setInspectorWidth] = useState(380);
   const sessionsRef = useRef(state.sessions);
   const hookConfigReady = useRef<Promise<void>>(Promise.resolve());
-  const [canvasState, setCanvasState] = useState<CanvasState>(defaultCanvasState());
-  const canvasSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvasViewRef = useRef<CanvasViewHandle>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const {
     currentVersion,
     availableUpdate,
@@ -257,10 +244,6 @@ export function AppLayout() {
     workspaceCandidate,
   );
 
-  const aliveSessionIds = new Set(
-    sortedSessionIds.slice(0, MAX_ALIVE_TERMINALS),
-  );
-
   useEffect(() => {
     if (viewingSession && !sessionBelongsToProject(viewingSession, state.projectPath)) {
       setViewingSession(null);
@@ -287,6 +270,13 @@ export function AppLayout() {
     sessionsRef.current = state.sessions;
   }, [state.sessions]);
 
+  useEffect(
+    () => () => {
+      resizeCleanupRef.current?.();
+    },
+    [],
+  );
+
   // Write hook config for the current project on startup / project change.
   // Sessions await hookConfigReady before spawning to avoid a race.
   useEffect(() => {
@@ -303,44 +293,6 @@ export function AppLayout() {
       .then(() => {})
       .catch((err) => console.warn("Failed to write hook config on startup:", err));
   }, [state.projectPath]);
-
-  // Load canvas state when project changes
-  useEffect(() => {
-    if (!state.projectPath) return;
-    invoke<string | null>("load_canvas_state", {
-      projectPath: state.projectPath,
-    })
-      .then((raw) => {
-        if (raw) {
-          try {
-            setCanvasState(JSON.parse(raw));
-          } catch {
-            console.warn("Failed to parse canvas state, using default");
-            setCanvasState(defaultCanvasState());
-          }
-        } else {
-          setCanvasState(defaultCanvasState());
-        }
-      })
-      .catch(() => setCanvasState(defaultCanvasState()));
-  }, [state.projectPath]);
-
-  // Debounced canvas state save
-  const handleCanvasStateChange = useCallback(
-    (newState: CanvasState) => {
-      setCanvasState(newState);
-      if (canvasSaveTimerRef.current) clearTimeout(canvasSaveTimerRef.current);
-      if (!state.projectPath) return;
-      const projectPath = state.projectPath;
-      canvasSaveTimerRef.current = setTimeout(() => {
-        invoke("save_canvas_state", {
-          projectPath,
-          state: JSON.stringify(newState),
-        }).catch(console.error);
-      }, 500);
-    },
-    [state.projectPath],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -488,6 +440,8 @@ export function AppLayout() {
           id: session.id,
           agent: session.agent,
           label: session.label,
+          status: session.status,
+          exit_code: session.exitCode,
           resume_target_id: session.resumeTargetId,
           worktree_path: session.worktreePath,
           branch: session.branch,
@@ -573,7 +527,6 @@ export function AppLayout() {
         label: config.label,
         status: "idle",
         resumeTargetId,
-        ptyId: null,
         worktreePath,
         branch,
         workspace: buildWorkspaceIdentity({
@@ -675,7 +628,6 @@ export function AppLayout() {
         id: resumeTargetId ?? session.id,
         status: "idle",
         resumeTargetId,
-        ptyId: null,
         createdAt: new Date().toISOString(),
         exitCode: null,
         command: resumeConfig.command,
@@ -698,6 +650,134 @@ export function AppLayout() {
   );
 
   const openSettings = useCallback(() => setSettingsOpen(true), []);
+
+  const handleSelectProject = useCallback(
+    async (path: string) => {
+      try {
+        await projectCommands.setPath(path);
+        dispatch({ type: "SET_PROJECT_PATH", path });
+        setViewingSession(null);
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      } catch (err) {
+        toast.error("Failed to switch project", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch],
+  );
+
+  const handleOpenProject = useCallback(async (path: string) => {
+    try {
+      await projectCommands.openInFinder(path);
+    } catch (err) {
+      toast.error("Failed to open project", {
+        description: String(err),
+      });
+    }
+  }, []);
+
+  const handleRemoveProject = useCallback(
+    async (path: string) => {
+      try {
+        await projectCommands.removePath(path);
+        const [nextProjectPath, projectPaths] = await Promise.all([
+          projectCommands.getPath(),
+          projectCommands.listPaths(),
+        ]);
+
+        dispatch({ type: "SET_PROJECTS", paths: projectPaths });
+        dispatch({ type: "SET_PROJECT_PATH", path: nextProjectPath });
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+
+        const nextActiveSessionId = nextProjectPath
+          ? Object.values(sessionsRef.current)
+              .filter(
+                (session) =>
+                  sessionBelongsToProject(session, nextProjectPath) &&
+                  (session.status === "running" ||
+                    session.status === "idle" ||
+                    session.status === "needs-input"),
+              )
+              .sort(
+                (a, b) =>
+                  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+              )[0]?.id ?? null
+          : null;
+
+        dispatch({ type: "SET_ACTIVE", id: nextActiveSessionId });
+        setViewingSession((current) => {
+          if (!current || sessionBelongsToProject(current, nextProjectPath)) {
+            return current;
+          }
+          return null;
+        });
+      } catch (err) {
+        toast.error("Failed to remove project", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch],
+  );
+
+  const startPanelResize = useCallback(
+    (panel: "sidebar" | "inspector", event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      resizeCleanupRef.current?.();
+
+      const startX = event.clientX;
+      const startWidth = panel === "sidebar" ? sidebarWidth : inspectorWidth;
+
+      const updateWidth = (nextWidth: number) => {
+        if (panel === "sidebar") {
+          setSidebarWidth(
+            Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, nextWidth)),
+          );
+          return;
+        }
+
+        setInspectorWidth(
+          Math.min(MAX_INSPECTOR_WIDTH, Math.max(MIN_INSPECTOR_WIDTH, nextWidth)),
+        );
+      };
+
+      const previousUserSelect = document.body.style.userSelect;
+      const previousCursor = document.body.style.cursor;
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX;
+        updateWidth(panel === "sidebar" ? startWidth + delta : startWidth - delta);
+      };
+
+      const cleanup = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", cleanup);
+        window.removeEventListener("pointercancel", cleanup);
+        document.body.style.userSelect = previousUserSelect;
+        document.body.style.cursor = previousCursor;
+        resizeCleanupRef.current = null;
+      };
+
+      resizeCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", cleanup);
+      window.addEventListener("pointercancel", cleanup);
+    },
+    [inspectorWidth, sidebarWidth],
+  );
+
+  const handleSelectCanvasSession = useCallback(
+    (sessionId: string) => {
+      dispatch({ type: "SET_ACTIVE", id: sessionId });
+      setViewingSession(null);
+    },
+    [dispatch],
+  );
 
   const handleSessionBranchChange = useCallback(
     async (sessionId: string, branch: string | null) => {
@@ -730,7 +810,6 @@ export function AppLayout() {
           : code === 0 || code === null
             ? "done"
             : "error";
-      dispatch({ type: "SET_PTY_ID", id: sessionId, ptyId: null });
       dispatch({
         type: "UPDATE_STATUS",
         id: sessionId,
@@ -738,33 +817,51 @@ export function AppLayout() {
         exitCode: code,
       });
 
+      if (session) {
+        void persistSession({
+          ...session,
+          status,
+          exitCode: code,
+        });
+      }
+
       if (session?.agent === "codex") {
         void syncCodexResumeTarget(session);
       }
     },
-    [dispatch, syncCodexResumeTarget],
+    [dispatch, persistSession, syncCodexResumeTarget],
   );
 
-  const handleSessionSpawn = useCallback(
-    (sessionId: string, ptyId: number) => {
-      dispatch({ type: "SET_PTY_ID", id: sessionId, ptyId });
+  const handleSessionStart = useCallback(
+    (sessionId: string) => {
+      const session = sessionsRef.current[sessionId];
+      dispatch({ type: "UPDATE_STATUS", id: sessionId, status: "running" });
+      if (session) {
+        void persistSession({
+          ...session,
+          status: "running",
+        });
+      }
     },
-    [dispatch],
+    [dispatch, persistSession],
   );
 
   const handleStopSession = useCallback(
     async (sessionId: string) => {
       const session = sessionsRef.current[sessionId];
-      if (!session || session.ptyId === null) return;
+      if (!session) return;
 
       try {
-        await invoke("pty_kill", { id: session.ptyId });
-        dispatch({ type: "SET_PTY_ID", id: sessionId, ptyId: null });
+        await invoke("close_terminal", { tileId: sessionId });
         dispatch({
           type: "UPDATE_STATUS",
           id: sessionId,
           status: "stopped",
           exitCode: session.exitCode,
+        });
+        void persistSession({
+          ...session,
+          status: "stopped",
         });
         if (session.agent === "codex") {
           void syncCodexResumeTarget(session);
@@ -775,7 +872,14 @@ export function AppLayout() {
         });
       }
     },
-    [dispatch, syncCodexResumeTarget],
+    [dispatch, persistSession, syncCodexResumeTarget],
+  );
+
+  const handleStopCanvasSession = useCallback(
+    (sessionId: string) => {
+      void handleStopSession(sessionId);
+    },
+    [handleStopSession],
   );
 
   const handleRenameSession = useCallback(
@@ -817,28 +921,41 @@ export function AppLayout() {
     async (session: Session) => {
       const localSession = state.sessions[session.id];
       const historySessionId = session.resumeTargetId ?? session.id;
-      if (!localSession) {
-        try {
-          await invoke("delete_session_metadata", {
-            sessionId: historySessionId,
-          });
-        } catch (err) {
-          toast.error("Failed to delete session", {
-            description: String(err),
-          });
-        }
-        return;
-      }
-
-      if (localSession.ptyId !== null) {
-        await invoke("pty_kill", { id: localSession.ptyId }).catch((err) => {
-          console.warn("Failed to kill PTY during session deletion:", err);
-        });
-      }
 
       try {
-        await invoke("delete_session", { id: localSession.id });
-        dispatch({ type: "REMOVE_SESSION", id: localSession.id });
+        if (localSession) {
+          await invoke("close_terminal", { tileId: localSession.id }).catch((err) => {
+            console.warn("Failed to close terminal during session deletion:", err);
+          });
+        }
+
+        if (session.agent === "claude-code") {
+          await invoke("delete_claude_session", {
+            sessionId: historySessionId,
+          });
+        } else if (session.agent === "codex") {
+          const codexSessionId =
+            historySessionId || (localSession ? await syncCodexResumeTarget(localSession) : null);
+          if (codexSessionId) {
+            await invoke("delete_codex_session", {
+              sessionId: codexSessionId,
+            });
+          }
+        }
+
+        if (localSession) {
+          await invoke("delete_session", { id: localSession.id });
+          dispatch({ type: "REMOVE_SESSION", id: localSession.id });
+        }
+
+        if (!localSession) {
+          await invoke("delete_session_metadata", {
+            sessionId: historySessionId,
+          }).catch(() => {
+            // Ignore missing overlay metadata when the real source deletion succeeded.
+          });
+        }
+
         dispatch({ type: "SET_PREVIEW_FILE", path: null });
       } catch (err) {
         toast.error("Failed to delete session", {
@@ -846,7 +963,7 @@ export function AppLayout() {
         });
       }
     },
-    [dispatch, state.sessions],
+    [dispatch, state.sessions, syncCodexResumeTarget],
   );
 
   const shortcutHandlers = useMemo(
@@ -881,30 +998,20 @@ export function AppLayout() {
         if (termEl instanceof HTMLElement) termEl.focus();
       },
       onEscape: () => {
-        if (state.viewMode === "canvas" && canvasViewRef.current) {
+        if (canvasViewRef.current) {
           canvasViewRef.current.unfocusTile();
           return true;
         }
         return false;
       },
-      onToggleViewMode: () => {
-        const next =
-          state.viewMode === "focused"
-            ? "grid"
-            : state.viewMode === "grid"
-              ? "canvas"
-              : "focused";
-        dispatch({ type: "SET_VIEW_MODE", mode: next });
-      },
     }),
-    [sortedSessionIds, state.activeSessionId, state.viewMode, dispatch],
+    [sortedSessionIds, state.activeSessionId, dispatch],
   );
   useKeyboardShortcuts(shortcutHandlers);
   useAgentHooks(state.sessions, dispatch);
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Custom titlebar */}
       <Titlebar
         sidebarOpen={sidebarOpen}
         inspectorOpen={inspectorOpen}
@@ -912,25 +1019,14 @@ export function AppLayout() {
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
         projectPath={state.projectPath}
         onProjectClick={() => setProjectPickerOpen(true)}
-        viewMode={state.viewMode}
         updateVersion={availableUpdate?.version ?? null}
         checkingForUpdates={checkingForUpdates}
         installingUpdate={installingUpdate}
         updateProgress={updateProgress}
         onInstallUpdate={() => void installUpdate()}
-        onToggleViewMode={() => {
-          const next =
-            state.viewMode === "focused"
-              ? "grid"
-              : state.viewMode === "grid"
-                ? "canvas"
-                : "focused";
-          dispatch({ type: "SET_VIEW_MODE", mode: next });
-        }}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
-      {/* Settings page (full overlay) */}
       {settingsOpen ? (
         <div className="flex-1 min-h-0">
           <SettingsPage
@@ -946,32 +1042,51 @@ export function AppLayout() {
           />
         </div>
       ) : (
-        /* Main content below titlebar */
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className="flex-1 min-h-0"
-        >
-          {/* Sidebar */}
-          {sidebarOpen && (
-            <>
-              <ResizablePanel defaultSize="20%" minSize="15%" maxSize="35%">
+        <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
+          {state.projectPath && liveSessions.length > 0 ? (
+            <CanvasView
+              ref={canvasViewRef}
+              projectPath={state.projectPath}
+              sessions={liveSessions}
+              activeSessionId={state.activeSessionId}
+              onSessionStart={handleSessionStart}
+              onSessionExit={handleSessionExit}
+              onSelectSession={handleSelectCanvasSession}
+              onStopSession={handleStopCanvasSession}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <div className="max-w-sm text-center">
+                <h2 className="mb-3 text-lg font-semibold">Welcome to Switchboard</h2>
+                <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+                  {state.projectPath
+                    ? "Manage multiple AI coding agents on a smooth shared canvas."
+                    : "Manage multiple AI coding agents in parallel. Open a project to get started."}
+                </p>
+                <Button onClick={() => (state.projectPath ? setDialogOpen(true) : setProjectPickerOpen(true))}>
+                  {state.projectPath ? (
+                    <Plus data-icon="inline-start" />
+                  ) : (
+                    <FolderOpen data-icon="inline-start" />
+                  )}
+                  {state.projectPath ? "Start First Session" : "Open Project"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {sidebarOpen ? (
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-20 p-1.5 pr-0.5">
+              <div
+                className="pointer-events-auto h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur"
+                style={{ width: sidebarWidth }}
+              >
                 <SessionSidebar
                   onNewSession={() => setDialogOpen(true)}
                   onAddProject={() => setProjectPickerOpen(true)}
-                  onSelectProject={(path) => {
-                    void projectCommands
-                      .setPath(path)
-                      .then(() => {
-                        dispatch({ type: "SET_PROJECT_PATH", path });
-                        setViewingSession(null);
-                        dispatch({ type: "SET_PREVIEW_FILE", path: null });
-                      })
-                      .catch((err) => {
-                        toast.error("Failed to switch project", {
-                          description: String(err),
-                        });
-                      });
-                  }}
+                  onSelectProject={handleSelectProject}
+                  onOpenProject={handleOpenProject}
+                  onRemoveProject={handleRemoveProject}
                   onViewSession={(session) => {
                     dispatch({ type: "SET_PREVIEW_FILE", path: null });
                     if (state.sessions[session.id]) {
@@ -981,7 +1096,7 @@ export function AppLayout() {
                   }}
                   onSelectActiveSession={(sessionId) => {
                     setViewingSession(null);
-                    if (state.viewMode === "canvas" && sessionId) {
+                    if (sessionId) {
                       canvasViewRef.current?.panToSession(sessionId);
                     }
                   }}
@@ -991,302 +1106,78 @@ export function AppLayout() {
                   onDeleteSession={handleDeleteSession}
                   selectedSessionId={selectedSessionId}
                 />
-              </ResizablePanel>
-              <ResizableHandle />
-            </>
-          )}
+              </div>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize session sidebar"
+                className="pointer-events-auto absolute top-1.5 right-0 bottom-1.5 w-3 cursor-col-resize"
+                onPointerDown={(event) => startPanelResize("sidebar", event)}
+              />
+            </div>
+          ) : null}
 
-          {/* Main area */}
-          <ResizablePanel defaultSize="55%">
-            <div className="flex flex-col h-full min-w-0 overflow-hidden">
-              <div className="flex-1 relative min-h-0">
-                {!state.projectPath ? (
-                  <div className="h-full flex items-center justify-center bg-background">
-                    <div className="text-center max-w-sm">
-                      <h2 className="text-lg font-semibold mb-3">
-                        Welcome to Switchboard
-                      </h2>
-                      <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                        Manage multiple AI coding agents in parallel.
-                        <br />
-                        Open a project to get started.
-                      </p>
-                      <Button onClick={() => setProjectPickerOpen(true)}>
-                        <FolderOpen data-icon="inline-start" />
-                        Open Project
-                      </Button>
-                    </div>
-                  </div>
-                ) : liveSessions.length === 0 ? (
-                  <div className="h-full flex items-center justify-center bg-background">
-                    <div className="text-center max-w-sm">
-                      <h2 className="text-lg font-semibold mb-3">
-                        Welcome to Switchboard
-                      </h2>
-                      <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                        Manage multiple AI coding agents in parallel.
-                        <br />
-                        Each session gets its own interactive terminal.
-                      </p>
-                      <Button onClick={() => setDialogOpen(true)}>
-                        <Plus data-icon="inline-start" />
-                        Start First Session
-                      </Button>
-                    </div>
-                  </div>
-                ) : state.viewMode === "canvas" ? (
-                  <CanvasView
-                    ref={canvasViewRef}
-                    sessions={liveSessions}
-                    activeSessionId={state.activeSessionId}
-                    aliveSessionIds={aliveSessionIds}
-                    onSessionSpawn={(sessionId, ptyId) =>
-                      handleSessionSpawn(sessionId, ptyId)
-                    }
-                    onSessionExit={(sessionId) =>
-                      handleSessionExit(sessionId)
-                    }
-                    onSelectSession={(sessionId) => {
-                      dispatch({ type: "SET_ACTIVE", id: sessionId });
-                      setViewingSession(null);
-                    }}
-                    onStopSession={(sessionId) =>
-                      void handleStopSession(sessionId)
-                    }
-                    canvasState={canvasState}
-                    onCanvasStateChange={handleCanvasStateChange}
-                  />
-                ) : (
-                  <div
-                    className={
-                      state.viewMode === "grid"
-                        ? "h-full overflow-auto p-2"
-                        : "relative h-full"
-                    }
-                  >
-                    <div
-                      className={
-                        state.viewMode === "grid"
-                          ? "grid gap-2 h-full"
-                          : "contents"
-                      }
-                      style={
-                        state.viewMode === "grid"
-                          ? {
-                              gridTemplateColumns:
-                                "repeat(auto-fit, minmax(400px, 1fr))",
-                              gridAutoRows: "minmax(300px, 1fr)",
-                            }
-                          : undefined
-                      }
-                    >
-                      {liveSessions.map((session) => {
-                        if (!aliveSessionIds.has(session.id)) return null;
-                        const isActive =
-                          session.id === state.activeSessionId;
-                        const isGrid = state.viewMode === "grid";
-                        const canStop =
-                          session.ptyId !== null &&
-                          (session.status === "running" ||
-                            session.status === "idle" ||
-                            session.status === "needs-input");
-
-                        return (
-                          <div
-                            key={session.id}
-                            className={cn(
-                              "flex flex-col bg-background",
-                              isGrid
-                                ? cn(
-                                    "overflow-hidden rounded-md border transition-colors",
-                                    isActive
-                                      ? "border-primary shadow-sm"
-                                      : "hover:border-primary/50",
-                                  )
-                                : "absolute inset-0",
-                            )}
-                            style={
-                              !isGrid
-                                ? {
-                                    display: isActive ? "flex" : "none",
-                                  }
-                                : undefined
-                            }
-                            onClick={
-                              isGrid
-                                ? () => {
-                                    dispatch({
-                                      type: "SET_ACTIVE",
-                                      id: session.id,
-                                    });
-                                    setViewingSession(null);
-                                  }
-                                : undefined
-                            }
-                          >
-                            {/* Header — compact in grid, full in focused */}
-                            {isGrid ? (
-                              <div className="flex shrink-0 items-center gap-2 border-b bg-card px-3 py-1.5">
-                                <AgentIcon
-                                  agent={session.agent}
-                                  className="size-3.5"
-                                />
-                                <span className="text-xs font-medium truncate flex-1">
-                                  {session.label}
-                                </span>
-                                {canStop && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          void handleStopSession(
-                                            session.id,
-                                          );
-                                        }}
-                                      >
-                                        <Square />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      Stop session
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
-                                <Circle
-                                  className={cn(
-                                    "size-2.5 fill-current",
-                                    session.status === "running" &&
-                                      "text-[var(--sb-status-running)]",
-                                    session.status === "idle" &&
-                                      "text-[var(--sb-status-done)]",
-                                    session.status === "needs-input" &&
-                                      "text-[var(--sb-status-warning)] animate-pulse",
-                                    session.status === "done" &&
-                                      "text-[var(--sb-status-done)]",
-                                    session.status === "stopped" &&
-                                      "text-muted-foreground",
-                                    session.status === "error" &&
-                                      "text-destructive",
-                                  )}
-                                />
-                              </div>
-                            ) : (
-                              <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
-                                <AgentIcon
-                                  agent={session.agent}
-                                  className="size-4 shrink-0"
-                                />
-                                <span
-                                  className="min-w-0 max-w-[40ch] truncate font-semibold"
-                                  title={session.label}
-                                >
-                                  {session.label}
-                                </span>
-                                <div className="ml-auto flex shrink-0 items-center gap-2">
-                                  {canStop && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                      onClick={() =>
-                                        void handleStopSession(
-                                          session.id,
-                                        )
-                                      }
-                                    >
-                                      <Square data-icon="inline-start" />
-                                      Stop
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                            {/* Terminal — pointer-events disabled on inactive grid tiles */}
-                            <div
-                              className="flex-1 min-h-0"
-                              style={
-                                isGrid && !isActive
-                                  ? { pointerEvents: "none" }
-                                  : undefined
-                              }
-                            >
-                              <XTermContainer
-                                command={session.command}
-                                args={session.args}
-                                cwd={session.cwd}
-                                env={session.env}
-                                isActive={
-                                  isGrid ? true : isActive
-                                }
-                                onSpawn={(ptyId) =>
-                                  handleSessionSpawn(
-                                    session.id,
-                                    ptyId,
-                                  )
-                                }
-                                onExit={handleSessionExit(
-                                  session.id,
-                                )}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {viewingSession && (
-                  <div className="absolute inset-0 z-10">
-                    <SessionTranscriptView
-                      key={`${viewingSession.agent}:${viewingSession.resumeTargetId ?? viewingSession.id}`}
-                      session={viewingSession}
-                      onClose={() => setViewingSession(null)}
-                      onResume={() => {
-                        void handleResumeSession(viewingSession);
-                        setViewingSession(null);
-                      }}
-                    />
-                  </div>
-                )}
-
-                {/* File preview overlay */}
-                {state.previewFilePath && (
-                  <div className="absolute inset-0 z-10">
-                    <FilePreview
-                      filePath={state.previewFilePath}
-                      onClose={() =>
-                        dispatch({ type: "SET_PREVIEW_FILE", path: null })
-                      }
-                    />
-                  </div>
-                )}
+          {state.projectPath ? (
+            <div
+              className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-1.5 pl-0.5 transition-[opacity,transform] duration-150 ${
+                inspectorOpen
+                  ? "translate-x-0 opacity-100"
+                  : "translate-x-3 opacity-0"
+              }`}
+              aria-hidden={!inspectorOpen}
+            >
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize inspector panel"
+                className={`pointer-events-auto absolute top-1.5 left-0 bottom-1.5 w-3 cursor-col-resize ${
+                  inspectorOpen ? "" : "pointer-events-none"
+                }`}
+                onPointerDown={(event) => startPanelResize("inspector", event)}
+              />
+              <div
+                className={`h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur transition-opacity duration-150 ${
+                  inspectorOpen ? "pointer-events-auto" : "pointer-events-none"
+                }`}
+                style={{ width: inspectorWidth }}
+              >
+                <WorkspacePanel
+                  activeTab={workspaceTab}
+                  context={workspaceContext}
+                  visible={inspectorOpen}
+                  session={selectedSession}
+                  githubToken={state.githubToken}
+                  onOpenSettings={openSettings}
+                  onSessionBranchChange={handleSessionBranchChange}
+                  onTabChange={setWorkspaceTab}
+                />
               </div>
             </div>
-          </ResizablePanel>
+          ) : null}
 
-          {/* Workspace inspector (hidden in grid view) */}
-          {inspectorOpen && state.projectPath && state.viewMode === "focused" && (
-              <>
-                <ResizableHandle />
-                <ResizablePanel defaultSize="25%" minSize="15%" maxSize="40%">
-                  <WorkspacePanel
-                    activeTab={workspaceTab}
-                    context={workspaceContext}
-                    session={selectedSession}
-                    githubToken={state.githubToken}
-                    onOpenSettings={openSettings}
-                    onSessionBranchChange={handleSessionBranchChange}
-                    onTabChange={setWorkspaceTab}
-                  />
-                </ResizablePanel>
-              </>
-            )}
-        </ResizablePanelGroup>
+          {viewingSession ? (
+            <div className="absolute inset-0 z-30">
+              <SessionTranscriptView
+                key={`${viewingSession.agent}:${viewingSession.resumeTargetId ?? viewingSession.id}`}
+                session={viewingSession}
+                onClose={() => setViewingSession(null)}
+                onResume={() => {
+                  void handleResumeSession(viewingSession);
+                  setViewingSession(null);
+                }}
+              />
+            </div>
+          ) : null}
+
+          {state.previewFilePath ? (
+            <div className="absolute inset-0 z-30">
+              <FilePreview
+                filePath={state.previewFilePath}
+                onClose={() => dispatch({ type: "SET_PREVIEW_FILE", path: null })}
+              />
+            </div>
+          ) : null}
+        </div>
       )}
 
       {/* New Session Dialog */}

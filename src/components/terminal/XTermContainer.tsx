@@ -1,91 +1,116 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { usePty } from "../../hooks/usePty";
 import { useTheme } from "@/components/theme-provider";
-import { Spinner } from "@/components/ui/spinner";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
 
 const DARK_THEME = {
-  background: "#1c1917",
-  foreground: "#e7e5e4",
-  cursor: "#a8a29e",
-  selectionBackground: "#44403c",
-  black: "#1c1917",
-  red: "#ef4444",
-  green: "#22c55e",
-  yellow: "#eab308",
-  blue: "#3b82f6",
-  magenta: "#a855f7",
-  cyan: "#06b6d4",
-  white: "#e7e5e4",
-  brightBlack: "#78716c",
-  brightRed: "#f87171",
-  brightGreen: "#4ade80",
-  brightYellow: "#facc15",
-  brightBlue: "#60a5fa",
-  brightMagenta: "#c084fc",
-  brightCyan: "#22d3ee",
-  brightWhite: "#fafaf9",
+  background: "#000000",
+  foreground: "#f2f7fb",
+  cursor: "#87e6ff",
+  black: "#000000",
+  blue: "#58c5ff",
+  brightBlack: "#496476",
+  brightBlue: "#89dbff",
+  brightCyan: "#b0fff2",
+  brightGreen: "#89ffc3",
+  brightMagenta: "#d5c4ff",
+  brightRed: "#ff8f8f",
+  brightWhite: "#ffffff",
+  brightYellow: "#ffd29b",
+  cyan: "#5ff3dd",
+  green: "#7ce6a7",
+  magenta: "#bc9cff",
+  red: "#ff7f7f",
+  white: "#dde8ee",
+  yellow: "#ffbf73",
 };
 
 const LIGHT_THEME = {
-  background: "#fafaf9",
-  foreground: "#1c1917",
-  cursor: "#78716c",
-  selectionBackground: "#e7e5e4",
-  black: "#1c1917",
-  red: "#dc2626",
-  green: "#16a34a",
-  yellow: "#ca8a04",
+  background: "#ffffff",
+  foreground: "#18212b",
+  cursor: "#2d4759",
+  black: "#18212b",
   blue: "#2563eb",
-  magenta: "#9333ea",
-  cyan: "#0891b2",
-  white: "#fafaf9",
-  brightBlack: "#a8a29e",
-  brightRed: "#ef4444",
-  brightGreen: "#22c55e",
-  brightYellow: "#eab308",
-  brightBlue: "#3b82f6",
-  brightMagenta: "#a855f7",
-  brightCyan: "#06b6d4",
+  brightBlack: "#6b7280",
+  brightBlue: "#60a5fa",
+  brightCyan: "#22d3ee",
+  brightGreen: "#4ade80",
+  brightMagenta: "#c084fc",
+  brightRed: "#f87171",
   brightWhite: "#ffffff",
+  brightYellow: "#facc15",
+  cyan: "#0891b2",
+  green: "#16a34a",
+  magenta: "#9333ea",
+  red: "#dc2626",
+  white: "#f8fafc",
+  yellow: "#ca8a04",
 };
 
 interface XTermContainerProps {
+  tileId: string;
   command?: string;
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
-  isActive?: boolean;
-  onSpawn?: (ptyId: number) => void;
+  onStart?: () => void;
   onExit?: (code: number | null) => void;
 }
 
-export function XTermContainer({
-  command = "/bin/bash",
+function areArgsEqual(left: string[] | undefined, right: string[] | undefined) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function areEnvEqual(
+  left: Record<string, string> | undefined,
+  right: Record<string, string> | undefined,
+) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return !left && !right;
+  }
+
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+
+  return leftEntries.every(([key, value]) => right[key] === value);
+}
+
+function XTermContainerComponent({
+  tileId,
+  command = "/bin/zsh",
   args = [],
   cwd,
   env,
-  isActive,
-  onSpawn,
+  onStart,
   onExit,
 }: XTermContainerProps) {
-  const shouldFit = isActive ?? true;
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const fitFrameRef = useRef<number | null>(null);
-  const shouldFitRef = useRef(shouldFit);
-  const [terminal, setTerminal] = useState<Terminal | null>(null);
-  const [ready, setReady] = useState(false);
-  const [hasOutput, setHasOutput] = useState(false);
-  const handleFirstOutput = useCallback(() => setHasOutput(true), []);
-  const { spawn, resize } = usePty(terminal, onExit, handleFirstOutput);
-  const spawnedRef = useRef(false);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const sessionActiveRef = useRef(false);
+  const onStartRef = useRef(onStart);
+  const onExitRef = useRef(onExit);
   const { theme } = useTheme();
 
   const isDark =
@@ -94,188 +119,199 @@ export function XTermContainer({
       window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   useEffect(() => {
-    shouldFitRef.current = shouldFit;
-  }, [shouldFit]);
+    onStartRef.current = onStart;
+  }, [onStart]);
 
-  const cancelScheduledFit = useCallback(() => {
-    if (fitFrameRef.current !== null) {
-      cancelAnimationFrame(fitFrameRef.current);
-      fitFrameRef.current = null;
-    }
-  }, []);
-
-  // Simple fit: just call fitAddon.fit(). No scroll hacks, no sizeKey
-  // deduplication. PTY resize is handled by term.onResize listener (below),
-  // matching collab-public's approach exactly.
-  const doFit = useCallback(() => {
-    const element = containerRef.current;
-    const fitAddon = fitAddonRef.current;
-    if (!shouldFitRef.current || !element || !fitAddon) return;
-    if (element.clientWidth === 0 || element.clientHeight === 0) return;
-    try {
-      fitAddon.fit();
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Schedule initial fit with retry for layout settling
-  const scheduleFit = useCallback(
-    (attempts = 2) => {
-      cancelScheduledFit();
-
-      const run = (remainingAttempts: number) => {
-        fitFrameRef.current = requestAnimationFrame(() => {
-          fitFrameRef.current = null;
-          doFit();
-
-          // Before first spawn, confirm layout is stable via double-RAF
-          if (!spawnedRef.current) {
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                const el = containerRef.current;
-                const term = terminalRef.current;
-                if (shouldFitRef.current && el && term && el.clientWidth > 0 && term.cols > 0) {
-                  setReady(true);
-                }
-              });
-            });
-            return;
-          }
-
-          if (remainingAttempts > 0) run(remainingAttempts - 1);
-        });
-      };
-
-      run(attempts);
-    },
-    [cancelScheduledFit, doFit],
-  );
-
-  // Initialize xterm.js
   useEffect(() => {
-    if (!containerRef.current) return;
+    onExitRef.current = onExit;
+  }, [onExit]);
 
-    const term = new Terminal({
-      fontFamily: '"JetBrains Mono", monospace',
-      fontSize: 13,
-      lineHeight: 1.4,
+  useEffect(() => {
+    const host = containerRef.current;
+    if (!host) {
+      return;
+    }
+
+    const isMacPlatform =
+      typeof navigator !== "undefined" &&
+      /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
+
+    const terminal = new Terminal({
+      allowTransparency: true,
+      convertEol: true,
       cursorBlink: true,
-      cursorStyle: "block",
-      scrollback: 200_000,
+      fontFamily: '"JetBrains Mono", monospace',
+      fontSize: 13.5,
+      lineHeight: 1.3,
+      macOptionIsMeta: true,
       theme: isDark ? DARK_THEME : LIGHT_THEME,
-      allowProposedApi: true,
+    });
+
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (
+        isMacPlatform &&
+        event.type === "keydown" &&
+        event.key === "Backspace" &&
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+
+        if (sessionActiveRef.current) {
+          void invoke("write_terminal", { tileId, data: "\u0017" }).catch((error) => {
+            console.error("Failed to write terminal shortcut input", error);
+          });
+        }
+
+        return false;
+      }
+
+      return true;
     });
 
     const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
+    terminal.loadAddon(fitAddon);
+    terminal.open(host);
 
-    term.open(containerRef.current);
-
-    const unicode11 = new Unicode11Addon();
-    term.loadAddon(unicode11);
-    term.unicode.activeVersion = "11";
-
-    // WebGL renderer: double-buffered canvas avoids partial-paint
-    // artifacts the DOM renderer can show during rapid sequential writes.
     try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
-      });
-      term.loadAddon(webglAddon);
+      terminal.loadAddon(new WebglAddon());
     } catch {
-      // DOM renderer fallback
+      // WebGL can fail on some GPUs; xterm falls back automatically.
     }
 
-    terminalRef.current = term;
+    terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-    setTerminal(term);
-    scheduleFit();
 
-    // rAF-coalesced resize: cancels pending frame and schedules a new one,
-    // so rapid resize events (panel drags) collapse to a single fit per frame
-    // (~16ms). Calls doFit directly — no wrapper overhead.
-    let resizeRafId = 0;
-    const observer = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) {
-        cancelAnimationFrame(resizeRafId);
-        resizeRafId = requestAnimationFrame(() => doFit());
+    const fitTerminal = () => {
+      try {
+        fitAddon.fit();
+      } catch {
+        // Ignore fit failures while the container is still settling.
       }
-    });
-    observer.observe(containerRef.current);
+    };
 
-    // PTY resize via term.onResize — fires synchronously after fit()
-    // changes cols/rows. Matches collab-public's approach. This is the
-    // fastest path: no sizeKey checks, no async wrapper overhead.
-    const resizeDisposable = term.onResize(({ cols, rows }) => {
-      resize(cols, rows).catch(console.error);
-    });
+    const syncTerminalSize = async () => {
+      if (!sessionActiveRef.current) {
+        return;
+      }
 
-    if ("fonts" in document) {
-      document.fonts.ready.then(() => scheduleFit());
-    }
+      fitTerminal();
+
+      await invoke("resize_terminal", {
+        tileId,
+        cols: Math.max(20, terminal.cols),
+        rows: Math.max(8, terminal.rows),
+      });
+    };
+
+    const disposables = [
+      terminal.onData((data) => {
+        if (!sessionActiveRef.current) {
+          return;
+        }
+
+        void invoke("write_terminal", { tileId, data }).catch((error) => {
+          console.error("Failed to write terminal input", error);
+        });
+      }),
+    ];
+
+    resizeObserverRef.current = new ResizeObserver(() => {
+      void syncTerminalSize();
+    });
+    resizeObserverRef.current.observe(host);
+
+    const startupTimer = window.setTimeout(() => {
+      fitTerminal();
+
+      void invoke<{ sessionId: string }>("create_terminal", {
+        request: {
+          tileId,
+          cols: Math.max(20, terminal.cols),
+          rows: Math.max(8, terminal.rows),
+          command: command || null,
+          args,
+          startDir: cwd ?? null,
+          env: env ?? null,
+        },
+      })
+        .then(() => {
+          sessionActiveRef.current = true;
+          onStartRef.current?.();
+          terminal.focus();
+        })
+        .catch((error) => {
+          terminal.writeln("");
+          terminal.writeln(`\u001b[31mFailed to launch terminal: ${String(error)}\u001b[0m`);
+        });
+    }, 40);
 
     return () => {
-      cancelScheduledFit();
-      cancelAnimationFrame(resizeRafId);
-      resizeDisposable.dispose();
-      observer.disconnect();
-      term.dispose();
-      terminalRef.current = null;
+      sessionActiveRef.current = false;
+      window.clearTimeout(startupTimer);
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
       fitAddonRef.current = null;
+      terminalRef.current = null;
+      disposables.forEach((disposable) => disposable.dispose());
+      terminal.dispose();
+      void invoke("close_terminal", { tileId }).catch(() => {
+        // App shutdown can race with Tauri teardown; ignore cleanup failures.
+      });
     };
-  }, [cancelScheduledFit, scheduleFit, doFit, resize]);
+  }, [args, command, cwd, env, tileId]);
 
-  // Update theme dynamically
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.options.theme = isDark ? DARK_THEME : LIGHT_THEME;
     }
   }, [isDark]);
 
-  // Hidden focused sessions are mounted with display:none, so we wait until
-  // the terminal is actually visible and measured before first spawn.
   useEffect(() => {
-    if (!terminal || !shouldFit) return;
-    scheduleFit();
-  }, [terminal, shouldFit, scheduleFit]);
+    let mounted = true;
+    const unsubscribe: Array<() => void> = [];
 
-  // Spawn PTY only after terminal is fitted with correct dimensions
-  useEffect(() => {
-    if (!terminal || !ready || spawnedRef.current) return;
-    spawnedRef.current = true;
+    const bind = async () => {
+      unsubscribe.push(
+        await listen<{ tileId: string; data: string }>("workspace-output", (event) => {
+          if (!mounted || event.payload.tileId !== tileId) {
+            return;
+          }
 
-    const doSpawn = async () => {
-      try {
-        const ptyId = await spawn({
-          command,
-          args,
-          cwd: cwd ?? undefined,
-          cols: terminal.cols,
-          rows: terminal.rows,
-          env,
-        });
-        onSpawn?.(ptyId);
-      } catch (err) {
-        terminal.write(`\r\nError: ${err}\r\n`);
-      }
+          terminalRef.current?.write(event.payload.data);
+        }),
+      );
+
+      unsubscribe.push(
+        await listen<{ tileId: string; code: number | null }>("workspace-exit", (event) => {
+          if (!mounted || event.payload.tileId !== tileId) {
+            return;
+          }
+
+          sessionActiveRef.current = false;
+          onExitRef.current?.(event.payload.code);
+        }),
+      );
     };
-    doSpawn();
-  }, [terminal, ready, command, args, cwd, env, spawn, onSpawn]);
 
-  return (
-    <div className="relative size-full bg-background p-2 border-0">
-      <div ref={containerRef} className="size-full border-0" />
-      {!hasOutput && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
-          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Spinner className="size-5" />
-            <span className="text-xs">Starting session…</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    void bind();
+
+    return () => {
+      mounted = false;
+      unsubscribe.forEach((dispose) => dispose());
+    };
+  }, [tileId]);
+
+  return <div ref={containerRef} className="h-full w-full min-h-0 min-w-0 overflow-hidden" />;
 }
+
+export const XTermContainer = memo(
+  XTermContainerComponent,
+  (prevProps, nextProps) =>
+    prevProps.tileId === nextProps.tileId &&
+    prevProps.command === nextProps.command &&
+    prevProps.cwd === nextProps.cwd &&
+    areArgsEqual(prevProps.args, nextProps.args) &&
+    areEnvEqual(prevProps.env, nextProps.env),
+);
