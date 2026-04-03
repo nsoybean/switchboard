@@ -49,7 +49,6 @@ struct UsageInfo {
     output_tokens: Option<u64>,
 }
 
-
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptMetadataItem {
@@ -100,10 +99,7 @@ fn claude_history_path() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".claude").join("history.jsonl"))
 }
 
-fn rewrite_jsonl_file(
-    path: &PathBuf,
-    should_keep: impl Fn(&str) -> bool,
-) -> Result<(), String> {
+fn rewrite_jsonl_file(path: &PathBuf, should_keep: impl Fn(&str) -> bool) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
@@ -122,7 +118,6 @@ fn rewrite_jsonl_file(
     file.write_all(next.as_bytes())
         .map_err(|e| format!("Write failed: {}", e))
 }
-
 
 /// Read all Claude sessions for a given project path
 #[tauri::command]
@@ -197,10 +192,7 @@ pub fn delete_claude_session(session_id: String) -> Result<(), String> {
                 return true;
             };
 
-            value
-                .get("sessionId")
-                .and_then(|value| value.as_str())
-                != Some(session_id.as_str())
+            value.get("sessionId").and_then(|value| value.as_str()) != Some(session_id.as_str())
         })?;
     }
 
@@ -352,7 +344,6 @@ pub fn get_claude_history() -> Result<Vec<ClaudeSessionSummary>, String> {
 
     Ok(entries)
 }
-
 
 #[tauri::command]
 pub fn get_claude_session_transcript(

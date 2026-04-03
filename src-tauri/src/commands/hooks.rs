@@ -73,11 +73,8 @@ pub fn write_codex_hook_config(cwd: String, port: u16) -> Result<(), String> {
 /// Write the forwarder script that bridges Codex command hooks → Switchboard HTTP server.
 /// Codex pipes JSON to stdin; the script POSTs it to our hook server.
 fn write_codex_forwarder_script() -> Result<(), String> {
-    let sb_dir = dirs::home_dir()
-        .ok_or("no home dir")?
-        .join(".switchboard");
-    fs::create_dir_all(&sb_dir)
-        .map_err(|e| format!("Failed to create ~/.switchboard: {}", e))?;
+    let sb_dir = dirs::home_dir().ok_or("no home dir")?.join(".switchboard");
+    fs::create_dir_all(&sb_dir).map_err(|e| format!("Failed to create ~/.switchboard: {}", e))?;
 
     let script_path = sb_dir.join("codex-hook-forwarder.sh");
 
@@ -109,8 +106,7 @@ echo '{"continue": true}'
 /// Write `<cwd>/.codex/hooks.json` with hooks for lifecycle events.
 fn write_codex_hooks_json(cwd: &str) -> Result<(), String> {
     let codex_dir = PathBuf::from(cwd).join(".codex");
-    fs::create_dir_all(&codex_dir)
-        .map_err(|e| format!("Failed to create .codex dir: {}", e))?;
+    fs::create_dir_all(&codex_dir).map_err(|e| format!("Failed to create .codex dir: {}", e))?;
 
     let hooks_path = codex_dir.join("hooks.json");
 
@@ -162,8 +158,7 @@ fn enable_codex_hooks_feature() -> Result<(), String> {
         .join("config.toml");
 
     if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create ~/.codex: {}", e))?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create ~/.codex: {}", e))?;
     }
 
     let mut doc: toml::Table = if config_path.exists() {
@@ -184,6 +179,5 @@ fn enable_codex_hooks_feature() -> Result<(), String> {
     let output = toml::to_string_pretty(&doc)
         .map_err(|e| format!("Failed to serialize config.toml: {}", e))?;
 
-    fs::write(&config_path, output)
-        .map_err(|e| format!("Failed to write config.toml: {}", e))
+    fs::write(&config_path, output).map_err(|e| format!("Failed to write config.toml: {}", e))
 }

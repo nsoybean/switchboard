@@ -78,11 +78,7 @@ impl SessionRegistry {
             .map_err(|error| format!("failed to allocate pty: {error}"))?;
 
         let resolved_command = resolve_command(request.command);
-        let resolved_args = if request.args.is_empty() {
-            vec!["-l".to_string()]
-        } else {
-            request.args
-        };
+        let resolved_args = default_args_for_command(&resolved_command, request.args);
         let cwd = resolve_start_dir(request.start_dir);
 
         let mut command_builder = CommandBuilder::new(&resolved_command);
@@ -213,7 +209,9 @@ impl SessionRegistry {
 
     #[cfg(test)]
     fn insert_placeholder(&self, tile_id: &str, session_id: &str) {
-        let writer = Arc::new(Mutex::new(Box::new(std::io::sink()) as Box<dyn Write + Send>));
+        let writer = Arc::new(Mutex::new(
+            Box::new(std::io::sink()) as Box<dyn Write + Send>
+        ));
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -301,6 +299,29 @@ fn resolve_start_dir(start_dir: Option<String>) -> String {
     }
 }
 
+fn default_args_for_command(command: &str, args: Vec<String>) -> Vec<String> {
+    if !args.is_empty() {
+        return args;
+    }
+
+    if uses_login_flag(command) {
+        return vec!["-l".to_string()];
+    }
+
+    Vec::new()
+}
+
+fn uses_login_flag(command: &str) -> bool {
+    let executable = command
+        .rsplit('/')
+        .next()
+        .unwrap_or(command)
+        .trim()
+        .to_ascii_lowercase();
+
+    matches!(executable.as_str(), "zsh" | "bash")
+}
+
 fn clamp_dimensions(cols: u16, rows: u16) -> (u16, u16) {
     (cols.max(20), rows.max(8))
 }
@@ -334,16 +355,13 @@ pub fn resize_terminal(
 }
 
 #[tauri::command]
-pub fn close_terminal(
-    sessions: State<'_, SessionRegistry>,
-    tile_id: String,
-) -> Result<(), String> {
+pub fn close_terminal(sessions: State<'_, SessionRegistry>, tile_id: String) -> Result<(), String> {
     sessions.close_terminal(&tile_id)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_dimensions, SessionRegistry};
+    use super::{clamp_dimensions, default_args_for_command, SessionRegistry};
 
     #[test]
     fn tracks_and_removes_session_bookkeeping() {
@@ -363,5 +381,31 @@ mod tests {
     fn clamps_zero_sized_terminal_dimensions() {
         assert_eq!(clamp_dimensions(0, 0), (20, 8));
         assert_eq!(clamp_dimensions(120, 32), (120, 32));
+    }
+
+    #[test]
+    fn defaults_shells_to_login_mode() {
+        assert_eq!(default_args_for_command("/bin/zsh", vec![]), vec!["-l"]);
+        assert_eq!(default_args_for_command("bash", vec![]), vec!["-l"]);
+    }
+
+    #[test]
+    fn does_not_inject_shell_args_for_other_commands() {
+        assert_eq!(
+            default_args_for_command("codex", vec![]),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            default_args_for_command("claude", vec![]),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn preserves_explicit_args() {
+        assert_eq!(
+            default_args_for_command("codex", vec!["resume".into(), "--last".into()]),
+            vec!["resume", "--last"]
+        );
     }
 }

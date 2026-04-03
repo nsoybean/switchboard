@@ -1055,7 +1055,7 @@ export function AppLayout() {
               onStopSession={handleStopCanvasSession}
             />
           ) : (
-            <div className="flex h-full items-center justify-center">
+            <div className="flex h-full items-center justify-center bg-[var(--sb-canvas-bg)]">
               <div className="max-w-sm text-center">
                 <h2 className="mb-3 text-lg font-semibold">Welcome to Switchboard</h2>
                 <p className="mb-6 text-sm leading-relaxed text-muted-foreground">

@@ -179,10 +179,7 @@ fn read_project_paths(config: &serde_json::Value) -> Vec<String> {
     paths
 }
 
-fn write_project_paths(
-    config: &mut serde_json::Value,
-    paths: Vec<String>,
-) -> Result<(), String> {
+fn write_project_paths(config: &mut serde_json::Value, paths: Vec<String>) -> Result<(), String> {
     let object = config
         .as_object_mut()
         .ok_or_else(|| "Invalid config format".to_string())?;
