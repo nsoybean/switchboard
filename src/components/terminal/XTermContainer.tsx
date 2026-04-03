@@ -117,6 +117,8 @@ function XTermContainerComponent({
     theme === "dark" ||
     (theme === "system" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const isShellCommand =
+    /(^|\/)(zsh|bash|sh|fish)$/.test(command);
 
   useEffect(() => {
     onStartRef.current = onStart;
@@ -148,6 +150,50 @@ function XTermContainerComponent({
     });
 
     terminal.attachCustomKeyEventHandler((event) => {
+      if (
+        isMacPlatform &&
+        isShellCommand &&
+        event.type === "keydown" &&
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key === "ArrowLeft" || event.key === "ArrowRight")
+      ) {
+        event.preventDefault();
+
+        if (sessionActiveRef.current) {
+          const data = event.key === "ArrowLeft" ? "\u001bb" : "\u001bf";
+          void invoke("write_terminal", { tileId, data }).catch((error) => {
+            console.error("Failed to write terminal shortcut input", error);
+          });
+        }
+
+        return false;
+      }
+
+      if (
+        isMacPlatform &&
+        !isShellCommand &&
+        event.type === "keydown" &&
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.key === "ArrowLeft" || event.key === "ArrowRight")
+      ) {
+        event.preventDefault();
+
+        if (sessionActiveRef.current) {
+          const data = event.key === "ArrowLeft" ? "\u0001" : "\u0005";
+          void invoke("write_terminal", { tileId, data }).catch((error) => {
+            console.error("Failed to write terminal shortcut input", error);
+          });
+        }
+
+        return false;
+      }
+
       if (
         isMacPlatform &&
         event.type === "keydown" &&
