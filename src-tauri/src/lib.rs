@@ -3,7 +3,6 @@ mod hook_server;
 
 use commands::pty::SessionRegistry;
 
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // macOS and Linux GUI apps lose access to your shell's $PATH env
@@ -35,11 +34,7 @@ pub fn run() {
             }
 
             // Spawn the async HTTP server now that the runtime is available
-            hook_server::spawn_hook_server(
-                app.handle().clone(),
-                hook_listener,
-                hook_token,
-            );
+            hook_server::spawn_hook_server(app.handle().clone(), hook_listener, hook_token);
 
             Ok(())
         })

@@ -987,6 +987,21 @@ export function AppLayout() {
         dispatch({ type: "SET_ACTIVE", id: sortedSessionIds[prevIdx] });
       },
       onNewSession: () => setDialogOpen(true),
+      onCloseSession: () => {
+        if (viewingSessionInProject) {
+          setViewingSession(null);
+          return;
+        }
+
+        if (
+          activeSession &&
+          (activeSession.status === "running" ||
+            activeSession.status === "idle" ||
+            activeSession.status === "needs-input")
+        ) {
+          void handleStopSession(activeSession.id);
+        }
+      },
       onToggleSidebar: () => setSidebarOpen((prev) => !prev),
       onToggleGitPanel: () => setInspectorOpen((prev) => !prev),
       onToggleFileTree: () => {
@@ -1005,7 +1020,14 @@ export function AppLayout() {
         return false;
       },
     }),
-    [sortedSessionIds, state.activeSessionId, dispatch],
+    [
+      activeSession,
+      dispatch,
+      handleStopSession,
+      sortedSessionIds,
+      state.activeSessionId,
+      viewingSessionInProject,
+    ],
   );
   useKeyboardShortcuts(shortcutHandlers);
   useAgentHooks(state.sessions, dispatch);
@@ -1055,7 +1077,7 @@ export function AppLayout() {
               onStopSession={handleStopCanvasSession}
             />
           ) : (
-            <div className="flex h-full items-center justify-center">
+            <div className="flex h-full items-center justify-center bg-[var(--sb-canvas-bg)]">
               <div className="max-w-sm text-center">
                 <h2 className="mb-3 text-lg font-semibold">Welcome to Switchboard</h2>
                 <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
@@ -1065,11 +1087,16 @@ export function AppLayout() {
                 </p>
                 <Button onClick={() => (state.projectPath ? setDialogOpen(true) : setProjectPickerOpen(true))}>
                   {state.projectPath ? (
-                    <Plus data-icon="inline-start" />
+                    null
                   ) : (
                     <FolderOpen data-icon="inline-start" />
                   )}
                   {state.projectPath ? "Start First Session" : "Open Project"}
+                  {state.projectPath ? (
+                    <kbd className="ml-1 inline-flex items-center rounded border border-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] leading-none opacity-80">
+                      ⌘ N
+                    </kbd>
+                  ) : null}
                 </Button>
               </div>
             </div>

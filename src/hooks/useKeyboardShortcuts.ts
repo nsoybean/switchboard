@@ -5,6 +5,7 @@ interface ShortcutHandlers {
   onNextSession: () => void;
   onPrevSession: () => void;
   onNewSession: () => void;
+  onCloseSession?: () => void;
   onToggleSidebar: () => void;
   onToggleGitPanel: () => void;
   onFocusTerminal: () => void;
@@ -21,6 +22,7 @@ interface ShortcutHandlers {
  * - Ctrl+Tab: Next session
  * - Ctrl+Shift+Tab: Previous session
  * - Ctrl+N: New session dialog
+ * - Ctrl+W: Close transcript view or stop the active live session
  * - Ctrl+B: Toggle sidebar
  * - Ctrl+G: Toggle workspace inspector
  * - Ctrl+E: Open inspector on Files tab
@@ -51,6 +53,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if ((e.ctrlKey || e.metaKey) && e.key === "n") {
         e.preventDefault();
         handlers.onNewSession();
+        return;
+      }
+
+      // Ctrl+W — close transcript view or stop the active session
+      if ((e.ctrlKey || e.metaKey) && e.key === "w") {
+        e.preventDefault();
+        handlers.onCloseSession?.();
         return;
       }
 

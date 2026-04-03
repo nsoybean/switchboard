@@ -1,8 +1,8 @@
 use axum::{
-    Router,
     extract::State as AxumState,
     http::{HeaderMap, StatusCode},
     routing::post,
+    Router,
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -43,18 +43,16 @@ pub struct AgentHookEvent {
 /// Bind port and generate token synchronously. Returns state for `app.manage()`
 /// and a std listener to be converted to tokio later.
 pub fn init_hook_server() -> (HookServerState, std::net::TcpListener) {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("failed to bind hook server");
-    listener.set_nonblocking(true).expect("failed to set nonblocking");
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("failed to bind hook server");
+    listener
+        .set_nonblocking(true)
+        .expect("failed to set nonblocking");
     let port = listener.local_addr().unwrap().port();
     let token = load_or_create_token();
 
     log::info!("Hook server bound to 127.0.0.1:{}", port);
 
-    let state = HookServerState {
-        port,
-        token,
-    };
+    let state = HookServerState { port, token };
     (state, listener)
 }
 
@@ -68,10 +66,7 @@ pub fn spawn_hook_server(
         let listener = tokio::net::TcpListener::from_std(std_listener)
             .expect("failed to convert listener to tokio");
 
-        let handler_state = Arc::new(HandlerState {
-            token,
-            app_handle,
-        });
+        let handler_state = Arc::new(HandlerState { token, app_handle });
 
         let app = Router::new()
             .route("/claude-hooks", post(handle_hook))

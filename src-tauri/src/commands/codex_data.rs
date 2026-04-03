@@ -2,9 +2,9 @@ use super::session_metadata;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
-use std::io::Write;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct CodexSessionSummary {
@@ -28,7 +28,6 @@ struct CodexThreadRow {
 struct CodexTranscriptRow {
     rollout_path: String,
 }
-
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -92,10 +91,7 @@ fn codex_session_index_path() -> Option<PathBuf> {
     candidates.into_iter().find(|path| path.exists())
 }
 
-fn rewrite_jsonl_file(
-    path: &PathBuf,
-    should_keep: impl Fn(&str) -> bool,
-) -> Result<(), String> {
+fn rewrite_jsonl_file(path: &PathBuf, should_keep: impl Fn(&str) -> bool) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
@@ -134,7 +130,6 @@ fn run_codex_statement(statement: &str) -> Result<(), String> {
 
     Ok(())
 }
-
 
 fn run_codex_query(query: &str) -> Result<Vec<CodexThreadRow>, String> {
     let db_path =
@@ -250,7 +245,6 @@ fn to_summary(row: &CodexThreadRow) -> CodexSessionSummary {
     }
 }
 
-
 #[tauri::command]
 pub fn get_codex_sessions(project_path: String) -> Result<Vec<CodexSessionSummary>, String> {
     let escaped = escape_sql(&project_path);
@@ -356,10 +350,7 @@ pub fn delete_codex_session(session_id: String) -> Result<(), String> {
                 return true;
             };
 
-            value
-                .get("session_id")
-                .and_then(|value| value.as_str())
-                != Some(session_id.as_str())
+            value.get("session_id").and_then(|value| value.as_str()) != Some(session_id.as_str())
         })?;
     }
 
@@ -379,7 +370,6 @@ pub fn delete_codex_session(session_id: String) -> Result<(), String> {
 
     Ok(())
 }
-
 
 #[tauri::command]
 pub fn get_codex_session_transcript(
