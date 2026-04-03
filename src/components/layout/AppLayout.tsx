@@ -1065,11 +1065,16 @@ export function AppLayout() {
                 </p>
                 <Button onClick={() => (state.projectPath ? setDialogOpen(true) : setProjectPickerOpen(true))}>
                   {state.projectPath ? (
-                    <Plus data-icon="inline-start" />
+                    null
                   ) : (
                     <FolderOpen data-icon="inline-start" />
                   )}
                   {state.projectPath ? "Start First Session" : "Open Project"}
+                  {state.projectPath ? (
+                    <kbd className="ml-1 inline-flex items-center rounded border border-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] leading-none opacity-80">
+                      ⌘ N
+                    </kbd>
+                  ) : null}
                 </Button>
               </div>
             </div>
