@@ -30,6 +30,7 @@ const TILE_STAGGER_Y = 30;
 const DOT_GRID_SIZE = 24;
 const DOT_GRID_INSET = 1.7;
 const DOT_GRID_MAX_OVERSHOOT = 0.14;
+const TILE_INTERACTION_SELECTOR = ".sb-canvas-tile-shell";
 
 interface CanvasAnchor {
   pointerX: number;
@@ -169,6 +170,7 @@ function SessionTileComponent({
 
   return (
     <Rnd
+      className="sb-canvas-tile-shell"
       position={{ x: tile.x, y: tile.y }}
       size={{ width: tile.width, height: tile.height }}
       minWidth={360}
@@ -545,7 +547,7 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
 
   const handlePanStart = useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
-      if ((event.target as HTMLElement).closest(".sb-canvas-tile")) {
+      if ((event.target as HTMLElement).closest(TILE_INTERACTION_SELECTOR)) {
         return;
       }
 
@@ -585,7 +587,7 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
       style={backgroundStyle}
       onPointerDown={handlePanStart}
       onWheel={(event) => {
-        if ((event.target as HTMLElement).closest(".sb-canvas-tile")) {
+        if ((event.target as HTMLElement).closest(TILE_INTERACTION_SELECTOR)) {
           return;
         }
 
