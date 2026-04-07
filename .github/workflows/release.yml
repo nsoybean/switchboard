@@ -58,6 +58,19 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
+      - name: Read tag message
+        id: tag_message
+        run: |
+          TAG_MSG=$(git tag -l --format='%(contents)' ${{ github.ref_name }} 2>/dev/null || echo "")
+          if [ -z "$TAG_MSG" ]; then
+            TAG_MSG="Download the DMG from the assets below."
+          fi
+          {
+            echo "body<<TAGEOF"
+            echo "$TAG_MSG"
+            echo "TAGEOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and publish release
         id: tauri
         uses: tauri-apps/tauri-action@v0
@@ -68,23 +81,11 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Switchboard v__VERSION__
-          releaseBody: |
-            Download the DMG from the assets below.
-
-            This release also includes updater metadata so installed copies of Switchboard can detect and install new versions in-app.
+          releaseBody: ${{ steps.tag_message.outputs.body }}
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
           args: --bundles app --target ${{ matrix.target }}
-
-      - name: Sync tag message to release description
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${{ github.ref_name }} 2>/dev/null || echo "")
-          if [ -n "$TAG_MESSAGE" ]; then
-            gh release edit ${{ github.ref_name }} --notes "$TAG_MESSAGE"
-          fi
 
       - name: Build DMG from app bundle
         run: |
