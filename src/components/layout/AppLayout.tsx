@@ -185,8 +185,11 @@ export function AppLayout() {
     sessionBelongsToProject(viewingSession, state.projectPath)
       ? viewingSession
       : null;
-  const selectedSession = viewingSessionInProject
+  const resolvedViewingSession = viewingSessionInProject
     ? (state.sessions[viewingSessionInProject.id] ?? viewingSessionInProject)
+    : null;
+  const selectedSession = viewingSessionInProject
+    ? resolvedViewingSession
     : activeSession;
   const selectedSessionId = viewingSessionInProject?.id ?? activeSession?.id ?? null;
   const projectLabel = state.projectPath
@@ -1114,11 +1117,25 @@ export function AppLayout() {
                   onSelectProject={handleSelectProject}
                   onOpenProject={handleOpenProject}
                   onRemoveProject={handleRemoveProject}
-                  onViewSession={(session) => {
+                  onViewSession={async (session) => {
                     dispatch({ type: "SET_PREVIEW_FILE", path: null });
                     if (state.sessions[session.id]) {
                       dispatch({ type: "SET_ACTIVE", id: session.id });
                     }
+
+                    if (session.agent === "codex" && !session.resumeTargetId) {
+                      const resumeTargetId = await syncCodexResumeTarget(session);
+                      setViewingSession(
+                        resumeTargetId
+                          ? {
+                              ...session,
+                              resumeTargetId,
+                            }
+                          : session,
+                      );
+                      return;
+                    }
+
                     setViewingSession(session);
                   }}
                   onSelectActiveSession={(sessionId) => {
@@ -1182,14 +1199,14 @@ export function AppLayout() {
             </div>
           ) : null}
 
-          {viewingSession ? (
+          {resolvedViewingSession ? (
             <div className="absolute inset-0 z-30">
               <SessionTranscriptView
-                key={`${viewingSession.agent}:${viewingSession.resumeTargetId ?? viewingSession.id}`}
-                session={viewingSession}
+                key={`${resolvedViewingSession.agent}:${resolvedViewingSession.resumeTargetId ?? resolvedViewingSession.id}`}
+                session={resolvedViewingSession}
                 onClose={() => setViewingSession(null)}
                 onResume={() => {
-                  void handleResumeSession(viewingSession);
+                  void handleResumeSession(resolvedViewingSession);
                   setViewingSession(null);
                 }}
               />

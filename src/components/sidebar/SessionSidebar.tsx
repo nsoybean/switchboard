@@ -29,7 +29,7 @@ interface SessionSidebarProps {
   onSelectProject?: (path: string) => Promise<void> | void;
   onOpenProject?: (path: string) => Promise<void> | void;
   onRemoveProject?: (path: string) => Promise<void> | void;
-  onViewSession?: (session: Session) => void;
+  onViewSession?: (session: Session) => Promise<void> | void;
   onSelectActiveSession?: (sessionId?: string) => void;
   onResumeSession?: (session: Session) => Promise<void> | void;
   onStopSession?: (sessionId: string) => Promise<void>;
@@ -161,7 +161,7 @@ export function SessionSidebar({
         await handleSelectProject(projectPath);
       }
 
-      onViewSession?.(session);
+      await onViewSession?.(session);
     },
     [handleSelectProject, onViewSession, state.projectPath],
   );
