@@ -84,6 +84,7 @@ fn write_codex_forwarder_script() -> Result<(), String> {
 INPUT=$(cat)
 curl -s -X POST "http://127.0.0.1:${SWITCHBOARD_HOOK_PORT}/codex-hooks" \
   -H "Authorization: Bearer ${SWITCHBOARD_HOOK_TOKEN}" \
+  -H "X-Switchboard-Session-Id: ${SWITCHBOARD_SESSION_ID}" \
   -H "Content-Type: application/json" \
   -d "$INPUT" >/dev/null 2>&1
 echo '{"continue": true}'
