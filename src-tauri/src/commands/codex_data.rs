@@ -1,4 +1,5 @@
 use super::session_metadata;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -148,8 +149,18 @@ fn run_codex_query(query: &str) -> Result<Vec<CodexThreadRow>, String> {
         return Err(format!("sqlite3 query failed: {}", stderr.trim()));
     }
 
-    serde_json::from_slice(&output.stdout)
-        .map_err(|e| format!("Failed to parse sqlite JSON: {}", e))
+    parse_sqlite_json_rows(&output.stdout)
+}
+
+fn parse_sqlite_json_rows<T>(stdout: &[u8]) -> Result<Vec<T>, String>
+where
+    T: DeserializeOwned,
+{
+    if stdout.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Ok(Vec::new());
+    }
+
+    serde_json::from_slice(stdout).map_err(|e| format!("Failed to parse sqlite JSON: {}", e))
 }
 
 fn escape_sql(value: &str) -> String {
@@ -182,8 +193,7 @@ fn find_codex_transcript_path(session_id: &str) -> Result<PathBuf, String> {
             return Err(format!("sqlite3 query failed: {}", stderr.trim()));
         }
 
-        serde_json::from_slice(&output.stdout)
-            .map_err(|e| format!("Failed to parse sqlite JSON: {}", e))?
+        parse_sqlite_json_rows(&output.stdout)?
     };
 
     if let Some(path) = rows
@@ -803,7 +813,7 @@ fn codex_output_display_mode(output: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_exec_command;
+    use super::{normalize_exec_command, parse_sqlite_json_rows};
 
     #[test]
     fn strips_matching_workdir_prefix_from_exec_command() {
@@ -817,5 +827,12 @@ mod tests {
         let command = "cd /tmp/other && npm test";
         let normalized = normalize_exec_command(command, Some("/tmp/project"));
         assert_eq!(normalized, "cd /tmp/other && npm test");
+    }
+
+    #[test]
+    fn parses_empty_sqlite_json_output_as_no_rows() {
+        let rows = parse_sqlite_json_rows::<serde_json::Value>(b"\n \t")
+            .expect("empty sqlite output should parse as zero rows");
+        assert!(rows.is_empty());
     }
 }

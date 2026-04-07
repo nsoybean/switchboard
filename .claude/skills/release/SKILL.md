@@ -111,20 +111,23 @@ Execute the following commands in sequence. Stop immediately and report any fail
 # 1. Bump version in package.json (no git tag yet)
 npm version <next_version> --no-git-tag-version
 
-# 2. Sync version to tauri.conf.json and Cargo.toml
+# 2. Regenerate lockfile to reflect the new version
+npm i --package-lock-only
+
+# 3. Sync version to tauri.conf.json and Cargo.toml
 npm run version:sync -- <next_version>
 
-# 3. Stage and commit the version bump
+# 4. Stage and commit the version bump
 git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
 git commit -m "chore: bump version to <next_version>"
 
-# 4. Create annotated tag with the changelog as the message (use heredoc to preserve formatting)
+# 5. Create annotated tag with the changelog as the message (use heredoc to preserve formatting)
 git tag -a "v<next_version>" -m "$(cat <<'EOF'
 <changelog>
 EOF
 )"
 
-# 5. Push the commit and the tag
+# 6. Push the commit and the tag
 git push origin HEAD
 git push origin "v<next_version>"
 ```

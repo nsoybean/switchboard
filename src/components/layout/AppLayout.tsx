@@ -48,6 +48,18 @@ interface HistorySessionSummary {
   project_path: string;
 }
 
+function getDurableHistorySessionId(session: Session): string | null {
+  if (session.agent === "claude-code") {
+    return session.resumeTargetId ?? session.id;
+  }
+
+  if (session.agent === "codex") {
+    return session.resumeTargetId;
+  }
+
+  return null;
+}
+
 function getCodexInitialPrompt(session: Session): string | null {
   if (session.agent !== "codex" || session.args.length === 0) {
     return null;
@@ -185,8 +197,11 @@ export function AppLayout() {
     sessionBelongsToProject(viewingSession, state.projectPath)
       ? viewingSession
       : null;
-  const selectedSession = viewingSessionInProject
+  const resolvedViewingSession = viewingSessionInProject
     ? (state.sessions[viewingSessionInProject.id] ?? viewingSessionInProject)
+    : null;
+  const selectedSession = viewingSessionInProject
+    ? resolvedViewingSession
     : activeSession;
   const selectedSessionId = viewingSessionInProject?.id ?? activeSession?.id ?? null;
   const projectLabel = state.projectPath
@@ -515,6 +530,7 @@ export function AppLayout() {
           env = {
             SWITCHBOARD_HOOK_TOKEN: token,
             SWITCHBOARD_HOOK_PORT: String(port),
+            SWITCHBOARD_SESSION_ID: id,
           };
         } catch (err) {
           console.warn("Failed to configure agent hooks:", err);
@@ -617,7 +633,12 @@ export function AppLayout() {
         try {
           const token = await hookCommands.getToken();
           const port = await hookCommands.getPort();
-          env = { ...env, SWITCHBOARD_HOOK_TOKEN: token, SWITCHBOARD_HOOK_PORT: String(port) };
+          env = {
+            ...env,
+            SWITCHBOARD_HOOK_TOKEN: token,
+            SWITCHBOARD_HOOK_PORT: String(port),
+            SWITCHBOARD_SESSION_ID: resumeTargetId ?? session.id,
+          };
         } catch (err) {
           console.warn("Failed to refresh agent hook env on resume:", err);
         }
@@ -885,12 +906,27 @@ export function AppLayout() {
   const handleRenameSession = useCallback(
     async (session: Session, label: string) => {
       const localSession = state.sessions[session.id];
-      const historySessionId = session.resumeTargetId ?? session.id;
+      const nextLabel = label.trim();
+      if (!nextLabel) return;
+
+      const metadataSessionId =
+        getDurableHistorySessionId(localSession ?? session) ??
+        (localSession?.agent === "codex"
+          ? await syncCodexResumeTarget(localSession)
+          : null);
+
       if (!localSession) {
+        if (!metadataSessionId) {
+          toast.error("Failed to rename session", {
+            description: "Could not resolve the durable session id for metadata.",
+          });
+          return;
+        }
+
         try {
           await invoke("rename_session_metadata", {
-            sessionId: historySessionId,
-            label,
+            sessionId: metadataSessionId,
+            label: nextLabel,
           });
         } catch (err) {
           toast.error("Failed to rename session", {
@@ -900,27 +936,36 @@ export function AppLayout() {
         return;
       }
 
-      const nextLabel = label.trim();
-      if (!nextLabel || nextLabel === localSession.label) return;
+      if (nextLabel === localSession.label) return;
 
       const updatedSession: Session = { ...localSession, label: nextLabel };
 
       try {
         await persistSession(updatedSession);
         dispatch({ type: "RENAME_SESSION", id: session.id, label: nextLabel });
+        if (metadataSessionId) {
+          await invoke("rename_session_metadata", {
+            sessionId: metadataSessionId,
+            label: nextLabel,
+          });
+        }
       } catch (err) {
         toast.error("Failed to rename session", {
           description: String(err),
         });
       }
     },
-    [dispatch, persistSession, state.sessions],
+    [dispatch, persistSession, state.sessions, syncCodexResumeTarget],
   );
 
   const handleDeleteSession = useCallback(
     async (session: Session) => {
       const localSession = state.sessions[session.id];
-      const historySessionId = session.resumeTargetId ?? session.id;
+      const metadataSessionId =
+        getDurableHistorySessionId(localSession ?? session) ??
+        (localSession?.agent === "codex"
+          ? await syncCodexResumeTarget(localSession)
+          : null);
 
       try {
         if (localSession) {
@@ -930,17 +975,19 @@ export function AppLayout() {
         }
 
         if (session.agent === "claude-code") {
+          if (!metadataSessionId) {
+            throw new Error("Could not resolve Claude session id.");
+          }
           await invoke("delete_claude_session", {
-            sessionId: historySessionId,
+            sessionId: metadataSessionId,
           });
         } else if (session.agent === "codex") {
-          const codexSessionId =
-            historySessionId || (localSession ? await syncCodexResumeTarget(localSession) : null);
-          if (codexSessionId) {
-            await invoke("delete_codex_session", {
-              sessionId: codexSessionId,
-            });
+          if (!metadataSessionId) {
+            throw new Error("Could not resolve Codex session id.");
           }
+          await invoke("delete_codex_session", {
+            sessionId: metadataSessionId,
+          });
         }
 
         if (localSession) {
@@ -948,9 +995,9 @@ export function AppLayout() {
           dispatch({ type: "REMOVE_SESSION", id: localSession.id });
         }
 
-        if (!localSession) {
+        if (metadataSessionId) {
           await invoke("delete_session_metadata", {
-            sessionId: historySessionId,
+            sessionId: metadataSessionId,
           }).catch(() => {
             // Ignore missing overlay metadata when the real source deletion succeeded.
           });
@@ -1114,11 +1161,25 @@ export function AppLayout() {
                   onSelectProject={handleSelectProject}
                   onOpenProject={handleOpenProject}
                   onRemoveProject={handleRemoveProject}
-                  onViewSession={(session) => {
+                  onViewSession={async (session) => {
                     dispatch({ type: "SET_PREVIEW_FILE", path: null });
                     if (state.sessions[session.id]) {
                       dispatch({ type: "SET_ACTIVE", id: session.id });
                     }
+
+                    if (session.agent === "codex" && !session.resumeTargetId) {
+                      const resumeTargetId = await syncCodexResumeTarget(session);
+                      setViewingSession(
+                        resumeTargetId
+                          ? {
+                              ...session,
+                              resumeTargetId,
+                            }
+                          : session,
+                      );
+                      return;
+                    }
+
                     setViewingSession(session);
                   }}
                   onSelectActiveSession={(sessionId) => {
@@ -1182,14 +1243,14 @@ export function AppLayout() {
             </div>
           ) : null}
 
-          {viewingSession ? (
+          {resolvedViewingSession ? (
             <div className="absolute inset-0 z-30">
               <SessionTranscriptView
-                key={`${viewingSession.agent}:${viewingSession.resumeTargetId ?? viewingSession.id}`}
-                session={viewingSession}
+                key={`${resolvedViewingSession.agent}:${resolvedViewingSession.resumeTargetId ?? resolvedViewingSession.id}`}
+                session={resolvedViewingSession}
                 onClose={() => setViewingSession(null)}
                 onResume={() => {
-                  void handleResumeSession(viewingSession);
+                  void handleResumeSession(resolvedViewingSession);
                   setViewingSession(null);
                 }}
               />

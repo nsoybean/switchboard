@@ -38,6 +38,7 @@ struct AgentHookPayload {
 pub struct AgentHookEvent {
     pub session_id: String,
     pub event_name: String,
+    pub switchboard_session_id: Option<String>,
 }
 
 /// Bind port and generate token synchronously. Returns state for `app.manage()`
@@ -109,10 +110,18 @@ async fn handle_hook(
         payload.hook_event_name
     );
 
+    let switchboard_session_id = headers
+        .get("x-switchboard-session-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+
     // Emit Tauri event to frontend (single event name for all agents)
     let event = AgentHookEvent {
         session_id: payload.session_id,
         event_name: payload.hook_event_name,
+        switchboard_session_id,
     };
     let _ = state.app_handle.emit("agent-hook", event);
 
