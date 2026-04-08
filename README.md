@@ -4,7 +4,7 @@
 
 # Switchboard
 
-**The open-source multi-agent workspace.** Run Claude Code, Codex, and Bash side by side — each in its own terminal, its own branch, its own worktree. Review and ship from one window.
+**The open-source multi-agent workspace.** Run multiple Claude Code, Codex, and Bash sessions in parallel - its own branch, its own worktree. Review and ship from one window.
 
 <p align="center">
   <img src="./public/main_dark_mode.png" alt="Switchboard showing multiple Claude Code and Codex sessions in one desktop window" width="1120" />
