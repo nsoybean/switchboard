@@ -60,6 +60,7 @@ interface XTermContainerProps {
   env?: Record<string, string>;
   onStart?: () => void;
   onExit?: (code: number | null) => void;
+  closeOnUnmount?: boolean;
 }
 
 function areArgsEqual(left: string[] | undefined, right: string[] | undefined) {
@@ -171,6 +172,7 @@ function XTermContainerComponent({
   env,
   onStart,
   onExit,
+  closeOnUnmount = true,
 }: XTermContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -340,18 +342,32 @@ function XTermContainerComponent({
     const startupTimer = window.setTimeout(() => {
       fitTerminal();
 
-      void invoke<{ sessionId: string }>("create_terminal", {
-        request: {
-          tileId,
-          cols: Math.max(20, terminal.cols),
-          rows: Math.max(8, terminal.rows),
-          command: command || null,
-          args,
-          startDir: cwd ?? null,
-          env: env ?? null,
-        },
-      })
-        .then(() => {
+      void invoke<boolean>("terminal_exists", { tileId })
+        .then(async (exists) => {
+          if (exists) {
+            const bufferedOutput = await invoke<string>("get_terminal_buffer", { tileId });
+            if (bufferedOutput) {
+              terminal.write(normalizeTerminalOutput(bufferedOutput, isDark));
+            }
+
+            sessionActiveRef.current = true;
+            await syncTerminalSize();
+            terminal.focus();
+            return;
+          }
+
+          await invoke<{ sessionId: string }>("create_terminal", {
+            request: {
+              tileId,
+              cols: Math.max(20, terminal.cols),
+              rows: Math.max(8, terminal.rows),
+              command: command || null,
+              args,
+              startDir: cwd ?? null,
+              env: env ?? null,
+            },
+          });
+
           sessionActiveRef.current = true;
           onStartRef.current?.();
           terminal.focus();
@@ -371,11 +387,13 @@ function XTermContainerComponent({
       terminalRef.current = null;
       disposables.forEach((disposable) => disposable.dispose());
       terminal.dispose();
-      void invoke("close_terminal", { tileId }).catch(() => {
-        // App shutdown can race with Tauri teardown; ignore cleanup failures.
-      });
+      if (closeOnUnmount) {
+        void invoke("close_terminal", { tileId }).catch(() => {
+          // App shutdown can race with Tauri teardown; ignore cleanup failures.
+        });
+      }
     };
-  }, [args, command, cwd, env, tileId]);
+  }, [args, closeOnUnmount, command, cwd, env, tileId]);
 
   useEffect(() => {
     if (terminalRef.current) {
@@ -426,6 +444,7 @@ export const XTermContainer = memo(
   (prevProps, nextProps) =>
     prevProps.tileId === nextProps.tileId &&
     prevProps.command === nextProps.command &&
+    prevProps.closeOnUnmount === nextProps.closeOnUnmount &&
     prevProps.cwd === nextProps.cwd &&
     areArgsEqual(prevProps.args, nextProps.args) &&
     areEnvEqual(prevProps.env, nextProps.env),

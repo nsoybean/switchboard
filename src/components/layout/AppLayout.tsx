@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { Titlebar } from "./Titlebar";
+import { PaneWorkspace } from "./PaneWorkspace";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
@@ -26,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { FolderOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type {
   AgentType,
   Session,
@@ -146,6 +148,7 @@ export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [workspaceShellMode, setWorkspaceShellMode] = useState<"pane" | "canvas">("pane");
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -851,6 +854,10 @@ export function AppLayout() {
       if (session?.agent === "codex") {
         void syncCodexResumeTarget(session);
       }
+
+      void invoke("close_terminal", { tileId: sessionId }).catch(() => {
+        // Terminal records can already be gone if the session was stopped manually.
+      });
     },
     [dispatch, persistSession, syncCodexResumeTarget],
   );
@@ -1082,13 +1089,101 @@ export function AppLayout() {
   useKeyboardShortcuts(shortcutHandlers);
   useAgentHooks(state.sessions, dispatch);
 
+  const sidebarContent = (
+    <SessionSidebar
+      onNewSession={() => setDialogOpen(true)}
+      onAddProject={() => setProjectPickerOpen(true)}
+      onSelectProject={handleSelectProject}
+      onOpenProject={handleOpenProject}
+      onRemoveProject={handleRemoveProject}
+      onViewSession={async (session) => {
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+        if (state.sessions[session.id]) {
+          dispatch({ type: "SET_ACTIVE", id: session.id });
+        }
+
+        if (session.agent === "codex" && !session.resumeTargetId) {
+          const resumeTargetId = await syncCodexResumeTarget(session);
+          setViewingSession(
+            resumeTargetId
+              ? {
+                  ...session,
+                  resumeTargetId,
+                }
+              : session,
+          );
+          return;
+        }
+
+        setViewingSession(session);
+      }}
+      onSelectActiveSession={(sessionId) => {
+        setViewingSession(null);
+        if (sessionId && workspaceShellMode === "canvas") {
+          canvasViewRef.current?.panToSession(sessionId);
+        }
+      }}
+      onResumeSession={handleResumeSession}
+      onStopSession={handleStopSession}
+      onRenameSession={handleRenameSession}
+      onDeleteSession={handleDeleteSession}
+      selectedSessionId={selectedSessionId}
+      historyOpen={historyOpen}
+      onHistoryOpenChange={setHistoryOpen}
+    />
+  );
+
+  const inspectorContent = state.projectPath ? (
+    <WorkspacePanel
+      activeTab={workspaceTab}
+      context={workspaceContext}
+      visible={inspectorOpen}
+      session={selectedSession}
+      githubToken={state.githubToken}
+      onOpenSettings={openSettings}
+      onSessionBranchChange={handleSessionBranchChange}
+      onTabChange={setWorkspaceTab}
+    />
+  ) : null;
+
+  const welcomeShell = (
+    <div
+      className={cn(
+        "flex h-full items-center justify-center",
+        workspaceShellMode === "canvas" ? "bg-[var(--sb-canvas-bg)]" : "bg-background",
+      )}
+    >
+      <div className="max-w-sm text-center">
+        <h2 className="mb-3 text-lg font-semibold">Welcome to Switchboard</h2>
+        <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+          {state.projectPath
+            ? workspaceShellMode === "canvas"
+              ? "Manage multiple AI coding agents on a smooth shared canvas."
+              : "Manage multiple AI coding agents in a structured pane workspace."
+            : "Manage multiple AI coding agents in parallel. Open a project to get started."}
+        </p>
+        <Button onClick={() => (state.projectPath ? setDialogOpen(true) : setProjectPickerOpen(true))}>
+          {state.projectPath ? null : <FolderOpen data-icon="inline-start" />}
+          {state.projectPath ? "Start First Session" : "Open Project"}
+          {state.projectPath ? (
+            <kbd className="ml-1 inline-flex items-center rounded border border-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] leading-none opacity-80">
+              ⌘ N
+            </kbd>
+          ) : null}
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full bg-background">
       <Titlebar
         sidebarOpen={sidebarOpen}
         inspectorOpen={inspectorOpen}
+        workspaceShellMode={workspaceShellMode}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
+        onWorkspaceShellModeChange={setWorkspaceShellMode}
         projectPath={state.projectPath}
         onProjectClick={() => setProjectPickerOpen(true)}
         onOpenHistory={() => setHistoryOpen(true)}
@@ -1115,155 +1210,150 @@ export function AppLayout() {
           />
         </div>
       ) : (
-        <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
-          {state.projectPath && liveSessions.length > 0 ? (
-            <CanvasView
-              ref={canvasViewRef}
-              projectPath={state.projectPath}
-              sessions={liveSessions}
-              activeSessionId={state.activeSessionId}
-              onSessionStart={handleSessionStart}
-              onSessionExit={handleSessionExit}
-              onSelectSession={handleSelectCanvasSession}
-              onStopSession={handleStopCanvasSession}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center bg-[var(--sb-canvas-bg)]">
-              <div className="max-w-sm text-center">
-                <h2 className="mb-3 text-lg font-semibold">Welcome to Switchboard</h2>
-                <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
-                  {state.projectPath
-                    ? "Manage multiple AI coding agents on a smooth shared canvas."
-                    : "Manage multiple AI coding agents in parallel. Open a project to get started."}
-                </p>
-                <Button onClick={() => (state.projectPath ? setDialogOpen(true) : setProjectPickerOpen(true))}>
-                  {state.projectPath ? (
-                    null
-                  ) : (
-                    <FolderOpen data-icon="inline-start" />
-                  )}
-                  {state.projectPath ? "Start First Session" : "Open Project"}
-                  {state.projectPath ? (
-                    <kbd className="ml-1 inline-flex items-center rounded border border-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] leading-none opacity-80">
-                      ⌘ N
-                    </kbd>
-                  ) : null}
-                </Button>
-              </div>
-            </div>
-          )}
+        workspaceShellMode === "pane" ? (
+          <div className="flex flex-1 min-h-0 overflow-hidden bg-background">
+            {sidebarOpen ? (
+              <>
+                <div
+                  className="h-full shrink-0 overflow-hidden border-r bg-card"
+                  style={{ width: sidebarWidth }}
+                >
+                  {sidebarContent}
+                </div>
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize session sidebar"
+                  className="w-3 shrink-0 cursor-col-resize bg-background"
+                  onPointerDown={(event) => startPanelResize("sidebar", event)}
+                />
+              </>
+            ) : null}
 
-          {sidebarOpen ? (
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-20 p-1.5 pr-0.5">
-              <div
-                className="pointer-events-auto h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur"
-                style={{ width: sidebarWidth }}
-              >
-                <SessionSidebar
+            <div className="min-w-0 flex-1 overflow-hidden">
+              {state.projectPath ? (
+                <PaneWorkspace
+                  activeSession={activeSession}
+                  liveSessions={liveSessions}
+                  transcriptSession={resolvedViewingSession}
                   onNewSession={() => setDialogOpen(true)}
-                  onAddProject={() => setProjectPickerOpen(true)}
-                  onSelectProject={handleSelectProject}
-                  onOpenProject={handleOpenProject}
-                  onRemoveProject={handleRemoveProject}
-                  onViewSession={async (session) => {
-                    dispatch({ type: "SET_PREVIEW_FILE", path: null });
-                    if (state.sessions[session.id]) {
-                      dispatch({ type: "SET_ACTIVE", id: session.id });
-                    }
+                  onSelectLiveSession={(sessionId) =>
+                    dispatch({ type: "SET_ACTIVE", id: sessionId })
+                  }
+                  onCloseTranscript={() => setViewingSession(null)}
+                  onResumeTranscript={
+                    resolvedViewingSession
+                      ? () => {
+                          void handleResumeSession(resolvedViewingSession);
+                          setViewingSession(null);
+                        }
+                      : undefined
+                  }
+                  onSessionStart={handleSessionStart}
+                  onSessionExit={handleSessionExit}
+                />
+              ) : (
+                welcomeShell
+              )}
+            </div>
 
-                    if (session.agent === "codex" && !session.resumeTargetId) {
-                      const resumeTargetId = await syncCodexResumeTarget(session);
-                      setViewingSession(
-                        resumeTargetId
-                          ? {
-                              ...session,
-                              resumeTargetId,
-                            }
-                          : session,
-                      );
-                      return;
-                    }
+            {state.projectPath && inspectorOpen ? (
+              <>
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize inspector panel"
+                  className="w-3 shrink-0 cursor-col-resize bg-background"
+                  onPointerDown={(event) => startPanelResize("inspector", event)}
+                />
+                <div
+                  className="h-full shrink-0 overflow-hidden border-l bg-card"
+                  style={{ width: inspectorWidth }}
+                >
+                  {inspectorContent}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : (
+          <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
+            {state.projectPath && liveSessions.length > 0 ? (
+              <CanvasView
+                ref={canvasViewRef}
+                projectPath={state.projectPath}
+                sessions={liveSessions}
+                activeSessionId={state.activeSessionId}
+                onSessionStart={handleSessionStart}
+                onSessionExit={handleSessionExit}
+                onSelectSession={handleSelectCanvasSession}
+                onStopSession={handleStopCanvasSession}
+              />
+            ) : (
+              welcomeShell
+            )}
 
-                    setViewingSession(session);
-                  }}
-                  onSelectActiveSession={(sessionId) => {
-                    setViewingSession(null);
-                    if (sessionId) {
-                      canvasViewRef.current?.panToSession(sessionId);
-                    }
-                  }}
-                  onResumeSession={handleResumeSession}
-                  onStopSession={handleStopSession}
-                  onRenameSession={handleRenameSession}
-                  onDeleteSession={handleDeleteSession}
-                  selectedSessionId={selectedSessionId}
-                  historyOpen={historyOpen}
-                  onHistoryOpenChange={setHistoryOpen}
+            {sidebarOpen ? (
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 p-1.5 pr-0.5">
+                <div
+                  className="pointer-events-auto h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur"
+                  style={{ width: sidebarWidth }}
+                >
+                  {sidebarContent}
+                </div>
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize session sidebar"
+                  className="pointer-events-auto absolute top-1.5 right-0 bottom-1.5 w-3 cursor-col-resize"
+                  onPointerDown={(event) => startPanelResize("sidebar", event)}
                 />
               </div>
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize session sidebar"
-                className="pointer-events-auto absolute top-1.5 right-0 bottom-1.5 w-3 cursor-col-resize"
-                onPointerDown={(event) => startPanelResize("sidebar", event)}
-              />
-            </div>
-          ) : null}
+            ) : null}
 
-          {state.projectPath ? (
-            <div
-              className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-1.5 pl-0.5 transition-[opacity,transform] duration-150 ${
-                inspectorOpen
-                  ? "translate-x-0 opacity-100"
-                  : "translate-x-3 opacity-0"
-              }`}
-              aria-hidden={!inspectorOpen}
-            >
+            {state.projectPath ? (
               <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize inspector panel"
-                className={`pointer-events-auto absolute top-1.5 left-0 bottom-1.5 w-3 cursor-col-resize ${
-                  inspectorOpen ? "" : "pointer-events-none"
+                className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-1.5 pl-0.5 transition-[opacity,transform] duration-150 ${
+                  inspectorOpen
+                    ? "translate-x-0 opacity-100"
+                    : "translate-x-3 opacity-0"
                 }`}
-                onPointerDown={(event) => startPanelResize("inspector", event)}
-              />
-              <div
-                className={`h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur transition-opacity duration-150 ${
-                  inspectorOpen ? "pointer-events-auto" : "pointer-events-none"
-                }`}
-                style={{ width: inspectorWidth }}
+                aria-hidden={!inspectorOpen}
               >
-                <WorkspacePanel
-                  activeTab={workspaceTab}
-                  context={workspaceContext}
-                  visible={inspectorOpen}
-                  session={selectedSession}
-                  githubToken={state.githubToken}
-                  onOpenSettings={openSettings}
-                  onSessionBranchChange={handleSessionBranchChange}
-                  onTabChange={setWorkspaceTab}
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize inspector panel"
+                  className={`pointer-events-auto absolute top-1.5 left-0 bottom-1.5 w-3 cursor-col-resize ${
+                    inspectorOpen ? "" : "pointer-events-none"
+                  }`}
+                  onPointerDown={(event) => startPanelResize("inspector", event)}
+                />
+                <div
+                  className={`h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur transition-opacity duration-150 ${
+                    inspectorOpen ? "pointer-events-auto" : "pointer-events-none"
+                  }`}
+                  style={{ width: inspectorWidth }}
+                >
+                  {inspectorContent}
+                </div>
+              </div>
+            ) : null}
+
+            {resolvedViewingSession ? (
+              <div className="absolute inset-0 z-30">
+                <SessionTranscriptView
+                  key={`${resolvedViewingSession.agent}:${resolvedViewingSession.resumeTargetId ?? resolvedViewingSession.id}`}
+                  session={resolvedViewingSession}
+                  onClose={() => setViewingSession(null)}
+                  onResume={() => {
+                    void handleResumeSession(resolvedViewingSession);
+                    setViewingSession(null);
+                  }}
                 />
               </div>
-            </div>
-          ) : null}
-
-          {resolvedViewingSession ? (
-            <div className="absolute inset-0 z-30">
-              <SessionTranscriptView
-                key={`${resolvedViewingSession.agent}:${resolvedViewingSession.resumeTargetId ?? resolvedViewingSession.id}`}
-                session={resolvedViewingSession}
-                onClose={() => setViewingSession(null)}
-                onResume={() => {
-                  void handleResumeSession(resolvedViewingSession);
-                  setViewingSession(null);
-                }}
-              />
-            </div>
-          ) : null}
-
-        </div>
+            ) : null}
+          </div>
+        )
       )}
 
       {/* New Session Dialog */}

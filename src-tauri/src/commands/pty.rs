@@ -17,7 +17,10 @@ struct SessionRecord {
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+    output_buffer: Arc<Mutex<String>>,
 }
+
+const TERMINAL_BUFFER_LIMIT: usize = 200_000;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,6 +114,7 @@ impl SessionRegistry {
         let master = Arc::new(Mutex::new(pair.master));
         let writer = Arc::new(Mutex::new(writer));
         let child = Arc::new(Mutex::new(child));
+        let output_buffer = Arc::new(Mutex::new(String::new()));
 
         self.sessions
             .lock()
@@ -122,10 +126,11 @@ impl SessionRegistry {
                     master,
                     writer,
                     child,
+                    output_buffer: output_buffer.clone(),
                 },
             );
 
-        spawn_reader(app, request.tile_id, reader);
+        spawn_reader(app, request.tile_id, reader, output_buffer);
 
         Ok(CreateTerminalResponse { session_id })
     }
@@ -196,6 +201,33 @@ impl SessionRegistry {
         Ok(())
     }
 
+    pub fn terminal_exists(&self, tile_id: &str) -> Result<bool, String> {
+        let sessions = self
+            .sessions
+            .lock()
+            .map_err(|_| "failed to lock session registry".to_string())?;
+
+        Ok(sessions.contains_key(tile_id))
+    }
+
+    pub fn terminal_buffer(&self, tile_id: &str) -> Result<String, String> {
+        let output_buffer = {
+            let sessions = self
+                .sessions
+                .lock()
+                .map_err(|_| "failed to lock session registry".to_string())?;
+            let session = sessions
+                .get(tile_id)
+                .ok_or_else(|| format!("unknown tile id: {tile_id}"))?;
+            session.output_buffer.clone()
+        };
+
+        output_buffer
+            .lock()
+            .map(|buffer| buffer.clone())
+            .map_err(|_| "failed to lock terminal output buffer".to_string())
+    }
+
     fn close_all(&self) {
         let tile_ids = match self.sessions.lock() {
             Ok(sessions) => sessions.keys().cloned().collect::<Vec<_>>(),
@@ -233,6 +265,7 @@ impl SessionRegistry {
                 master,
                 writer,
                 child: Arc::new(Mutex::new(child)),
+                output_buffer: Arc::new(Mutex::new(String::new())),
             },
         );
     }
@@ -255,7 +288,27 @@ impl Drop for SessionRegistry {
     }
 }
 
-fn spawn_reader(app: AppHandle, tile_id: String, mut reader: Box<dyn Read + Send>) {
+fn trim_output_buffer(buffer: &mut String, limit: usize) {
+    if buffer.len() <= limit {
+        return;
+    }
+
+    let overflow = buffer.len() - limit;
+    let boundary = buffer
+        .char_indices()
+        .find(|(index, _)| *index >= overflow)
+        .map(|(index, _)| index)
+        .unwrap_or(0);
+
+    buffer.drain(..boundary);
+}
+
+fn spawn_reader(
+    app: AppHandle,
+    tile_id: String,
+    mut reader: Box<dyn Read + Send>,
+    output_buffer: Arc<Mutex<String>>,
+) {
     std::thread::spawn(move || {
         let mut buffer = [0_u8; 8192];
         loop {
@@ -263,6 +316,10 @@ fn spawn_reader(app: AppHandle, tile_id: String, mut reader: Box<dyn Read + Send
                 Ok(0) => break,
                 Ok(size) => {
                     let data = String::from_utf8_lossy(&buffer[..size]).into_owned();
+                    if let Ok(mut buffered_output) = output_buffer.lock() {
+                        buffered_output.push_str(&data);
+                        trim_output_buffer(&mut buffered_output, TERMINAL_BUFFER_LIMIT);
+                    }
                     let _ = app.emit(
                         "workspace-output",
                         WorkspaceOutputPayload {
@@ -357,6 +414,19 @@ pub fn resize_terminal(
 #[tauri::command]
 pub fn close_terminal(sessions: State<'_, SessionRegistry>, tile_id: String) -> Result<(), String> {
     sessions.close_terminal(&tile_id)
+}
+
+#[tauri::command]
+pub fn terminal_exists(sessions: State<'_, SessionRegistry>, tile_id: String) -> Result<bool, String> {
+    sessions.terminal_exists(&tile_id)
+}
+
+#[tauri::command]
+pub fn get_terminal_buffer(
+    sessions: State<'_, SessionRegistry>,
+    tile_id: String,
+) -> Result<String, String> {
+    sessions.terminal_buffer(&tile_id)
 }
 
 #[cfg(test)]

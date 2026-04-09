@@ -3,7 +3,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
   History,
+  LayoutGrid,
   Loader2,
+  PanelTop,
   PanelLeft,
   PanelRight,
   Settings,
@@ -22,8 +24,10 @@ import { useTheme } from "@/components/theme-provider";
 interface TitlebarProps {
   sidebarOpen: boolean;
   inspectorOpen: boolean;
+  workspaceShellMode?: "pane" | "canvas";
   onToggleSidebar: () => void;
   onToggleInspector: () => void;
+  onWorkspaceShellModeChange?: (mode: "pane" | "canvas") => void;
   projectPath?: string | null;
   onProjectClick?: () => void;
   onOpenHistory?: () => void;
@@ -38,8 +42,10 @@ interface TitlebarProps {
 export function Titlebar({
   sidebarOpen,
   inspectorOpen,
+  workspaceShellMode = "pane",
   onToggleSidebar,
   onToggleInspector,
+  onWorkspaceShellModeChange,
   projectPath,
   onProjectClick,
   onOpenHistory,
@@ -154,6 +160,28 @@ export function Titlebar({
             </TooltipTrigger>
             <TooltipContent>Open History (⌘⇧H)</TooltipContent>
           </Tooltip>
+        ) : null}
+        {projectPathLabel ? (
+          <div className="ml-1 inline-flex items-center rounded-md border bg-background/80 p-0.5">
+            <Button
+              variant={workspaceShellMode === "pane" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-6 gap-1.5 px-2 text-[11px]"
+              onClick={() => onWorkspaceShellModeChange?.("pane")}
+            >
+              <PanelTop className="size-3.5" />
+              Pane
+            </Button>
+            <Button
+              variant={workspaceShellMode === "canvas" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-6 gap-1.5 px-2 text-[11px]"
+              onClick={() => onWorkspaceShellModeChange?.("canvas")}
+            >
+              <LayoutGrid className="size-3.5" />
+              Canvas
+            </Button>
+          </div>
         ) : null}
       </div>
 

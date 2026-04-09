@@ -224,6 +224,7 @@ function SessionTileComponent({
             env={session.env}
             onStart={handleStart}
             onExit={handleExit}
+            closeOnUnmount={false}
           />
         </div>
       </article>

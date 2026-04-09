@@ -43,6 +43,8 @@ pub fn run() {
             commands::pty::write_terminal,
             commands::pty::resize_terminal,
             commands::pty::close_terminal,
+            commands::pty::terminal_exists,
+            commands::pty::get_terminal_buffer,
             commands::claude_data::get_claude_sessions,
             commands::claude_data::get_claude_history,
             commands::claude_data::get_claude_session_transcript,
