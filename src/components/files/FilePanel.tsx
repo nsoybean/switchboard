@@ -1,23 +1,23 @@
 import { FileTree } from "./FileTree";
-import { useAppState, useAppDispatch } from "../../state/context";
 
 interface FilePanelProps {
   rootPath: string;
+  selectedPath?: string | null;
+  onFileSelect?: (path: string) => void;
 }
 
-export function FilePanel({ rootPath }: FilePanelProps) {
-  const state = useAppState();
-  const dispatch = useAppDispatch();
-
+export function FilePanel({
+  rootPath,
+  selectedPath,
+  onFileSelect,
+}: FilePanelProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <FileTree
           rootPath={rootPath}
-          selectedPath={state.previewFilePath}
-          onFileSelect={(path) =>
-            dispatch({ type: "SET_PREVIEW_FILE", path })
-          }
+          selectedPath={selectedPath}
+          onFileSelect={onFileSelect}
         />
       </div>
     </div>

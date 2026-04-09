@@ -6,7 +6,6 @@ import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { NewSessionDialog } from "../dialogs/NewSessionDialog";
 import { ProjectPickerDialog } from "../dialogs/ProjectPickerDialog";
-import { FilePreview } from "../files/FilePreview";
 import { SettingsPage } from "../settings/SettingsPage";
 import {
   WorkspacePanel,
@@ -38,8 +37,8 @@ import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
 
 const MIN_SIDEBAR_WIDTH = 260;
 const MAX_SIDEBAR_WIDTH = 520;
-const MIN_INSPECTOR_WIDTH = 300;
-const MAX_INSPECTOR_WIDTH = 640;
+const MIN_INSPECTOR_WIDTH = 360;
+const MAX_INSPECTOR_WIDTH = 760;
 
 interface HistorySessionSummary {
   session_id: string;
@@ -149,7 +148,7 @@ export function AppLayout() {
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const [sidebarWidth, setSidebarWidth] = useState(320);
-  const [inspectorWidth, setInspectorWidth] = useState(380);
+  const [inspectorWidth, setInspectorWidth] = useState(560);
   const sessionsRef = useRef(state.sessions);
   const hookConfigReady = useRef<Promise<void>>(Promise.resolve());
   const canvasViewRef = useRef<CanvasViewHandle>(null);
@@ -1257,14 +1256,6 @@ export function AppLayout() {
             </div>
           ) : null}
 
-          {state.previewFilePath ? (
-            <div className="absolute inset-0 z-30">
-              <FilePreview
-                filePath={state.previewFilePath}
-                onClose={() => dispatch({ type: "SET_PREVIEW_FILE", path: null })}
-              />
-            </div>
-          ) : null}
         </div>
       )}
 
