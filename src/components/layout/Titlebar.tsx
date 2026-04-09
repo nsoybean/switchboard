@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
+  History,
   Loader2,
   PanelLeft,
   PanelRight,
@@ -25,6 +26,7 @@ interface TitlebarProps {
   onToggleInspector: () => void;
   projectPath?: string | null;
   onProjectClick?: () => void;
+  onOpenHistory?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
@@ -40,6 +42,7 @@ export function Titlebar({
   onToggleInspector,
   projectPath,
   onProjectClick,
+  onOpenHistory,
   onOpenSettings,
   updateVersion = null,
   checkingForUpdates = false,
@@ -134,6 +137,22 @@ export function Titlebar({
               </button>
             </TooltipTrigger>
             <TooltipContent>{projectPath}</TooltipContent>
+          </Tooltip>
+        ) : null}
+        {projectPathLabel ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground"
+                onClick={onOpenHistory}
+              >
+                <History className="size-3.5" />
+                History
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open History (⌘⇧H)</TooltipContent>
           </Tooltip>
         ) : null}
       </div>

@@ -6,19 +6,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { getSessionAttentionHint, getSessionStatusLabel } from "@/lib/session-attention";
 import { Circle, PencilLine, Play, Square, Trash2 } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { formatTokens, formatCost, estimateCost } from "../../lib/pricing";
 import type { Session } from "../../state/types";
-
-const STATUS_LABELS: Record<string, string> = {
-  running: "Running",
-  idle: "Idle",
-  "needs-input": "Needs Input",
-  done: "Done",
-  error: "Error",
-  stopped: "Stopped",
-};
 
 interface TokenInfo {
   inputTokens: number;
@@ -57,6 +49,7 @@ export function SessionCard({
     session.status === "error" ||
     session.status === "stopped";
   const canManage = Boolean(onResume || onStop || onRename || onDelete);
+  const attentionHint = getSessionAttentionHint(session);
 
   return (
     <div
@@ -91,20 +84,25 @@ export function SessionCard({
                     "size-2.5 fill-current",
                     session.status === "running" &&
                       "text-[var(--sb-status-running)]",
-                    session.status === "idle" &&
+                    (session.status === "idle" || session.status === "needs-input") &&
                       "text-[var(--sb-status-done)]",
                     session.status === "needs-input" &&
-                      "text-[var(--sb-status-warning)] animate-pulse",
+                      "animate-pulse",
                   )}
                 />
                 <Badge
                   variant="secondary"
                   className="h-4 px-1 text-[10px] font-normal"
                 >
-                  {STATUS_LABELS[session.status] ?? session.status}
+                  {getSessionStatusLabel(session.status)}
                 </Badge>
               </>
             )}
+            {attentionHint && !isDone ? (
+              <span className="text-[10px] text-muted-foreground/70">
+                {attentionHint}
+              </span>
+            ) : null}
             {tokenInfo &&
               (tokenInfo.inputTokens > 0 || tokenInfo.outputTokens > 0) && (
                 <span className="text-[10px] text-muted-foreground/70">

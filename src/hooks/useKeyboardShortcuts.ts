@@ -10,6 +10,7 @@ interface ShortcutHandlers {
   onToggleGitPanel: () => void;
   onFocusTerminal: () => void;
   onToggleFileTree?: () => void;
+  onOpenHistory?: () => void;
   /** Called on Escape. Return true if handled (suppresses default onFocusTerminal). */
   onEscape?: () => boolean;
 }
@@ -26,6 +27,7 @@ interface ShortcutHandlers {
  * - Ctrl+B: Toggle sidebar
  * - Ctrl+G: Toggle workspace inspector
  * - Ctrl+E: Open inspector on Files tab
+ * - Ctrl+Shift+H: Open history
  * - Escape: Focus terminal
  */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
@@ -81,6 +83,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if ((e.ctrlKey || e.metaKey) && e.key === "e") {
         e.preventDefault();
         handlers.onToggleFileTree?.();
+        return;
+      }
+
+      // Ctrl+Shift+H — open history
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "h") {
+        e.preventDefault();
+        handlers.onOpenHistory?.();
         return;
       }
 

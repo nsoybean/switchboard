@@ -32,24 +32,24 @@ const DARK_THEME = {
 
 const LIGHT_THEME = {
   background: "#ffffff",
-  foreground: "#18212b",
-  cursor: "#2d4759",
-  black: "#18212b",
-  blue: "#2563eb",
-  brightBlack: "#6b7280",
-  brightBlue: "#60a5fa",
-  brightCyan: "#22d3ee",
-  brightGreen: "#4ade80",
-  brightMagenta: "#c084fc",
-  brightRed: "#f87171",
-  brightWhite: "#ffffff",
-  brightYellow: "#facc15",
-  cyan: "#0891b2",
-  green: "#16a34a",
-  magenta: "#9333ea",
-  red: "#dc2626",
-  white: "#f8fafc",
-  yellow: "#ca8a04",
+  foreground: "#111b24",
+  cursor: "#243847",
+  black: "#111b24",
+  blue: "#1d4ed8",
+  brightBlack: "#374151",
+  brightBlue: "#2563eb",
+  brightCyan: "#0f766e",
+  brightGreen: "#15803d",
+  brightMagenta: "#7e22ce",
+  brightRed: "#b91c1c",
+  brightWhite: "#e5e7eb",
+  brightYellow: "#d97706",
+  cyan: "#0f766e",
+  green: "#15803d",
+  magenta: "#7e22ce",
+  red: "#b91c1c",
+  white: "#6b7280",
+  yellow: "#a16207",
 };
 
 interface XTermContainerProps {
@@ -93,6 +93,74 @@ function areEnvEqual(
   }
 
   return leftEntries.every(([key, value]) => right[key] === value);
+}
+
+function stripAnsiDim(data: string): string {
+  return data.replace(/\x1b\[([0-9;]*)m/g, (match, params: string) => {
+    if (!params) {
+      return match;
+    }
+
+    const tokens = params.split(";").filter((part) => part.length > 0);
+    const nextTokens: string[] = [];
+
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index];
+
+      // Preserve extended color sequences like 38;2;r;g;b and 48;2;r;g;b.
+      if (
+        (token === "38" || token === "48" || token === "58") &&
+        tokens[index + 1] === "2" &&
+        tokens.length >= index + 5
+      ) {
+        nextTokens.push(
+          token,
+          tokens[index + 1],
+          tokens[index + 2],
+          tokens[index + 3],
+          tokens[index + 4],
+        );
+        index += 4;
+        continue;
+      }
+
+      // Preserve indexed color sequences like 38;5;n and 48;5;n.
+      if (
+        (token === "38" || token === "48" || token === "58") &&
+        tokens[index + 1] === "5" &&
+        tokens.length >= index + 3
+      ) {
+        nextTokens.push(token, tokens[index + 1], tokens[index + 2]);
+        index += 2;
+        continue;
+      }
+
+      // Drop standalone dim SGR only.
+      if (token === "2") {
+        continue;
+      }
+
+      nextTokens.push(token);
+    }
+
+    if (nextTokens.length === tokens.length) {
+      return match;
+    }
+
+    if (nextTokens.length === 0) {
+      return "";
+    }
+
+    return `\x1b[${nextTokens.join(";")}m`;
+  });
+}
+
+function normalizeTerminalOutput(data: string, isDark: boolean): string {
+  if (isDark) {
+    return data;
+  }
+
+  return stripAnsiDim(data);
 }
 
 function XTermContainerComponent({
@@ -146,6 +214,7 @@ function XTermContainerComponent({
       fontSize: 13.5,
       lineHeight: 1.3,
       macOptionIsMeta: true,
+      minimumContrastRatio: isDark ? 1 : 9,
       theme: isDark ? DARK_THEME : LIGHT_THEME,
     });
 
@@ -325,7 +394,7 @@ function XTermContainerComponent({
             return;
           }
 
-          terminalRef.current?.write(event.payload.data);
+          terminalRef.current?.write(normalizeTerminalOutput(event.payload.data, isDark));
         }),
       );
 
@@ -347,7 +416,7 @@ function XTermContainerComponent({
       mounted = false;
       unsubscribe.forEach((dispose) => dispose());
     };
-  }, [tileId]);
+  }, [isDark, tileId]);
 
   return <div ref={containerRef} className="h-full w-full min-h-0 min-w-0 overflow-hidden" />;
 }

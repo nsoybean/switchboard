@@ -145,6 +145,7 @@ export function AppLayout() {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -677,6 +678,7 @@ export function AppLayout() {
         await projectCommands.setPath(path);
         dispatch({ type: "SET_PROJECT_PATH", path });
         setViewingSession(null);
+        setHistoryOpen(false);
         dispatch({ type: "SET_PREVIEW_FILE", path: null });
       } catch (err) {
         toast.error("Failed to switch project", {
@@ -708,6 +710,7 @@ export function AppLayout() {
 
         dispatch({ type: "SET_PROJECTS", paths: projectPaths });
         dispatch({ type: "SET_PROJECT_PATH", path: nextProjectPath });
+        setHistoryOpen(false);
         dispatch({ type: "SET_PREVIEW_FILE", path: null });
 
         const nextActiveSessionId = nextProjectPath
@@ -1054,6 +1057,7 @@ export function AppLayout() {
         setInspectorOpen(true);
         setWorkspaceTab("files");
       },
+      onOpenHistory: () => setHistoryOpen(true),
       onFocusTerminal: () => {
         const termEl = document.querySelector(".xterm-helper-textarea");
         if (termEl instanceof HTMLElement) termEl.focus();
@@ -1087,6 +1091,7 @@ export function AppLayout() {
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
         projectPath={state.projectPath}
         onProjectClick={() => setProjectPickerOpen(true)}
+        onOpenHistory={() => setHistoryOpen(true)}
         updateVersion={availableUpdate?.version ?? null}
         checkingForUpdates={checkingForUpdates}
         installingUpdate={installingUpdate}
@@ -1192,6 +1197,8 @@ export function AppLayout() {
                   onRenameSession={handleRenameSession}
                   onDeleteSession={handleDeleteSession}
                   selectedSessionId={selectedSessionId}
+                  historyOpen={historyOpen}
+                  onHistoryOpenChange={setHistoryOpen}
                 />
               </div>
               <div
