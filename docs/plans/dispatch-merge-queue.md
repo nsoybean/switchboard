@@ -208,16 +208,19 @@ The right pane should evolve from a simple inspector into a docked workspace for
 
 Recommended layout inside the right pane:
 
-1. document tab strip at the top
-2. active file/diff/review content below
-3. optional lightweight source switcher for `Explorer`, `Changes`, and `Review`
+1. source switcher for `Explorer`, `Changes`, and `Review`
+2. navigator panel that changes with the selected source
+3. separate document tab strip
+4. active file/diff document surface below the tab strip
 
 Behavior:
 
+- `Explorer`, `Changes`, and `Review` only change the navigator panel
 - opening a file from the tree creates or focuses a right-pane file tab
 - opening a diff from changes creates or focuses a right-pane diff tab
-- multiple files can stay open side by side as tabs
-- review actions remain docked in the same pane, not promoted to the center
+- multiple files can stay open as tabs in the document area
+- the document area remains stable while the navigator source changes
+- review actions remain docked in the right pane, not promoted to the center
 
 The `Review` tab becomes the place for:
 
@@ -228,6 +231,21 @@ The `Review` tab becomes the place for:
 - merge / PR / discard actions
 
 This keeps code visibility close by without turning the app into a file-browser-first product.
+
+Reference layout:
+
+```text
++----------------------------------------------------------------------------------+
+| Explorer | Changes | Review                                                      |
++----------------------------------------------------------------------------------+
+| Navigator panel                    | Document tabs                               |
+|------------------------------------|---------------------------------------------|
+| file tree OR changed files OR      | [feature-prd.md] [presence.ts] [diff]       |
+| review summary/actions             |---------------------------------------------|
+|                                    | active file or diff preview                 |
+|                                    |                                             |
++----------------------------------------------------------------------------------+
+```
 
 ### Shell Modes
 
@@ -369,6 +387,7 @@ App state additions:
 rightPaneTabs: RightPaneTab[];
 activeRightPaneTabId: string | null;
 rightPaneSource: "explorer" | "changes" | "review";
+rightPaneNavigatorWidth: number;
 ```
 
 This gives Switchboard the UX you want from the reference:
@@ -419,9 +438,14 @@ type WorkspaceTab = "files" | "changes" | "review";
 
 Recommended first-pass composition:
 
-- `files` = source browser that opens file tabs in the right pane
-- `changes` = status/diff navigator that opens diff tabs in the right pane
-- `review` = merge/PR/discard and session summary
+- `files` = source browser shown in the navigator panel; opened files go to document tabs
+- `changes` = status/diff navigator shown in the navigator panel; opened diffs go to document tabs
+- `review` = merge/PR/discard and session summary shown in the navigator panel
+
+Chosen interaction rule for V1:
+
+- source switcher changes the navigator panel only
+- document tabs persist independently of the selected navigator source
 
 Then, once stable, the header can become a document tab strip-first layout with the source switcher
 de-emphasized.
@@ -551,6 +575,7 @@ Goal:
 
 Changes:
 
+- split the right pane into navigator panel + document pane
 - add file/diff tabs to the right pane
 - add `Review` tab to `WorkspacePanel`
 - show prompt summary, attention reason, diff stats, and branch/worktree identity
