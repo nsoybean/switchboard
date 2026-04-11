@@ -758,7 +758,11 @@ function PaneLeafView({
           const isActive = tabId === leaf.activeTabId;
 
           return (
-            <div key={tabId} className={cn("h-full min-h-0 p-1", isActive ? "block" : "hidden")}>
+            <div key={tabId} className={cn(
+              "h-full min-h-0",
+              isActive ? "block" : "hidden",
+              surface.kind !== "live-session" && "p-1",
+            )}>
               {surface.kind === "live-session" ? (
                 <XTermContainer
                   tileId={surface.session.id}

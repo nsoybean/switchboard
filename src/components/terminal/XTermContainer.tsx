@@ -34,6 +34,8 @@ const LIGHT_THEME = {
   background: "#ffffff",
   foreground: "#111b24",
   cursor: "#243847",
+  selectionBackground: "#b4d5fe",
+  selectionForeground: "#111b24",
   black: "#111b24",
   blue: "#1d4ed8",
   brightBlack: "#374151",
@@ -42,7 +44,7 @@ const LIGHT_THEME = {
   brightGreen: "#15803d",
   brightMagenta: "#7e22ce",
   brightRed: "#b91c1c",
-  brightWhite: "#e5e7eb",
+  brightWhite: "#d1d5db",
   brightYellow: "#d97706",
   cyan: "#0f766e",
   green: "#15803d",
@@ -216,11 +218,32 @@ function XTermContainerComponent({
       fontSize: 13.5,
       lineHeight: 1.3,
       macOptionIsMeta: true,
-      minimumContrastRatio: isDark ? 1 : 9,
+      minimumContrastRatio: isDark ? 1 : 3,
       theme: isDark ? DARK_THEME : LIGHT_THEME,
     });
 
     terminal.attachCustomKeyEventHandler((event) => {
+      // Shift+Enter → newline for Claude Code / Codex multi-line input
+      if (
+        !isShellCommand &&
+        event.type === "keydown" &&
+        event.key === "Enter" &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+
+        if (sessionActiveRef.current) {
+          void invoke("write_terminal", { tileId, data: "\n" }).catch((error) => {
+            console.error("Failed to write terminal newline", error);
+          });
+        }
+
+        return false;
+      }
+
       if (
         isMacPlatform &&
         isShellCommand &&
@@ -341,6 +364,9 @@ function XTermContainerComponent({
 
     const startupTimer = window.setTimeout(() => {
       fitTerminal();
+      // Double-fit: first fit may calculate wrong dimensions if container
+      // hasn't fully settled after layout changes (tab switch, split).
+      requestAnimationFrame(() => fitTerminal());
 
       void invoke<boolean>("terminal_exists", { tileId })
         .then(async (exists) => {
