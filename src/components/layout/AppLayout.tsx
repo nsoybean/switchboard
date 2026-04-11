@@ -151,6 +151,7 @@ export function AppLayout() {
   const [createPrOpen, setCreatePrOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"general" | "integrations" | "about" | undefined>(undefined);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [workspaceShellMode, setWorkspaceShellMode] = useState<"pane" | "canvas">("pane");
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
@@ -567,6 +568,7 @@ export function AppLayout() {
         env,
       };
       dispatch({ type: "ADD_SESSION", session });
+      dispatch({ type: "SET_ACTIVE", id: session.id });
       persistSession(session);
     },
     [dispatch, persistSession, state.projectPath],
@@ -677,7 +679,10 @@ export function AppLayout() {
     [dispatch, persistSession, state.sessions, syncCodexResumeTarget],
   );
 
-  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const openSettings = useCallback((tab?: "general" | "integrations" | "about") => {
+    setSettingsInitialTab(tab);
+    setSettingsOpen(true);
+  }, []);
 
   const handleSelectProject = useCallback(
     async (path: string) => {
@@ -1048,6 +1053,12 @@ export function AppLayout() {
       },
       onNewSession: () => setDialogOpen(true),
       onCloseSession: () => {
+        // Close file tab first if one is open
+        if (openFilePath) {
+          setOpenFilePath(null);
+          return;
+        }
+
         if (viewingSessionInProject) {
           setViewingSession(null);
           return;
@@ -1207,13 +1218,14 @@ export function AppLayout() {
         installingUpdate={installingUpdate}
         updateProgress={updateProgress}
         onInstallUpdate={() => void installUpdate()}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettings}
       />
 
       {settingsOpen ? (
         <div className="flex-1 min-h-0">
           <SettingsPage
-            onBack={() => setSettingsOpen(false)}
+            onBack={() => { setSettingsOpen(false); setSettingsInitialTab(undefined); }}
+            initialTab={settingsInitialTab}
             currentVersion={currentVersion}
             updateVersion={availableUpdate?.version ?? null}
             updateNotes={availableUpdate?.body}
@@ -1256,6 +1268,7 @@ export function AppLayout() {
                   onSelectLiveSession={(sessionId) =>
                     dispatch({ type: "SET_ACTIVE", id: sessionId })
                   }
+                  onCloseSession={(sessionId) => void handleStopSession(sessionId)}
                   onCloseTranscript={() => setViewingSession(null)}
                   onCloseFile={() => setOpenFilePath(null)}
                   onResumeTranscript={

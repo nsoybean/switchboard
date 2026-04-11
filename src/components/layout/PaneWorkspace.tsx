@@ -30,6 +30,7 @@ interface PaneWorkspaceProps {
   openFilePath: string | null;
   onNewSession: () => void;
   onSelectLiveSession: (sessionId: string) => void;
+  onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: () => void;
   onResumeTranscript?: () => void;
@@ -45,7 +46,7 @@ interface LiveSurface {
   kind: "live-session";
   session: Session;
   title: string;
-  closable: false;
+  closable: true;
 }
 
 interface TranscriptSurface {
@@ -611,6 +612,7 @@ function PaneLeafView({
   onSelectTab,
   onSplit,
   onClosePane,
+  onCloseSession,
   onCloseTranscript,
   onCloseFile,
   onResumeTranscript,
@@ -621,11 +623,11 @@ function PaneLeafView({
   leaf: PaneLeafNode;
   paneCount: number;
   surfacesById: Map<string, PaneSurface>;
-  isFocused: boolean;
   onFocusPane: (paneId: string) => void;
   onSelectTab: (paneId: string, tabId: string) => void;
   onSplit: (paneId: string, direction: SplitDirection) => void;
   onClosePane: (paneId: string) => void;
+  onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
   onResumeTranscript?: () => void;
@@ -684,7 +686,9 @@ function PaneLeafView({
                       className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/pane-tab:opacity-100"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (surface.kind === "file") {
+                        if (surface.kind === "live-session") {
+                          onCloseSession(surface.session.id);
+                        } else if (surface.kind === "file") {
                           onCloseFile(surface.id);
                         } else {
                           onCloseTranscript();
@@ -805,6 +809,7 @@ function PaneTreeView({
   onSelectTab,
   onSplit,
   onClosePane,
+  onCloseSession,
   onCloseTranscript,
   onCloseFile,
   onResumeTranscript,
@@ -820,6 +825,7 @@ function PaneTreeView({
   onSelectTab: (paneId: string, tabId: string) => void;
   onSplit: (paneId: string, direction: SplitDirection) => void;
   onClosePane: (paneId: string) => void;
+  onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
   onResumeTranscript?: () => void;
@@ -833,11 +839,11 @@ function PaneTreeView({
         leaf={node}
         paneCount={paneCount}
         surfacesById={surfacesById}
-        isFocused={activePaneId === node.id}
         onFocusPane={onFocusPane}
         onSelectTab={onSelectTab}
         onSplit={onSplit}
         onClosePane={onClosePane}
+        onCloseSession={onCloseSession}
         onCloseTranscript={onCloseTranscript}
         onCloseFile={onCloseFile}
         onResumeTranscript={onResumeTranscript}
@@ -864,6 +870,7 @@ function PaneTreeView({
               onSelectTab={onSelectTab}
               onSplit={onSplit}
               onClosePane={onClosePane}
+              onCloseSession={onCloseSession}
               onCloseTranscript={onCloseTranscript}
               onCloseFile={onCloseFile}
               onResumeTranscript={onResumeTranscript}
@@ -888,6 +895,7 @@ export function PaneWorkspace({
   openFilePath,
   onNewSession,
   onSelectLiveSession,
+  onCloseSession,
   onCloseTranscript,
   onCloseFile,
   onResumeTranscript,
@@ -900,7 +908,7 @@ export function PaneWorkspace({
       kind: "live-session",
       session,
       title: session.label,
-      closable: false,
+      closable: true,
     }));
 
     if (transcriptSession) {
@@ -1016,6 +1024,7 @@ export function PaneWorkspace({
             };
           });
         }}
+        onCloseSession={onCloseSession}
         onCloseTranscript={onCloseTranscript}
         onCloseFile={onCloseFile}
         onResumeTranscript={onResumeTranscript}

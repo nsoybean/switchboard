@@ -27,7 +27,7 @@ interface WorkspacePanelProps {
   git: GitState & GitActions;
   session?: Session | null;
   githubToken?: string | null;
-  onOpenSettings?: () => void;
+  onOpenSettings?: (tab?: "general" | "integrations" | "about") => void;
   onFileSelect?: (filePath: string) => void;
   onTabChange: (tab: WorkspaceTab) => void;
 }

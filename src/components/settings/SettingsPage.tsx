@@ -17,6 +17,7 @@ type SettingsTab = (typeof TABS)[number]["id"];
 
 interface SettingsPageProps {
   onBack: () => void;
+  initialTab?: SettingsTab;
   currentVersion: string | null;
   updateVersion: string | null;
   updateNotes?: string;
@@ -29,6 +30,7 @@ interface SettingsPageProps {
 
 export function SettingsPage({
   onBack,
+  initialTab,
   currentVersion,
   updateVersion,
   updateNotes,
@@ -38,7 +40,7 @@ export function SettingsPage({
   onCheckForUpdates,
   onInstallUpdate,
 }: SettingsPageProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "general");
 
   return (
     <div className="flex flex-col h-full bg-background">

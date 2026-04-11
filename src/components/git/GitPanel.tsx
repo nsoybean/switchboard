@@ -21,7 +21,7 @@ interface GitPanelProps {
   cwd: string;
   git: GitState & GitActions;
   githubToken?: string | null;
-  onOpenSettings?: () => void;
+  onOpenSettings?: (tab?: "general" | "integrations" | "about") => void;
   onOpenDiff?: (diff: { path: string; staged: boolean; status: string }) => void;
   activeDiffPath?: string | null;
   activeDiffStaged?: boolean | null;
