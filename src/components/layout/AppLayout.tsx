@@ -13,8 +13,10 @@ import {
   type WorkspaceContext,
   type WorkspaceTab,
 } from "../workspace/WorkspacePanel";
+import { StatusBar } from "./StatusBar";
 import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useAgentHooks } from "../../hooks/useClaudeHooks";
+import { useGitState } from "../../hooks/useGitState";
 import { useKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
 import { getBranchPrefix } from "../../lib/branches";
@@ -39,7 +41,7 @@ import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
 
 const MIN_SIDEBAR_WIDTH = 260;
 const MAX_SIDEBAR_WIDTH = 520;
-const MIN_INSPECTOR_WIDTH = 360;
+const MIN_INSPECTOR_WIDTH = 200;
 const MAX_INSPECTOR_WIDTH = 760;
 
 interface HistorySessionSummary {
@@ -152,7 +154,7 @@ export function AppLayout() {
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const [sidebarWidth, setSidebarWidth] = useState(320);
-  const [inspectorWidth, setInspectorWidth] = useState(560);
+  const [inspectorWidth, setInspectorWidth] = useState(320);
   const sessionsRef = useRef(state.sessions);
   const hookConfigReady = useRef<Promise<void>>(Promise.resolve());
   const canvasViewRef = useRef<CanvasViewHandle>(null);
@@ -1089,6 +1091,14 @@ export function AppLayout() {
   useKeyboardShortcuts(shortcutHandlers);
   useAgentHooks(state.sessions, dispatch);
 
+  const hasWorkspaceRoot = workspaceContext?.availability === "ready" && !!workspaceContext.rootPath;
+  const git = useGitState({
+    cwd: hasWorkspaceRoot ? workspaceContext!.rootPath! : "",
+    visible: hasWorkspaceRoot && inspectorOpen,
+    sessionId: workspaceContext?.kind === "session" ? selectedSession?.id : null,
+    onSessionBranchChange: handleSessionBranchChange,
+  });
+
   const sidebarContent = (
     <SessionSidebar
       onNewSession={() => setDialogOpen(true)}
@@ -1137,11 +1147,10 @@ export function AppLayout() {
     <WorkspacePanel
       activeTab={workspaceTab}
       context={workspaceContext}
-      visible={inspectorOpen}
+      git={git}
       session={selectedSession}
       githubToken={state.githubToken}
       onOpenSettings={openSettings}
-      onSessionBranchChange={handleSessionBranchChange}
       onTabChange={setWorkspaceTab}
     />
   ) : null;
@@ -1354,6 +1363,22 @@ export function AppLayout() {
             ) : null}
           </div>
         )
+      )}
+
+      {/* Status Bar */}
+      {state.projectPath && !settingsOpen && (
+        <StatusBar
+          git={git}
+          cwd={workspaceContext?.rootPath ?? null}
+          branchPrefix={
+            selectedSession?.agent
+              ? getBranchPrefix(selectedSession.agent as AgentType)
+              : undefined
+          }
+          githubToken={state.githubToken}
+          onNewSession={() => setDialogOpen(true)}
+          onOpenSettings={openSettings}
+        />
       )}
 
       {/* New Session Dialog */}

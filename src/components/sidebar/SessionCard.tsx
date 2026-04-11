@@ -1,30 +1,21 @@
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { getSessionAttentionHint, getSessionStatusLabel } from "@/lib/session-attention";
-import { Circle, PencilLine, Play, Square, Trash2 } from "lucide-react";
-import { AgentIcon } from "@/components/agents/AgentIcon";
-import { formatTokens, formatCost, estimateCost } from "../../lib/pricing";
+import { GitBranch, PencilLine, Play, Square, Trash2 } from "lucide-react";
 import type { Session } from "../../state/types";
-
-interface TokenInfo {
-  inputTokens: number;
-  outputTokens: number;
-  model: string | null;
-}
 
 interface SessionCardProps {
   session: Session;
   isActive: boolean;
   isPast?: boolean;
-  tokenInfo?: TokenInfo;
+  index?: number;
   timestampLabel?: string;
   timestampTitle?: string;
+  diffStats?: { additions: number; deletions: number } | null;
   onClick: () => void;
   onResume?: () => void;
   onStop?: () => void;
@@ -35,104 +26,89 @@ interface SessionCardProps {
 export function SessionCard({
   session,
   isActive,
-  tokenInfo,
+  index,
   timestampLabel,
   timestampTitle,
+  diffStats,
   onClick,
   onResume,
   onStop,
   onRename,
   onDelete,
 }: SessionCardProps) {
-  const isDone =
-    session.status === "done" ||
-    session.status === "error" ||
-    session.status === "stopped";
+  const isRunning = session.status === "running";
   const canManage = Boolean(onResume || onStop || onRename || onDelete);
-  const attentionHint = getSessionAttentionHint(session);
 
   return (
     <div
       className={cn(
-        "group/session flex w-full min-w-0 items-start gap-2 rounded-md px-3 py-2 text-sm transition-colors overflow-hidden",
+        "group/session flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors overflow-hidden cursor-pointer",
         isActive
           ? "bg-accent text-accent-foreground"
           : "hover:bg-accent/50 text-foreground",
-        isDone && !isActive && "opacity-60",
       )}
+      onClick={onClick}
     >
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
-      >
-        <AgentIcon agent={session.agent} className="mt-0.5 size-4" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-medium text-[13px]">
-            {session.label}
-          </div>
-          {session.branch && (
-            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-              {session.branch}
-            </div>
+      {/* Session number */}
+      {typeof index === "number" && (
+        <span
+          className={cn(
+            "mt-0.5 shrink-0 w-4 text-right text-[11px] tabular-nums",
+            isRunning
+              ? "text-[var(--sb-status-running)] font-semibold"
+              : session.status === "idle" || session.status === "needs-input"
+                ? "text-[var(--sb-status-done)]"
+                : "text-muted-foreground",
           )}
-          <div className="mt-1 flex items-center gap-1.5">
-            {!isDone && (
-              <>
-                <Circle
-                  className={cn(
-                    "size-2.5 fill-current",
-                    session.status === "running" &&
-                      "text-[var(--sb-status-running)]",
-                    (session.status === "idle" || session.status === "needs-input") &&
-                      "text-[var(--sb-status-done)]",
-                    session.status === "needs-input" &&
-                      "animate-pulse",
-                  )}
-                />
-                <Badge
-                  variant="secondary"
-                  className="h-4 px-1 text-[10px] font-normal"
-                >
-                  {getSessionStatusLabel(session.status)}
-                </Badge>
-              </>
-            )}
-            {attentionHint && !isDone ? (
-              <span className="text-[10px] text-muted-foreground/70">
-                {attentionHint}
-              </span>
-            ) : null}
-            {tokenInfo &&
-              (tokenInfo.inputTokens > 0 || tokenInfo.outputTokens > 0) && (
-                <span className="text-[10px] text-muted-foreground/70">
-                  {formatTokens(tokenInfo.inputTokens + tokenInfo.outputTokens)}
-                  {" · "}
-                  {formatCost(
-                    estimateCost(
-                      tokenInfo.model,
-                      tokenInfo.inputTokens,
-                      tokenInfo.outputTokens,
-                    ),
-                  )}
-                </span>
-              )}
-          </div>
+        >
+          {index}
+        </span>
+      )}
+
+      {/* Git branch icon */}
+      <GitBranch className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+
+      {/* Content */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-[13px] font-medium">
+            {session.label}
+          </span>
         </div>
-      </button>
+        <div
+          className="mt-0.5 text-[11px] text-muted-foreground"
+          title={timestampTitle}
+        >
+          {timestampLabel}
+        </div>
+      </div>
+
+      {/* Right side: diff stats or action buttons */}
       <div className="relative mt-0.5 shrink-0 self-start">
-        {timestampLabel && (
+        {diffStats && (diffStats.additions > 0 || diffStats.deletions > 0) ? (
           <span
             className={cn(
-              "flex items-start justify-end text-[10px] text-muted-foreground transition-opacity",
+              "flex items-center gap-1 text-[11px] font-medium tabular-nums transition-opacity",
               canManage &&
                 "group-hover/session:opacity-0 group-hover/session:hidden group-focus-within/session:opacity-0 group-focus-within/session:hidden",
             )}
-            title={timestampTitle}
-            aria-label={timestampTitle}
           >
-            {timestampLabel}
+            <span className="text-[var(--sb-diff-add-fg)]">
+              +{diffStats.additions}
+            </span>
+            <span className="text-[var(--sb-diff-del-fg)]">
+              -{diffStats.deletions}
+            </span>
           </span>
+        ) : (
+          !canManage ? null : (
+            <span
+              className={cn(
+                "flex items-start justify-end text-[10px] text-muted-foreground transition-opacity",
+                "group-hover/session:opacity-0 group-hover/session:hidden group-focus-within/session:opacity-0 group-focus-within/session:hidden",
+              )}
+            />
+          )
         )}
         {canManage && (
           <div className="hidden items-center gap-0.5 group-hover/session:flex group-focus-within/session:flex">

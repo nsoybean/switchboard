@@ -65,7 +65,7 @@ interface PaneSplitNode {
   kind: "split";
   id: string;
   axis: PaneAxis;
-  children: [PaneNode, PaneNode];
+  children: PaneNode[];
 }
 
 type PaneNode = PaneLeafNode | PaneSplitNode;
@@ -108,8 +108,8 @@ function paneNodeEqual(left: PaneNode | null, right: PaneNode | null): boolean {
   if (left.kind === "split" && right.kind === "split") {
     return (
       left.axis === right.axis &&
-      paneNodeEqual(left.children[0], right.children[0]) &&
-      paneNodeEqual(left.children[1], right.children[1])
+      left.children.length === right.children.length &&
+      left.children.every((child, i) => paneNodeEqual(child, right.children[i]))
     );
   }
 
@@ -129,7 +129,11 @@ function getFirstLeaf(node: PaneNode | null): PaneLeafNode | null {
     return node;
   }
 
-  return getFirstLeaf(node.children[0]) ?? getFirstLeaf(node.children[1]);
+  for (const child of node.children) {
+    const leaf = getFirstLeaf(child);
+    if (leaf) return leaf;
+  }
+  return null;
 }
 
 function countLeaves(node: PaneNode | null): number {
@@ -141,7 +145,7 @@ function countLeaves(node: PaneNode | null): number {
     return 1;
   }
 
-  return countLeaves(node.children[0]) + countLeaves(node.children[1]);
+  return node.children.reduce((sum, child) => sum + countLeaves(child), 0);
 }
 
 function findLeaf(node: PaneNode | null, leafId: string | null): PaneLeafNode | null {
@@ -153,7 +157,11 @@ function findLeaf(node: PaneNode | null, leafId: string | null): PaneLeafNode | 
     return node.id === leafId ? node : null;
   }
 
-  return findLeaf(node.children[0], leafId) ?? findLeaf(node.children[1], leafId);
+  for (const child of node.children) {
+    const found = findLeaf(child, leafId);
+    if (found) return found;
+  }
+  return null;
 }
 
 function findLeafContainingTab(node: PaneNode | null, tabId: string | null): PaneLeafNode | null {
@@ -165,7 +173,11 @@ function findLeafContainingTab(node: PaneNode | null, tabId: string | null): Pan
     return node.tabIds.includes(tabId) ? node : null;
   }
 
-  return findLeafContainingTab(node.children[0], tabId) ?? findLeafContainingTab(node.children[1], tabId);
+  for (const child of node.children) {
+    const found = findLeafContainingTab(child, tabId);
+    if (found) return found;
+  }
+  return null;
 }
 
 function collectAssignedTabIds(node: PaneNode | null): string[] {
@@ -177,7 +189,7 @@ function collectAssignedTabIds(node: PaneNode | null): string[] {
     return node.tabIds;
   }
 
-  return [...collectAssignedTabIds(node.children[0]), ...collectAssignedTabIds(node.children[1])];
+  return node.children.flatMap(collectAssignedTabIds);
 }
 
 function ensureActiveTabs(node: PaneNode): PaneNode {
@@ -194,13 +206,12 @@ function ensureActiveTabs(node: PaneNode): PaneNode {
     return { ...node, activeTabId: nextActiveTabId };
   }
 
-  const left = ensureActiveTabs(node.children[0]);
-  const right = ensureActiveTabs(node.children[1]);
-  if (left === node.children[0] && right === node.children[1]) {
+  const nextChildren = node.children.map(ensureActiveTabs);
+  if (nextChildren.every((child, i) => child === node.children[i])) {
     return node;
   }
 
-  return { ...node, children: [left, right] };
+  return { ...node, children: nextChildren };
 }
 
 function normalizeNode(node: PaneNode | null, availableTabIds: Set<string>): PaneNode | null {
@@ -230,26 +241,26 @@ function normalizeNode(node: PaneNode | null, availableTabIds: Set<string>): Pan
     };
   }
 
-  const left = normalizeNode(node.children[0], availableTabIds);
-  const right = normalizeNode(node.children[1], availableTabIds);
+  const nextChildren = node.children
+    .map((child) => normalizeNode(child, availableTabIds))
+    .filter((child): child is PaneNode => child !== null);
 
-  if (!left && !right) {
+  if (nextChildren.length === 0) {
     return null;
   }
 
-  if (!left) {
-    return right;
+  if (nextChildren.length === 1) {
+    return nextChildren[0];
   }
 
-  if (!right) {
-    return left;
-  }
-
-  if (left === node.children[0] && right === node.children[1]) {
+  if (
+    nextChildren.length === node.children.length &&
+    nextChildren.every((child, i) => child === node.children[i])
+  ) {
     return node;
   }
 
-  return { ...node, children: [left, right] };
+  return { ...node, children: nextChildren };
 }
 
 function appendTabsToLeaf(
@@ -288,13 +299,14 @@ function appendTabsToLeaf(
     };
   }
 
-  const left = appendTabsToLeaf(node.children[0], leafId, tabIds, preferredActiveTabId);
-  const right = appendTabsToLeaf(node.children[1], leafId, tabIds, preferredActiveTabId);
-  if (left === node.children[0] && right === node.children[1]) {
+  const nextChildren = node.children.map((child) =>
+    appendTabsToLeaf(child, leafId, tabIds, preferredActiveTabId),
+  );
+  if (nextChildren.every((child, i) => child === node.children[i])) {
     return node;
   }
 
-  return { ...node, children: [left, right] };
+  return { ...node, children: nextChildren };
 }
 
 function appendTabsToFirstLeaf(
@@ -319,13 +331,14 @@ function setLeafActiveTab(node: PaneNode, leafId: string, tabId: string): PaneNo
     return { ...node, activeTabId: tabId };
   }
 
-  const left = setLeafActiveTab(node.children[0], leafId, tabId);
-  const right = setLeafActiveTab(node.children[1], leafId, tabId);
-  if (left === node.children[0] && right === node.children[1]) {
+  const nextChildren = node.children.map((child) =>
+    setLeafActiveTab(child, leafId, tabId),
+  );
+  if (nextChildren.every((child, i) => child === node.children[i])) {
     return node;
   }
 
-  return { ...node, children: [left, right] };
+  return { ...node, children: nextChildren };
 }
 
 function splitLeaf(
@@ -335,8 +348,10 @@ function splitLeaf(
   tabId: string,
 ): { root: PaneNode; activePaneId: string | null } {
   let nextActivePaneId: string | null = null;
+  const splitAxis: PaneAxis = direction === "left" || direction === "right" ? "horizontal" : "vertical";
+  const insertBefore = direction === "left" || direction === "up";
 
-  const visit = (current: PaneNode): PaneNode => {
+  const visit = (current: PaneNode, parentAxis?: PaneAxis): PaneNode => {
     if (current.kind === "leaf") {
       if (current.id !== leafId) {
         return current;
@@ -358,27 +373,53 @@ function splitLeaf(
       };
 
       nextActivePaneId = movedLeaf.id;
-      const axis: PaneAxis = direction === "left" || direction === "right" ? "horizontal" : "vertical";
-      const children: [PaneNode, PaneNode] =
-        direction === "left" || direction === "up"
-          ? [movedLeaf, currentLeaf]
-          : [currentLeaf, movedLeaf];
+
+      // If parent has the same axis, we'll insert as sibling (handled in split branch below)
+      // Otherwise, wrap in a new split
+      if (parentAxis === splitAxis) {
+        // Return a sentinel split that the parent will absorb
+        return {
+          kind: "split",
+          id: "__absorb__",
+          axis: splitAxis,
+          children: insertBefore
+            ? [movedLeaf, currentLeaf]
+            : [currentLeaf, movedLeaf],
+        };
+      }
 
       return {
         kind: "split",
         id: makeNodeId("split"),
-        axis,
-        children,
+        axis: splitAxis,
+        children: insertBefore
+          ? [movedLeaf, currentLeaf]
+          : [currentLeaf, movedLeaf],
       };
     }
 
-    const left = visit(current.children[0]);
-    const right = visit(current.children[1]);
-    if (left === current.children[0] && right === current.children[1]) {
+    const nextChildren = current.children.map((child) =>
+      visit(child, current.axis),
+    );
+    if (nextChildren.every((child, i) => child === current.children[i])) {
       return current;
     }
 
-    return { ...current, children: [left, right] };
+    // Absorb sentinel children: if a child is a split with the same axis and id "__absorb__",
+    // splice its children into our children array
+    if (current.axis === splitAxis) {
+      const absorbed: PaneNode[] = [];
+      for (const child of nextChildren) {
+        if (child.kind === "split" && child.id === "__absorb__" && child.axis === current.axis) {
+          absorbed.push(...child.children);
+        } else {
+          absorbed.push(child);
+        }
+      }
+      return { ...current, children: absorbed };
+    }
+
+    return { ...current, children: nextChildren };
   };
 
   return {
@@ -396,63 +437,62 @@ interface RemoveLeafResult {
 function closeLeaf(node: PaneNode, leafId: string): RemoveLeafResult {
   if (node.kind === "leaf") {
     if (node.id !== leafId) {
+      return { node, removed: false, focusLeafId: null };
+    }
+    return { node: null, removed: true, focusLeafId: null };
+  }
+
+  // Try removing from each child
+  for (let i = 0; i < node.children.length; i++) {
+    const result = closeLeaf(node.children[i], leafId);
+    if (!result.removed) continue;
+
+    const removedChild = node.children[i];
+    const tabsToRedistribute = collectAssignedTabIds(removedChild);
+
+    if (result.node) {
+      // Child was pruned but not fully removed — replace in place
+      const nextChildren = [...node.children];
+      nextChildren[i] = result.node;
       return {
-        node,
-        removed: false,
-        focusLeafId: null,
+        node: { ...node, children: nextChildren },
+        removed: true,
+        focusLeafId: getFirstLeaf(result.node)?.id ?? null,
+      };
+    }
+
+    // Child fully removed — splice it out
+    const remaining = node.children.filter((_, idx) => idx !== i);
+
+    if (remaining.length === 0) {
+      return { node: null, removed: true, focusLeafId: null };
+    }
+
+    // Redistribute tabs from removed child into adjacent sibling
+    const adjacentIdx = Math.min(i, remaining.length - 1);
+    remaining[adjacentIdx] = appendTabsToFirstLeaf(
+      remaining[adjacentIdx],
+      tabsToRedistribute,
+      null,
+    );
+
+    if (remaining.length === 1) {
+      // Collapse single-child split
+      return {
+        node: remaining[0],
+        removed: true,
+        focusLeafId: getFirstLeaf(remaining[0])?.id ?? null,
       };
     }
 
     return {
-      node: null,
+      node: { ...node, children: remaining },
       removed: true,
-      focusLeafId: null,
+      focusLeafId: getFirstLeaf(remaining[adjacentIdx])?.id ?? null,
     };
   }
 
-  const [leftChild, rightChild] = node.children;
-  const leftResult = closeLeaf(leftChild, leafId);
-  if (leftResult.removed) {
-    const merged = leftResult.node
-      ? { ...node, children: [leftResult.node, rightChild] as [PaneNode, PaneNode] }
-      : appendTabsToFirstLeaf(rightChild, collectAssignedTabIds(leftChild), null);
-
-    return {
-      node: merged,
-      removed: true,
-      focusLeafId: getFirstLeaf(merged)?.id ?? null,
-    };
-  }
-
-  const rightResult = closeLeaf(rightChild, leafId);
-  if (rightResult.removed) {
-    const merged = rightResult.node
-      ? { ...node, children: [leftChild, rightResult.node] as [PaneNode, PaneNode] }
-      : appendTabsToFirstLeaf(leftChild, collectAssignedTabIds(rightChild), null);
-
-    return {
-      node: merged,
-      removed: true,
-      focusLeafId: getFirstLeaf(merged)?.id ?? null,
-    };
-  }
-
-  if (leftResult.node === leftChild && rightResult.node === rightChild) {
-    return {
-      node,
-      removed: false,
-      focusLeafId: null,
-    };
-  }
-
-  return {
-    node: {
-      ...node,
-      children: [leftResult.node ?? leftChild, rightResult.node ?? rightChild],
-    },
-    removed: false,
-    focusLeafId: null,
-  };
+  return { node, removed: false, focusLeafId: null };
 }
 
 function syncPaneLayout(
@@ -768,45 +808,34 @@ function PaneTreeView({
     );
   }
 
+  const defaultSize = 100 / node.children.length;
+
   return (
     <ResizablePanelGroup orientation={node.axis}>
-      <ResizablePanel defaultSize={50} minSize={20}>
-        <PaneTreeView
-          node={node.children[0]}
-          paneCount={paneCount}
-          surfacesById={surfacesById}
-          activePaneId={activePaneId}
-          onFocusPane={onFocusPane}
-          onSelectTab={onSelectTab}
-          onSplit={onSplit}
-          onClosePane={onClosePane}
-          onCloseTranscript={onCloseTranscript}
-          onResumeTranscript={onResumeTranscript}
-          onSelectLiveSession={onSelectLiveSession}
-          onSessionStart={onSessionStart}
-          onSessionExit={onSessionExit}
-        />
-      </ResizablePanel>
-
-      <ResizableHandle withHandle />
-
-      <ResizablePanel defaultSize={50} minSize={20}>
-        <PaneTreeView
-          node={node.children[1]}
-          paneCount={paneCount}
-          surfacesById={surfacesById}
-          activePaneId={activePaneId}
-          onFocusPane={onFocusPane}
-          onSelectTab={onSelectTab}
-          onSplit={onSplit}
-          onClosePane={onClosePane}
-          onCloseTranscript={onCloseTranscript}
-          onResumeTranscript={onResumeTranscript}
-          onSelectLiveSession={onSelectLiveSession}
-          onSessionStart={onSessionStart}
-          onSessionExit={onSessionExit}
-        />
-      </ResizablePanel>
+      {node.children.flatMap((child, index) => {
+        const panel = (
+          <ResizablePanel key={child.id} defaultSize={defaultSize} minSize={10}>
+            <PaneTreeView
+              node={child}
+              paneCount={paneCount}
+              surfacesById={surfacesById}
+              activePaneId={activePaneId}
+              onFocusPane={onFocusPane}
+              onSelectTab={onSelectTab}
+              onSplit={onSplit}
+              onClosePane={onClosePane}
+              onCloseTranscript={onCloseTranscript}
+              onResumeTranscript={onResumeTranscript}
+              onSelectLiveSession={onSelectLiveSession}
+              onSessionStart={onSessionStart}
+              onSessionExit={onSessionExit}
+            />
+          </ResizablePanel>
+        );
+        return index === 0
+          ? [panel]
+          : [<ResizableHandle key={`handle-${child.id}`} withHandle />, panel];
+      })}
     </ResizablePanelGroup>
   );
 }
