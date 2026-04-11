@@ -607,7 +607,6 @@ function PaneLeafView({
   leaf,
   paneCount,
   surfacesById,
-  isFocused,
   onFocusPane,
   onSelectTab,
   onSplit,
@@ -642,15 +641,13 @@ function PaneLeafView({
 
   return (
     <div
-      className={cn(
-        "flex h-full min-h-0 min-w-0 flex-col bg-background",
-        isFocused ? "ring-1 ring-border ring-inset" : "",
-      )}
+      className="flex h-full min-h-0 min-w-0 flex-col"
       onMouseDown={() => onFocusPane(leaf.id)}
     >
-      <div className="border-b bg-card/85 px-2 py-2">
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+      {/* Tab bar — sits on top of content, active tab connects seamlessly */}
+      <div className="relative shrink-0 bg-muted/50">
+        <div className="flex items-center">
+          <div className="flex min-w-0 flex-1 items-end gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {leaf.tabIds.map((tabId) => {
               const surface = surfacesById.get(tabId);
               if (!surface) {
@@ -669,10 +666,10 @@ function PaneLeafView({
                     }
                   }}
                   className={cn(
-                    "group/pane-tab flex max-w-[260px] items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors",
+                    "group/pane-tab relative flex max-w-[260px] shrink-0 items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
                     isActive
-                      ? "border-border bg-background text-foreground shadow-sm"
-                      : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground",
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
                   )}
                 >
                   {surface.kind === "file" ? (
@@ -684,7 +681,7 @@ function PaneLeafView({
                   <PaneSurfaceBadge surface={surface} />
                   {surface.closable ? (
                     <span
-                      className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-60 transition-opacity hover:bg-accent hover:text-foreground group-hover/pane-tab:opacity-100"
+                      className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/pane-tab:opacity-100"
                       onClick={(event) => {
                         event.stopPropagation();
                         if (surface.kind === "file") {
@@ -699,12 +696,15 @@ function PaneLeafView({
                       <X className="size-3" />
                     </span>
                   ) : null}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-foreground" />
+                  )}
                 </button>
               );
             })}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5 px-2">
             {([
               { direction: "left", label: "Split left", icon: ArrowLeft },
               { direction: "right", label: "Split right", icon: ArrowRight },
@@ -719,10 +719,10 @@ function PaneLeafView({
                   onClick={() => onSplit(leaf.id, action.direction)}
                   disabled={!canSplit}
                   className={cn(
-                    "inline-flex size-7 items-center justify-center rounded-md border text-muted-foreground transition-colors",
+                    "inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors",
                     canSplit
-                      ? "border-transparent hover:border-border hover:bg-background hover:text-foreground"
-                      : "cursor-not-allowed border-transparent opacity-40",
+                      ? "hover:bg-accent hover:text-foreground"
+                      : "cursor-not-allowed opacity-30",
                   )}
                   title={canSplit ? action.label : "Open more than one tab in this pane to split it"}
                   aria-label={action.label}
@@ -736,7 +736,7 @@ function PaneLeafView({
               <button
                 type="button"
                 onClick={() => onClosePane(leaf.id)}
-                className="inline-flex size-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-background hover:text-foreground"
+                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 title="Close pane"
                 aria-label="Close pane"
               >
@@ -745,9 +745,10 @@ function PaneLeafView({
             ) : null}
           </div>
         </div>
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden bg-background">
         {leaf.tabIds.map((tabId) => {
           const surface = surfacesById.get(tabId);
           if (!surface) {
@@ -757,7 +758,7 @@ function PaneLeafView({
           const isActive = tabId === leaf.activeTabId;
 
           return (
-            <div key={tabId} className={cn("h-full min-h-0", isActive ? "block" : "hidden")}>
+            <div key={tabId} className={cn("h-full min-h-0 p-1", isActive ? "block" : "hidden")}>
               {surface.kind === "live-session" ? (
                 <XTermContainer
                   tileId={surface.session.id}
@@ -870,7 +871,7 @@ function PaneTreeView({
         );
         return index === 0
           ? [panel]
-          : [<ResizableHandle key={`handle-${child.id}`} withHandle />, panel];
+          : [<ResizableHandle key={`handle-${child.id}`} />, panel];
       })}
     </ResizablePanelGroup>
   );

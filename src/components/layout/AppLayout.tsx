@@ -1239,7 +1239,7 @@ export function AppLayout() {
                   role="separator"
                   aria-orientation="vertical"
                   aria-label="Resize session sidebar"
-                  className="w-3 shrink-0 cursor-col-resize bg-background"
+                  className="w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2 relative"
                   onPointerDown={(event) => startPanelResize("sidebar", event)}
                 />
               </>
@@ -1280,7 +1280,7 @@ export function AppLayout() {
                   role="separator"
                   aria-orientation="vertical"
                   aria-label="Resize inspector panel"
-                  className="w-3 shrink-0 cursor-col-resize bg-background"
+                  className="w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2 relative"
                   onPointerDown={(event) => startPanelResize("inspector", event)}
                 />
                 <div
