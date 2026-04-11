@@ -18,7 +18,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { BranchPicker } from "@/components/git/BranchPicker";
 import { useTheme } from "@/components/theme-provider";
+import type { GitState } from "@/hooks/useGitState";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
@@ -28,6 +30,8 @@ interface TitlebarProps {
   onToggleInspector: () => void;
   onWorkspaceShellModeChange?: (mode: "pane" | "canvas") => void;
   projectPath?: string | null;
+  git?: GitState & { switchBranch: (name: string) => Promise<void> };
+  onCreateBranch?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
@@ -44,6 +48,8 @@ export function Titlebar({
   onToggleInspector,
   onWorkspaceShellModeChange,
   projectPath,
+  git,
+  onCreateBranch,
   onOpenSettings,
   updateVersion = null,
   checkingForUpdates = false,
@@ -137,6 +143,20 @@ export function Titlebar({
           <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
         </Tooltip>
       </div>
+
+      {/* Branch picker — aligned to start of middle pane */}
+      {git?.branch && (
+        <BranchPicker
+          branches={git.branches}
+          loading={git.branchesLoading && git.branches.length === 0}
+          value={git.branch}
+          disabled={git.branchActionPending}
+          triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-2 text-xs font-medium shadow-none hover:bg-accent/50"
+          createLabel="Create branch..."
+          onSelect={(branchName) => void git.switchBranch(branchName)}
+          onCreateBranch={onCreateBranch}
+        />
+      )}
 
       {/* Spacer — drag region */}
       <div data-tauri-drag-region className="flex-1" />

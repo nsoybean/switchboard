@@ -28,6 +28,7 @@ interface WorkspacePanelProps {
   session?: Session | null;
   githubToken?: string | null;
   onOpenSettings?: () => void;
+  onFileSelect?: (filePath: string) => void;
   onTabChange: (tab: WorkspaceTab) => void;
 }
 
@@ -58,6 +59,7 @@ export function WorkspacePanel({
   session,
   githubToken,
   onOpenSettings,
+  onFileSelect,
   onTabChange,
 }: WorkspacePanelProps) {
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
@@ -147,6 +149,7 @@ export function WorkspacePanel({
             {activeTab === "files" ? (
               <FilePanel
                 rootPath={context.rootPath!}
+                onFileSelect={onFileSelect}
               />
             ) : null}
 

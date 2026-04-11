@@ -147,6 +147,7 @@ export function AppLayout() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [openFilePath, setOpenFilePath] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1151,6 +1152,7 @@ export function AppLayout() {
       session={selectedSession}
       githubToken={state.githubToken}
       onOpenSettings={openSettings}
+      onFileSelect={setOpenFilePath}
       onTabChange={setWorkspaceTab}
     />
   ) : null;
@@ -1194,6 +1196,8 @@ export function AppLayout() {
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
         onWorkspaceShellModeChange={setWorkspaceShellMode}
         projectPath={state.projectPath}
+        git={hasWorkspaceRoot ? git : undefined}
+        onCreateBranch={() => {/* handled by WorkspacePanel's CreateBranchDialog */}}
         updateVersion={availableUpdate?.version ?? null}
         checkingForUpdates={checkingForUpdates}
         installingUpdate={installingUpdate}
@@ -1243,11 +1247,13 @@ export function AppLayout() {
                   activeSession={activeSession}
                   liveSessions={liveSessions}
                   transcriptSession={resolvedViewingSession}
+                  openFilePath={openFilePath}
                   onNewSession={() => setDialogOpen(true)}
                   onSelectLiveSession={(sessionId) =>
                     dispatch({ type: "SET_ACTIVE", id: sessionId })
                   }
                   onCloseTranscript={() => setViewingSession(null)}
+                  onCloseFile={() => setOpenFilePath(null)}
                   onResumeTranscript={
                     resolvedViewingSession
                       ? () => {
@@ -1368,14 +1374,7 @@ export function AppLayout() {
         <StatusBar
           git={git}
           cwd={workspaceContext?.rootPath ?? null}
-          branchPrefix={
-            selectedSession?.agent
-              ? getBranchPrefix(selectedSession.agent as AgentType)
-              : undefined
-          }
           githubToken={state.githubToken}
-          onNewSession={() => setDialogOpen(true)}
-          onOpenSettings={openSettings}
         />
       )}
 

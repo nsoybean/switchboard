@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUp,
   Eye,
+  FileText,
   Plus,
   X,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/state/types";
+import { FilePreview } from "../files/FilePreview";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
 
@@ -25,9 +27,11 @@ interface PaneWorkspaceProps {
   activeSession: Session | null;
   liveSessions: Session[];
   transcriptSession: Session | null;
+  openFilePath: string | null;
   onNewSession: () => void;
   onSelectLiveSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
+  onCloseFile: () => void;
   onResumeTranscript?: () => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
@@ -52,7 +56,15 @@ interface TranscriptSurface {
   closable: true;
 }
 
-type PaneSurface = LiveSurface | TranscriptSurface;
+interface FileSurface {
+  id: string;
+  kind: "file";
+  filePath: string;
+  title: string;
+  closable: true;
+}
+
+type PaneSurface = LiveSurface | TranscriptSurface | FileSurface;
 
 interface PaneLeafNode {
   kind: "leaf";
@@ -579,6 +591,10 @@ function PaneSurfaceBadge({ surface }: { surface: PaneSurface }) {
     );
   }
 
+  if (surface.kind === "file") {
+    return null;
+  }
+
   return (
     <Badge variant="outline" className="h-4 px-1 text-[10px] font-normal">
       <Eye data-icon="inline-start" />
@@ -597,6 +613,7 @@ function PaneLeafView({
   onSplit,
   onClosePane,
   onCloseTranscript,
+  onCloseFile,
   onResumeTranscript,
   onSelectLiveSession,
   onSessionStart,
@@ -611,6 +628,7 @@ function PaneLeafView({
   onSplit: (paneId: string, direction: SplitDirection) => void;
   onClosePane: (paneId: string) => void;
   onCloseTranscript: () => void;
+  onCloseFile: (surfaceId: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
   onSessionStart: (sessionId: string) => void;
@@ -657,7 +675,11 @@ function PaneLeafView({
                       : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground",
                   )}
                 >
-                  <AgentIcon agent={surface.session.agent} className="size-3.5 shrink-0" />
+                  {surface.kind === "file" ? (
+                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <AgentIcon agent={surface.session.agent} className="size-3.5 shrink-0" />
+                  )}
                   <span className="truncate font-medium">{surface.title}</span>
                   <PaneSurfaceBadge surface={surface} />
                   {surface.closable ? (
@@ -665,7 +687,11 @@ function PaneLeafView({
                       className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-60 transition-opacity hover:bg-accent hover:text-foreground group-hover/pane-tab:opacity-100"
                       onClick={(event) => {
                         event.stopPropagation();
-                        onCloseTranscript();
+                        if (surface.kind === "file") {
+                          onCloseFile(surface.id);
+                        } else {
+                          onCloseTranscript();
+                        }
                       }}
                       role="button"
                       aria-label={`Close ${surface.title}`}
@@ -743,6 +769,12 @@ function PaneLeafView({
                   onExit={onSessionExit(surface.session.id)}
                   closeOnUnmount={false}
                 />
+              ) : surface.kind === "file" ? (
+                <FilePreview
+                  filePath={surface.filePath}
+                  onClose={() => onCloseFile(surface.id)}
+                  showHeader={false}
+                />
               ) : (
                 <SessionTranscriptView
                   session={surface.session}
@@ -769,6 +801,7 @@ function PaneTreeView({
   onSplit,
   onClosePane,
   onCloseTranscript,
+  onCloseFile,
   onResumeTranscript,
   onSelectLiveSession,
   onSessionStart,
@@ -783,6 +816,7 @@ function PaneTreeView({
   onSplit: (paneId: string, direction: SplitDirection) => void;
   onClosePane: (paneId: string) => void;
   onCloseTranscript: () => void;
+  onCloseFile: (surfaceId: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
   onSessionStart: (sessionId: string) => void;
@@ -800,6 +834,7 @@ function PaneTreeView({
         onSplit={onSplit}
         onClosePane={onClosePane}
         onCloseTranscript={onCloseTranscript}
+        onCloseFile={onCloseFile}
         onResumeTranscript={onResumeTranscript}
         onSelectLiveSession={onSelectLiveSession}
         onSessionStart={onSessionStart}
@@ -825,6 +860,7 @@ function PaneTreeView({
               onSplit={onSplit}
               onClosePane={onClosePane}
               onCloseTranscript={onCloseTranscript}
+              onCloseFile={onCloseFile}
               onResumeTranscript={onResumeTranscript}
               onSelectLiveSession={onSelectLiveSession}
               onSessionStart={onSessionStart}
@@ -844,9 +880,11 @@ export function PaneWorkspace({
   activeSession,
   liveSessions,
   transcriptSession,
+  openFilePath,
   onNewSession,
   onSelectLiveSession,
   onCloseTranscript,
+  onCloseFile,
   onResumeTranscript,
   onSessionStart,
   onSessionExit,
@@ -870,18 +908,31 @@ export function PaneWorkspace({
       });
     }
 
+    if (openFilePath) {
+      const fileName = openFilePath.split("/").pop() ?? openFilePath;
+      nextSurfaces.push({
+        id: `file:${openFilePath}`,
+        kind: "file",
+        filePath: openFilePath,
+        title: fileName,
+        closable: true,
+      });
+    }
+
     return nextSurfaces;
-  }, [liveSessions, transcriptSession]);
+  }, [liveSessions, transcriptSession, openFilePath]);
 
   const surfacesById = useMemo(
     () => new Map(surfaces.map((surface) => [surface.id, surface])),
     [surfaces],
   );
-  const preferredTabId = transcriptSession
-    ? `transcript:${transcriptSession.resumeTargetId ?? transcriptSession.id}`
-    : activeSession
-      ? `live:${activeSession.id}`
-      : null;
+  const preferredTabId = openFilePath
+    ? `file:${openFilePath}`
+    : transcriptSession
+      ? `transcript:${transcriptSession.resumeTargetId ?? transcriptSession.id}`
+      : activeSession
+        ? `live:${activeSession.id}`
+        : null;
   const [layout, setLayout] = useState<PaneLayoutState>({ root: null, activePaneId: null });
 
   useEffect(() => {
@@ -961,6 +1012,7 @@ export function PaneWorkspace({
           });
         }}
         onCloseTranscript={onCloseTranscript}
+        onCloseFile={onCloseFile}
         onResumeTranscript={onResumeTranscript}
         onSelectLiveSession={onSelectLiveSession}
         onSessionStart={onSessionStart}
