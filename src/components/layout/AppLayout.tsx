@@ -1194,8 +1194,6 @@ export function AppLayout() {
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
         onWorkspaceShellModeChange={setWorkspaceShellMode}
         projectPath={state.projectPath}
-        onProjectClick={() => setProjectPickerOpen(true)}
-        onOpenHistory={() => setHistoryOpen(true)}
         updateVersion={availableUpdate?.version ?? null}
         checkingForUpdates={checkingForUpdates}
         installingUpdate={installingUpdate}

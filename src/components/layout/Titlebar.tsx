@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
-  History,
   LayoutGrid,
   Loader2,
   PanelTop,
@@ -29,8 +28,6 @@ interface TitlebarProps {
   onToggleInspector: () => void;
   onWorkspaceShellModeChange?: (mode: "pane" | "canvas") => void;
   projectPath?: string | null;
-  onProjectClick?: () => void;
-  onOpenHistory?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
@@ -47,8 +44,6 @@ export function Titlebar({
   onToggleInspector,
   onWorkspaceShellModeChange,
   projectPath,
-  onProjectClick,
-  onOpenHistory,
   onOpenSettings,
   updateVersion = null,
   checkingForUpdates = false,
@@ -126,70 +121,55 @@ export function Titlebar({
 
       {!isFullscreen && <Separator orientation="vertical" className="h-4" />}
 
-      {/* App + project identity */}
-      <div className="flex min-w-0 items-center gap-2 px-3">
-        <span className="shrink-0 text-xs font-semibold tracking-wide">
-          switchboard
-        </span>
-        {projectPathLabel ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onProjectClick}
-                className="min-w-0 truncate rounded-md border px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {projectPathLabel}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{projectPath}</TooltipContent>
-          </Tooltip>
-        ) : null}
-        {projectPathLabel ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground"
-                onClick={onOpenHistory}
-              >
-                <History className="size-3.5" />
-                History
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Open History (⌘⇧H)</TooltipContent>
-          </Tooltip>
-        ) : null}
-        {projectPathLabel ? (
-          <div className="ml-1 inline-flex items-center rounded-md border bg-background/80 p-0.5">
+      {/* Left controls */}
+      <div className="flex items-center px-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
             <Button
-              variant={workspaceShellMode === "pane" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-6 gap-1.5 px-2 text-[11px]"
-              onClick={() => onWorkspaceShellModeChange?.("pane")}
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              onClick={onToggleSidebar}
             >
-              <PanelTop className="size-3.5" />
-              Pane
+              <PanelLeft className={sidebarOpen ? "size-4" : "size-4 opacity-40"} />
             </Button>
-            <Button
-              variant={workspaceShellMode === "canvas" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-6 gap-1.5 px-2 text-[11px]"
-              onClick={() => onWorkspaceShellModeChange?.("canvas")}
-            >
-              <LayoutGrid className="size-3.5" />
-              Canvas
-            </Button>
-          </div>
-        ) : null}
+          </TooltipTrigger>
+          <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Spacer — drag region */}
       <div data-tauri-drag-region className="flex-1" />
 
       {/* Right controls */}
-      <div className="flex items-center gap-0.5 px-2">
+      <div className="flex items-center gap-1 px-2">
+        {/* Pane / Canvas toggle */}
+        {projectPathLabel ? (
+          <>
+            <div className="inline-flex items-center rounded-md border bg-background/80 p-0.5">
+              <Button
+                variant={workspaceShellMode === "pane" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-6 gap-1.5 px-2 text-[11px]"
+                onClick={() => onWorkspaceShellModeChange?.("pane")}
+              >
+                <PanelTop className="size-3.5" />
+                Pane
+              </Button>
+              <Button
+                variant={workspaceShellMode === "canvas" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-6 gap-1.5 px-2 text-[11px]"
+                onClick={() => onWorkspaceShellModeChange?.("canvas")}
+              >
+                <LayoutGrid className="size-3.5" />
+                Canvas
+              </Button>
+            </div>
+            <Separator orientation="vertical" className="h-4" />
+          </>
+        ) : null}
+
         {updateVersion && (
           <>
             <Button
@@ -208,24 +188,10 @@ export function Titlebar({
                 ? `Updating ${updateProgress}%`
                 : `Update ${updateVersion}`}
             </Button>
-
-            <Separator orientation="vertical" className="h-4 mx-1" />
+            <Separator orientation="vertical" className="h-4" />
           </>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9"
-              onClick={onToggleSidebar}
-            >
-              <PanelLeft className={sidebarOpen ? "size-4" : "size-4 opacity-40"} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
-        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -242,7 +208,7 @@ export function Titlebar({
           <TooltipContent>Toggle Inspector (⌘G)</TooltipContent>
         </Tooltip>
 
-        <Separator orientation="vertical" className="h-4 mx-1" />
+        <Separator orientation="vertical" className="h-4" />
 
         <Tooltip>
           <TooltipTrigger asChild>
