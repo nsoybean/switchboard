@@ -123,6 +123,7 @@ export function BranchPicker({
       >
         <div className="border-b p-1">
           <Input
+            autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.stopPropagation()}

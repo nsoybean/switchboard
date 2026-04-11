@@ -4,7 +4,6 @@ import {
   ArrowDownToLine,
   ArrowRight,
   ExternalLink,
-  GitBranch,
   GitPullRequest,
   LayoutGrid,
   Loader2,
