@@ -13,7 +13,7 @@ import {
   type WorkspaceContext,
   type WorkspaceTab,
 } from "../workspace/WorkspacePanel";
-import { StatusBar } from "./StatusBar";
+import { CreatePrDialog } from "../git/CreatePrDialog";
 import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useAgentHooks } from "../../hooks/useClaudeHooks";
 import { useGitState } from "../../hooks/useGitState";
@@ -148,6 +148,7 @@ export function AppLayout() {
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
+  const [createPrOpen, setCreatePrOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1197,7 +1198,10 @@ export function AppLayout() {
         onWorkspaceShellModeChange={setWorkspaceShellMode}
         projectPath={state.projectPath}
         git={hasWorkspaceRoot ? git : undefined}
+        githubToken={state.githubToken}
+        cwd={workspaceContext?.rootPath}
         onCreateBranch={() => {/* handled by WorkspacePanel's CreateBranchDialog */}}
+        onCreatePr={() => setCreatePrOpen(true)}
         updateVersion={availableUpdate?.version ?? null}
         checkingForUpdates={checkingForUpdates}
         installingUpdate={installingUpdate}
@@ -1369,15 +1373,6 @@ export function AppLayout() {
         )
       )}
 
-      {/* Status Bar */}
-      {state.projectPath && !settingsOpen && (
-        <StatusBar
-          git={git}
-          cwd={workspaceContext?.rootPath ?? null}
-          githubToken={state.githubToken}
-        />
-      )}
-
       {/* New Session Dialog */}
       <NewSessionDialog
         open={dialogOpen}
@@ -1385,6 +1380,16 @@ export function AppLayout() {
         onClose={() => setDialogOpen(false)}
         onSubmit={handleNewSession}
       />
+
+      {/* Create PR Dialog */}
+      {state.githubToken && workspaceContext?.rootPath && (
+        <CreatePrDialog
+          open={createPrOpen}
+          onClose={() => setCreatePrOpen(false)}
+          cwd={workspaceContext.rootPath}
+          githubToken={state.githubToken}
+        />
+      )}
 
       {/* Project Picker Dialog */}
       <ProjectPickerDialog

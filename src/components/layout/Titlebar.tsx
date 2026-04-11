@@ -2,6 +2,10 @@ import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
+  ArrowRight,
+  ExternalLink,
+  GitBranch,
+  GitPullRequest,
   LayoutGrid,
   Loader2,
   PanelTop,
@@ -31,7 +35,10 @@ interface TitlebarProps {
   onWorkspaceShellModeChange?: (mode: "pane" | "canvas") => void;
   projectPath?: string | null;
   git?: GitState & { switchBranch: (name: string) => Promise<void> };
+  githubToken?: string | null;
+  cwd?: string | null;
   onCreateBranch?: () => void;
+  onCreatePr?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
@@ -50,6 +57,7 @@ export function Titlebar({
   projectPath,
   git,
   onCreateBranch,
+  onCreatePr,
   onOpenSettings,
   updateVersion = null,
   checkingForUpdates = false,
@@ -63,6 +71,7 @@ export function Titlebar({
   const projectPathLabel = projectPath
     ? projectPath.split("/").slice(-2).join("/")
     : null;
+  const [targetBranch, setTargetBranch] = useState("origin/main");
 
   useEffect(() => {
     // Check initial fullscreen state
@@ -144,18 +153,47 @@ export function Titlebar({
         </Tooltip>
       </div>
 
-      {/* Branch picker — aligned to start of middle pane */}
+      {/* Branch → target + Create PR */}
       {git?.branch && (
-        <BranchPicker
-          branches={git.branches}
-          loading={git.branchesLoading && git.branches.length === 0}
-          value={git.branch}
-          disabled={git.branchActionPending}
-          triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-2 text-xs font-medium shadow-none hover:bg-accent/50"
-          createLabel="Create branch..."
-          onSelect={(branchName) => void git.switchBranch(branchName)}
-          onCreateBranch={onCreateBranch}
-        />
+        <div className="flex items-center gap-2 text-[11px]">
+          <BranchPicker
+            branches={git.branches}
+            loading={git.branchesLoading && git.branches.length === 0}
+            value={git.branch}
+            disabled={git.branchActionPending}
+            triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium shadow-none hover:bg-accent/50"
+            createLabel="Create branch..."
+            onSelect={(branchName) => void git.switchBranch(branchName)}
+            onCreateBranch={onCreateBranch}
+          />
+
+          <ArrowRight className="size-3 shrink-0 text-muted-foreground" />
+
+          <BranchPicker
+            branches={git.branches}
+            loading={git.branchesLoading && git.branches.length === 0}
+            value={targetBranch}
+            disabled={false}
+            showIcon={false}
+            showCurrentBadge={false}
+            triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-accent/50 hover:text-foreground"
+            createLabel="Create branch..."
+            onSelect={(branchName) => setTargetBranch(branchName)}
+            onCreateBranch={onCreateBranch}
+          />
+
+          <Separator orientation="vertical" className="h-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 gap-1.5 px-2 text-[11px]"
+            onClick={onCreatePr}
+          >
+            <GitPullRequest className="size-3" />
+            Create PR
+            <ExternalLink className="size-2.5" />
+          </Button>
+        </div>
       )}
 
       {/* Spacer — drag region */}

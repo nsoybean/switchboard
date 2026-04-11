@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDownIcon, GitBranch, PlusIcon } from "lucide-react";
+import { GitBranch, PlusIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,10 @@ interface BranchPickerProps {
   triggerClassName?: string;
   createLabel?: string;
   emptyLabel?: string;
+  /** Show git branch icon in trigger. Default true. */
+  showIcon?: boolean;
+  /** Show "current" badge in trigger and dropdown. Default true. */
+  showCurrentBadge?: boolean;
 }
 
 export function BranchPicker({
@@ -39,6 +43,8 @@ export function BranchPicker({
   triggerClassName,
   createLabel = "Create and checkout new branch...",
   emptyLabel = "No branches available.",
+  showIcon = true,
+  showCurrentBadge = true,
 }: BranchPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -106,15 +112,9 @@ export function BranchPicker({
           )}
         >
           <span className="flex min-w-0 items-center gap-2">
-            <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
+            {showIcon && <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />}
             <span className="truncate">{selectedBranch?.name ?? value}</span>
-            {selectedBranch?.is_current ? (
-              <Badge variant="outline" className="shrink-0 text-[10px]">
-                current
-              </Badge>
-            ) : null}
           </span>
-          <ChevronDownIcon className="shrink-0" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -150,7 +150,7 @@ export function BranchPicker({
                     )}
                   >
                     <span className="truncate">{branch.name}</span>
-                    {branch.is_current ? (
+                    {showCurrentBadge && branch.is_current ? (
                       <Badge variant="outline" className="shrink-0 text-[10px]">
                         current
                       </Badge>
