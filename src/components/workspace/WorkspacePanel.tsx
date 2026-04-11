@@ -27,7 +27,6 @@ interface WorkspacePanelProps {
   git: GitState & GitActions;
   session?: Session | null;
   githubToken?: string | null;
-  onOpenSettings?: (tab?: "general" | "integrations" | "about") => void;
   onFileSelect?: (filePath: string) => void;
   onTabChange: (tab: WorkspaceTab) => void;
 }
@@ -58,7 +57,6 @@ export function WorkspacePanel({
   git,
   session,
   githubToken,
-  onOpenSettings,
   onFileSelect,
   onTabChange,
 }: WorkspacePanelProps) {
@@ -158,7 +156,6 @@ export function WorkspacePanel({
                 cwd={context.rootPath!}
                 git={git}
                 githubToken={githubToken}
-                onOpenSettings={onOpenSettings}
               />
             ) : null}
           </>

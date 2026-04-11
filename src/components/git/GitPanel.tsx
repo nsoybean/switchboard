@@ -21,7 +21,6 @@ interface GitPanelProps {
   cwd: string;
   git: GitState & GitActions;
   githubToken?: string | null;
-  onOpenSettings?: (tab?: "general" | "integrations" | "about") => void;
   onOpenDiff?: (diff: { path: string; staged: boolean; status: string }) => void;
   activeDiffPath?: string | null;
   activeDiffStaged?: boolean | null;
@@ -31,7 +30,6 @@ export const GitPanel = memo(function GitPanel({
   cwd,
   git,
   githubToken,
-  onOpenSettings,
   onOpenDiff,
   activeDiffPath,
   activeDiffStaged,
@@ -130,7 +128,6 @@ export const GitPanel = memo(function GitPanel({
         onPull={git.pull}
         onPush={git.push}
         onRefresh={git.refresh}
-        onOpenSettings={onOpenSettings}
       />
 
       {/* Staged/Unstaged toggle */}

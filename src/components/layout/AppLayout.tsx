@@ -151,7 +151,6 @@ export function AppLayout() {
   const [createPrOpen, setCreatePrOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<"general" | "integrations" | "about" | undefined>(undefined);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [workspaceShellMode, setWorkspaceShellMode] = useState<"pane" | "canvas">("pane");
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
@@ -679,10 +678,7 @@ export function AppLayout() {
     [dispatch, persistSession, state.sessions, syncCodexResumeTarget],
   );
 
-  const openSettings = useCallback((tab?: "general" | "integrations" | "about") => {
-    setSettingsInitialTab(tab);
-    setSettingsOpen(true);
-  }, []);
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
 
   const handleSelectProject = useCallback(
     async (path: string) => {
@@ -1163,7 +1159,6 @@ export function AppLayout() {
       git={git}
       session={selectedSession}
       githubToken={state.githubToken}
-      onOpenSettings={openSettings}
       onFileSelect={setOpenFilePath}
       onTabChange={setWorkspaceTab}
     />
@@ -1224,8 +1219,7 @@ export function AppLayout() {
       {settingsOpen ? (
         <div className="flex-1 min-h-0">
           <SettingsPage
-            onBack={() => { setSettingsOpen(false); setSettingsInitialTab(undefined); }}
-            initialTab={settingsInitialTab}
+            onBack={() => setSettingsOpen(false)}
             currentVersion={currentVersion}
             updateVersion={availableUpdate?.version ?? null}
             updateNotes={availableUpdate?.body}

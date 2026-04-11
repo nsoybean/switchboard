@@ -57,6 +57,7 @@ export function Titlebar({
   git,
   onCreateBranch,
   onCreatePr,
+  githubToken,
   onOpenSettings,
   updateVersion = null,
   checkingForUpdates = false,
@@ -182,16 +183,28 @@ export function Titlebar({
           />
 
           <Separator orientation="vertical" className="h-4" />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-6 gap-1.5 px-2 text-[11px]"
-            onClick={onCreatePr}
-          >
-            <GitPullRequest className="size-3" />
-            Create PR
-            <ExternalLink className="size-2.5" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 gap-1.5 px-2 text-[11px]"
+                  disabled={!githubToken}
+                  onClick={onCreatePr}
+                >
+                  <GitPullRequest className="size-3" />
+                  Create PR
+                  <ExternalLink className="size-2.5" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!githubToken && (
+              <TooltipContent>
+                Add a GitHub token in Settings to create PRs
+              </TooltipContent>
+            )}
+          </Tooltip>
         </div>
       )}
 

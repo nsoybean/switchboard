@@ -28,7 +28,6 @@ interface GitToolbarProps {
   onPull: () => Promise<void>;
   onPush: () => Promise<void>;
   onRefresh: () => void;
-  onOpenSettings?: (tab?: "general" | "integrations" | "about") => void;
 }
 
 export function GitToolbar({
@@ -40,7 +39,6 @@ export function GitToolbar({
   onPull,
   onPush,
   onRefresh,
-  onOpenSettings,
 }: GitToolbarProps) {
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
@@ -154,16 +152,29 @@ export function GitToolbar({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              {githubToken ? (
-                <DropdownMenuItem onClick={() => setPrDialogOpen(true)}>
-                  Create PR
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem onClick={() => onOpenSettings?.("integrations")}>
-                  Create PR
-                  <span className="ml-auto text-[10px] text-muted-foreground">No token</span>
-                </DropdownMenuItem>
-              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <DropdownMenuItem
+                      disabled={!githubToken}
+                      onSelect={(e) => {
+                        if (!githubToken) {
+                          e.preventDefault();
+                          return;
+                        }
+                        setPrDialogOpen(true);
+                      }}
+                    >
+                      Create PR
+                    </DropdownMenuItem>
+                  </span>
+                </TooltipTrigger>
+                {!githubToken && (
+                  <TooltipContent side="left">
+                    Add a GitHub token in Settings to create PRs
+                  </TooltipContent>
+                )}
+              </Tooltip>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
