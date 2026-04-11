@@ -84,16 +84,20 @@ function createTileForSession(
   sessionId: string,
   index: number,
   viewport: CanvasState["viewport"],
+  containerWidth = 900,
+  containerHeight = 600,
 ): CanvasTile {
   const zoom = clampZoom(viewport.zoom);
+  const centerWorldX = (containerWidth / 2 - viewport.panX) / zoom - DEFAULT_SIZES.terminal.width / 2;
+  const centerWorldY = (containerHeight / 2 - viewport.panY) / zoom - DEFAULT_SIZES.terminal.height / 2;
   return {
     id: `tile:${sessionId}`,
     type: "terminal",
     sessionId,
     width: DEFAULT_SIZES.terminal.width,
     height: DEFAULT_SIZES.terminal.height,
-    x: (84 - viewport.panX) / zoom + index * (TILE_STAGGER_X / zoom),
-    y: (96 - viewport.panY) / zoom + index * (TILE_STAGGER_Y / zoom),
+    x: centerWorldX + index * (TILE_STAGGER_X / zoom),
+    y: centerWorldY + index * (TILE_STAGGER_Y / zoom),
     zIndex: index + 1,
   };
 }
@@ -351,10 +355,13 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
       const liveSessionIds = new Set(sessions.map((session) => session.id));
       const keptTiles = current.tiles.filter((tile) => liveSessionIds.has(tile.sessionId));
       const existingSessionIds = new Set(keptTiles.map((tile) => tile.sessionId));
+      const rect = viewportRef.current?.getBoundingClientRect();
+      const cw = rect?.width ?? 900;
+      const ch = rect?.height ?? 600;
       const createdTiles = sessions
         .filter((session) => !existingSessionIds.has(session.id))
         .map((session, index) =>
-          createTileForSession(session.id, keptTiles.length + index, current.viewport),
+          createTileForSession(session.id, keptTiles.length + index, current.viewport, cw, ch),
         );
 
       if (createdTiles.length === 0 && keptTiles.length === current.tiles.length) {
