@@ -32,24 +32,26 @@ const DARK_THEME = {
 
 const LIGHT_THEME = {
   background: "#ffffff",
-  foreground: "#18212b",
-  cursor: "#2d4759",
-  black: "#18212b",
-  blue: "#2563eb",
-  brightBlack: "#6b7280",
-  brightBlue: "#60a5fa",
-  brightCyan: "#22d3ee",
-  brightGreen: "#4ade80",
-  brightMagenta: "#c084fc",
-  brightRed: "#f87171",
-  brightWhite: "#ffffff",
-  brightYellow: "#facc15",
-  cyan: "#0891b2",
-  green: "#16a34a",
-  magenta: "#9333ea",
-  red: "#dc2626",
-  white: "#f8fafc",
-  yellow: "#ca8a04",
+  foreground: "#111b24",
+  cursor: "#243847",
+  selectionBackground: "#b4d5fe",
+  selectionForeground: "#111b24",
+  black: "#111b24",
+  blue: "#1d4ed8",
+  brightBlack: "#374151",
+  brightBlue: "#2563eb",
+  brightCyan: "#0f766e",
+  brightGreen: "#15803d",
+  brightMagenta: "#7e22ce",
+  brightRed: "#b91c1c",
+  brightWhite: "#d1d5db",
+  brightYellow: "#d97706",
+  cyan: "#0f766e",
+  green: "#15803d",
+  magenta: "#7e22ce",
+  red: "#b91c1c",
+  white: "#6b7280",
+  yellow: "#a16207",
 };
 
 interface XTermContainerProps {
@@ -60,6 +62,7 @@ interface XTermContainerProps {
   env?: Record<string, string>;
   onStart?: () => void;
   onExit?: (code: number | null) => void;
+  closeOnUnmount?: boolean;
 }
 
 function areArgsEqual(left: string[] | undefined, right: string[] | undefined) {
@@ -95,6 +98,74 @@ function areEnvEqual(
   return leftEntries.every(([key, value]) => right[key] === value);
 }
 
+function stripAnsiDim(data: string): string {
+  return data.replace(/\x1b\[([0-9;]*)m/g, (match, params: string) => {
+    if (!params) {
+      return match;
+    }
+
+    const tokens = params.split(";").filter((part) => part.length > 0);
+    const nextTokens: string[] = [];
+
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index];
+
+      // Preserve extended color sequences like 38;2;r;g;b and 48;2;r;g;b.
+      if (
+        (token === "38" || token === "48" || token === "58") &&
+        tokens[index + 1] === "2" &&
+        tokens.length >= index + 5
+      ) {
+        nextTokens.push(
+          token,
+          tokens[index + 1],
+          tokens[index + 2],
+          tokens[index + 3],
+          tokens[index + 4],
+        );
+        index += 4;
+        continue;
+      }
+
+      // Preserve indexed color sequences like 38;5;n and 48;5;n.
+      if (
+        (token === "38" || token === "48" || token === "58") &&
+        tokens[index + 1] === "5" &&
+        tokens.length >= index + 3
+      ) {
+        nextTokens.push(token, tokens[index + 1], tokens[index + 2]);
+        index += 2;
+        continue;
+      }
+
+      // Drop standalone dim SGR only.
+      if (token === "2") {
+        continue;
+      }
+
+      nextTokens.push(token);
+    }
+
+    if (nextTokens.length === tokens.length) {
+      return match;
+    }
+
+    if (nextTokens.length === 0) {
+      return "";
+    }
+
+    return `\x1b[${nextTokens.join(";")}m`;
+  });
+}
+
+function normalizeTerminalOutput(data: string, isDark: boolean): string {
+  if (isDark) {
+    return data;
+  }
+
+  return stripAnsiDim(data);
+}
+
 function XTermContainerComponent({
   tileId,
   command = "/bin/zsh",
@@ -103,6 +174,7 @@ function XTermContainerComponent({
   env,
   onStart,
   onExit,
+  closeOnUnmount = true,
 }: XTermContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -146,10 +218,32 @@ function XTermContainerComponent({
       fontSize: 13.5,
       lineHeight: 1.3,
       macOptionIsMeta: true,
+      minimumContrastRatio: isDark ? 1 : 3,
       theme: isDark ? DARK_THEME : LIGHT_THEME,
     });
 
     terminal.attachCustomKeyEventHandler((event) => {
+      // Shift+Enter → newline for Claude Code / Codex multi-line input
+      if (
+        !isShellCommand &&
+        event.type === "keydown" &&
+        event.key === "Enter" &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+
+        if (sessionActiveRef.current) {
+          void invoke("write_terminal", { tileId, data: "\n" }).catch((error) => {
+            console.error("Failed to write terminal newline", error);
+          });
+        }
+
+        return false;
+      }
+
       if (
         isMacPlatform &&
         isShellCommand &&
@@ -270,19 +364,36 @@ function XTermContainerComponent({
 
     const startupTimer = window.setTimeout(() => {
       fitTerminal();
+      // Double-fit: first fit may calculate wrong dimensions if container
+      // hasn't fully settled after layout changes (tab switch, split).
+      requestAnimationFrame(() => fitTerminal());
 
-      void invoke<{ sessionId: string }>("create_terminal", {
-        request: {
-          tileId,
-          cols: Math.max(20, terminal.cols),
-          rows: Math.max(8, terminal.rows),
-          command: command || null,
-          args,
-          startDir: cwd ?? null,
-          env: env ?? null,
-        },
-      })
-        .then(() => {
+      void invoke<boolean>("terminal_exists", { tileId })
+        .then(async (exists) => {
+          if (exists) {
+            const bufferedOutput = await invoke<string>("get_terminal_buffer", { tileId });
+            if (bufferedOutput) {
+              terminal.write(normalizeTerminalOutput(bufferedOutput, isDark));
+            }
+
+            sessionActiveRef.current = true;
+            await syncTerminalSize();
+            terminal.focus();
+            return;
+          }
+
+          await invoke<{ sessionId: string }>("create_terminal", {
+            request: {
+              tileId,
+              cols: Math.max(20, terminal.cols),
+              rows: Math.max(8, terminal.rows),
+              command: command || null,
+              args,
+              startDir: cwd ?? null,
+              env: env ?? null,
+            },
+          });
+
           sessionActiveRef.current = true;
           onStartRef.current?.();
           terminal.focus();
@@ -302,11 +413,13 @@ function XTermContainerComponent({
       terminalRef.current = null;
       disposables.forEach((disposable) => disposable.dispose());
       terminal.dispose();
-      void invoke("close_terminal", { tileId }).catch(() => {
-        // App shutdown can race with Tauri teardown; ignore cleanup failures.
-      });
+      if (closeOnUnmount) {
+        void invoke("close_terminal", { tileId }).catch(() => {
+          // App shutdown can race with Tauri teardown; ignore cleanup failures.
+        });
+      }
     };
-  }, [args, command, cwd, env, tileId]);
+  }, [args, closeOnUnmount, command, cwd, env, tileId]);
 
   useEffect(() => {
     if (terminalRef.current) {
@@ -325,7 +438,7 @@ function XTermContainerComponent({
             return;
           }
 
-          terminalRef.current?.write(event.payload.data);
+          terminalRef.current?.write(normalizeTerminalOutput(event.payload.data, isDark));
         }),
       );
 
@@ -347,7 +460,7 @@ function XTermContainerComponent({
       mounted = false;
       unsubscribe.forEach((dispose) => dispose());
     };
-  }, [tileId]);
+  }, [isDark, tileId]);
 
   return <div ref={containerRef} className="h-full w-full min-h-0 min-w-0 overflow-hidden" />;
 }
@@ -357,6 +470,7 @@ export const XTermContainer = memo(
   (prevProps, nextProps) =>
     prevProps.tileId === nextProps.tileId &&
     prevProps.command === nextProps.command &&
+    prevProps.closeOnUnmount === nextProps.closeOnUnmount &&
     prevProps.cwd === nextProps.cwd &&
     areArgsEqual(prevProps.args, nextProps.args) &&
     areEnvEqual(prevProps.env, nextProps.env),

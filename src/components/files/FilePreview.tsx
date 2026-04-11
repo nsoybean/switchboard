@@ -7,7 +7,8 @@ import { createHighlighter, type Highlighter } from "shiki";
 
 interface FilePreviewProps {
   filePath: string;
-  onClose: () => void;
+  onClose?: () => void;
+  showHeader?: boolean;
 }
 
 const LANG_MAP: Record<string, string> = {
@@ -92,7 +93,11 @@ async function highlight(
   });
 }
 
-export function FilePreview({ filePath, onClose }: FilePreviewProps) {
+export function FilePreview({
+  filePath,
+  onClose,
+  showHeader = true,
+}: FilePreviewProps) {
   const [content, setContent] = useState<string | null>(null);
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -149,22 +154,25 @@ export function FilePreview({ filePath, onClose }: FilePreviewProps) {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Header bar */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b bg-card shrink-0">
-        <File className="size-3.5 text-muted-foreground" />
-        <span className="text-xs font-medium truncate flex-1 font-mono">
-          {fileName}
-        </span>
-        <span className="text-[10px] text-muted-foreground/60">{language}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          onClick={onClose}
-        >
-          <X className="size-3.5" />
-        </Button>
-      </div>
+      {showHeader ? (
+        <div className="flex items-center gap-2 px-4 py-2 border-b bg-card shrink-0">
+          <File className="size-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium truncate flex-1 font-mono">
+            {fileName}
+          </span>
+          <span className="text-[10px] text-muted-foreground/60">{language}</span>
+          {onClose ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              onClick={onClose}
+            >
+              <X className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-auto">

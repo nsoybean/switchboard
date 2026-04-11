@@ -2,7 +2,12 @@ import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
+  ArrowRight,
+  ExternalLink,
+  GitPullRequest,
+  LayoutGrid,
   Loader2,
+  PanelTop,
   PanelLeft,
   PanelRight,
   Settings,
@@ -16,15 +21,23 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { BranchPicker } from "@/components/git/BranchPicker";
 import { useTheme } from "@/components/theme-provider";
+import type { GitState } from "@/hooks/useGitState";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
   inspectorOpen: boolean;
+  workspaceShellMode?: "pane" | "canvas";
   onToggleSidebar: () => void;
   onToggleInspector: () => void;
+  onWorkspaceShellModeChange?: (mode: "pane" | "canvas") => void;
   projectPath?: string | null;
-  onProjectClick?: () => void;
+  git?: GitState & { switchBranch: (name: string) => Promise<void> };
+  githubToken?: string | null;
+  cwd?: string | null;
+  onCreateBranch?: () => void;
+  onCreatePr?: () => void;
   onOpenSettings?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
@@ -36,10 +49,15 @@ interface TitlebarProps {
 export function Titlebar({
   sidebarOpen,
   inspectorOpen,
+  workspaceShellMode = "pane",
   onToggleSidebar,
   onToggleInspector,
+  onWorkspaceShellModeChange,
   projectPath,
-  onProjectClick,
+  git,
+  onCreateBranch,
+  onCreatePr,
+  githubToken,
   onOpenSettings,
   updateVersion = null,
   checkingForUpdates = false,
@@ -53,6 +71,7 @@ export function Titlebar({
   const projectPathLabel = projectPath
     ? projectPath.split("/").slice(-2).join("/")
     : null;
+  const [targetBranch, setTargetBranch] = useState("origin/main");
 
   useEffect(() => {
     // Check initial fullscreen state
@@ -117,32 +136,110 @@ export function Titlebar({
 
       {!isFullscreen && <Separator orientation="vertical" className="h-4" />}
 
-      {/* App + project identity */}
-      <div className="flex min-w-0 items-center gap-2 px-3">
-        <span className="shrink-0 text-xs font-semibold tracking-wide">
-          switchboard
-        </span>
-        {projectPathLabel ? (
+      {/* Left controls */}
+      <div className="flex items-center px-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              onClick={onToggleSidebar}
+            >
+              <PanelLeft className={sidebarOpen ? "size-4" : "size-4 opacity-40"} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
+        </Tooltip>
+      </div>
+
+      {/* Branch → target + Create PR */}
+      {git?.branch && (
+        <div className="flex items-center gap-2 text-[11px]">
+          <BranchPicker
+            branches={git.branches}
+            loading={git.branchesLoading && git.branches.length === 0}
+            value={git.branch}
+            disabled={git.branchActionPending}
+            triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium shadow-none hover:bg-accent/50"
+            createLabel="Create branch..."
+            onSelect={(branchName) => void git.switchBranch(branchName)}
+            onCreateBranch={onCreateBranch}
+          />
+
+          <ArrowRight className="size-3 shrink-0 text-muted-foreground" />
+
+          <BranchPicker
+            branches={git.branches}
+            loading={git.branchesLoading && git.branches.length === 0}
+            value={targetBranch}
+            disabled={false}
+            showIcon={false}
+            showCurrentBadge={false}
+            triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-accent/50 hover:text-foreground"
+            createLabel="Create branch..."
+            onSelect={(branchName) => setTargetBranch(branchName)}
+            onCreateBranch={onCreateBranch}
+          />
+
+          <Separator orientation="vertical" className="h-4" />
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onProjectClick}
-                className="min-w-0 truncate rounded-md border px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {projectPathLabel}
-              </button>
+              <span className="inline-flex">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 gap-1.5 px-2 text-[11px]"
+                  disabled={!githubToken}
+                  onClick={onCreatePr}
+                >
+                  <GitPullRequest className="size-3" />
+                  Create PR
+                  <ExternalLink className="size-2.5" />
+                </Button>
+              </span>
             </TooltipTrigger>
-            <TooltipContent>{projectPath}</TooltipContent>
+            {!githubToken && (
+              <TooltipContent>
+                Add a GitHub token in Settings to create PRs
+              </TooltipContent>
+            )}
           </Tooltip>
-        ) : null}
-      </div>
+        </div>
+      )}
 
       {/* Spacer — drag region */}
       <div data-tauri-drag-region className="flex-1" />
 
       {/* Right controls */}
-      <div className="flex items-center gap-0.5 px-2">
+      <div className="flex items-center gap-1 px-2">
+        {/* Pane / Canvas toggle */}
+        {projectPathLabel ? (
+          <>
+            <div className="inline-flex items-center rounded-md border bg-background/80 p-0.5">
+              <Button
+                variant={workspaceShellMode === "pane" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-6 gap-1.5 px-2 text-[11px]"
+                onClick={() => onWorkspaceShellModeChange?.("pane")}
+              >
+                <PanelTop className="size-3.5" />
+                Pane
+              </Button>
+              <Button
+                variant={workspaceShellMode === "canvas" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-6 gap-1.5 px-2 text-[11px]"
+                onClick={() => onWorkspaceShellModeChange?.("canvas")}
+              >
+                <LayoutGrid className="size-3.5" />
+                Canvas
+              </Button>
+            </div>
+            <Separator orientation="vertical" className="h-4" />
+          </>
+        ) : null}
+
         {updateVersion && (
           <>
             <Button
@@ -161,24 +258,10 @@ export function Titlebar({
                 ? `Updating ${updateProgress}%`
                 : `Update ${updateVersion}`}
             </Button>
-
-            <Separator orientation="vertical" className="h-4 mx-1" />
+            <Separator orientation="vertical" className="h-4" />
           </>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9"
-              onClick={onToggleSidebar}
-            >
-              <PanelLeft className={sidebarOpen ? "size-4" : "size-4 opacity-40"} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
-        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -195,7 +278,7 @@ export function Titlebar({
           <TooltipContent>Toggle Inspector (⌘G)</TooltipContent>
         </Tooltip>
 
-        <Separator orientation="vertical" className="h-4 mx-1" />
+        <Separator orientation="vertical" className="h-4" />
 
         <Tooltip>
           <TooltipTrigger asChild>

@@ -28,7 +28,6 @@ interface GitToolbarProps {
   onPull: () => Promise<void>;
   onPush: () => Promise<void>;
   onRefresh: () => void;
-  onOpenSettings?: () => void;
 }
 
 export function GitToolbar({
@@ -40,7 +39,6 @@ export function GitToolbar({
   onPull,
   onPush,
   onRefresh,
-  onOpenSettings,
 }: GitToolbarProps) {
   const [commitOpen, setCommitOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState("");
@@ -154,33 +152,29 @@ export function GitToolbar({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              {githubToken ? (
-                <DropdownMenuItem onClick={() => setPrDialogOpen(true)}>
-                  Create PR
-                </DropdownMenuItem>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
                     <DropdownMenuItem
-                      disabled
-                      onSelect={(e) => e.preventDefault()}
+                      disabled={!githubToken}
+                      onSelect={(e) => {
+                        if (!githubToken) {
+                          e.preventDefault();
+                          return;
+                        }
+                        setPrDialogOpen(true);
+                      }}
                     >
                       Create PR
                     </DropdownMenuItem>
-                  </TooltipTrigger>
+                  </span>
+                </TooltipTrigger>
+                {!githubToken && (
                   <TooltipContent side="left">
-                    <p className="text-xs">Add a GitHub token in Settings to create PRs</p>
-                    {onOpenSettings && (
-                      <button
-                        className="text-xs text-primary underline mt-1"
-                        onClick={onOpenSettings}
-                      >
-                        Open Settings
-                      </button>
-                    )}
+                    Add a GitHub token in Settings to create PRs
                   </TooltipContent>
-                </Tooltip>
-              )}
+                )}
+              </Tooltip>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>

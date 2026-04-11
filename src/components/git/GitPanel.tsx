@@ -21,14 +21,18 @@ interface GitPanelProps {
   cwd: string;
   git: GitState & GitActions;
   githubToken?: string | null;
-  onOpenSettings?: () => void;
+  onOpenDiff?: (diff: { path: string; staged: boolean; status: string }) => void;
+  activeDiffPath?: string | null;
+  activeDiffStaged?: boolean | null;
 }
 
 export const GitPanel = memo(function GitPanel({
   cwd,
   git,
   githubToken,
-  onOpenSettings,
+  onOpenDiff,
+  activeDiffPath,
+  activeDiffStaged,
 }: GitPanelProps) {
   const [activeTab, setActiveTab] = useState("unstaged");
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
@@ -124,7 +128,6 @@ export const GitPanel = memo(function GitPanel({
         onPull={git.pull}
         onPush={git.push}
         onRefresh={git.refresh}
-        onOpenSettings={onOpenSettings}
       />
 
       {/* Staged/Unstaged toggle */}
@@ -181,14 +184,28 @@ export const GitPanel = memo(function GitPanel({
 
         {!git.error && filteredFiles.map((file) => {
           const isExpanded = expandedFile === file.path;
+          const isSelectedDocument =
+            activeDiffPath === file.path && activeDiffStaged === showStaged;
           return (
             <div key={`${file.path}-${file.staged}`}>
               {/* File row — clickable to toggle diff */}
               <div
-                onClick={() => toggleFile(file.path)}
+                onClick={() => {
+                  if (onOpenDiff) {
+                    onOpenDiff({
+                      path: file.path,
+                      staged: showStaged,
+                      status: file.status,
+                    });
+                    return;
+                  }
+                  toggleFile(file.path);
+                }}
                 className={cn(
                   "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 overflow-hidden border-b px-2 py-1.5 text-xs cursor-pointer",
-                  isExpanded ? "bg-accent/60" : "hover:bg-accent/50",
+                  (isExpanded || isSelectedDocument)
+                    ? "bg-accent/60"
+                    : "hover:bg-accent/50",
                 )}
               >
                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
@@ -264,7 +281,7 @@ export const GitPanel = memo(function GitPanel({
               </div>
 
               {/* Inline diff for this file */}
-              {isExpanded && fileDiff && <DiffView diff={fileDiff} />}
+              {!onOpenDiff && isExpanded && fileDiff ? <DiffView diff={fileDiff} /> : null}
             </div>
           );
         })}

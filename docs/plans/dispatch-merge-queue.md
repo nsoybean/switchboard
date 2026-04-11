@@ -1,296 +1,690 @@
-# Dispatch & Merge Queue — Tier 1 Foundation
+# Dispatch & Review Queue — Session-First Revision
 
 ## Context
 
-Switchboard is adding a parallel multi-agent workflow. The core idea: a solo founder dispatches
-multiple agents to work in isolated git worktrees simultaneously, supervises them from a cockpit
-view, then reviews and merges their outputs one by one.
+The earlier version of this plan treated dispatch as a special "task mode" and centered the UX
+around a merge queue. After reviewing the desired direction and the Cursor ADE reference, the
+better framing is broader:
 
-Two design decisions lock in the foundation:
+- Switchboard's primary job is managing parallel agent sessions
+- the main center surface should be sessions and transcripts, not file editing
+- files, diffs, and git actions should stay visible as supporting side panels for trust and review
+- the UI should reduce mode decisions and collapse attention into a small number of obvious states
 
-1. **"Dispatch Agent" = existing new session flow + `taskPrompt` field.** Same primitives
-   (`create_worktree` + `create_terminal` + `ADD_SESSION`). The `taskPrompt` field on `Session`
-   is the contract: if set, the session is in "task mode" — it has one job and should move to
-   review when done. `NewSessionDialog` already collects `task` and `useWorktree` — no UI change
-   needed.
+This revision updates the plan accordingly.
 
-2. **`idle` vs `merge-pending` are distinct states.** `idle` = "waiting for your next message"
-   (interactive sessions, unchanged). `merge-pending` = "dispatched task complete, code ready
-   to review." The `Stop` hook already fires when an agent finishes a turn. The reducer
-   auto-promotes `idle → merge-pending` when `session.taskPrompt !== null`.
+## Product Direction
 
-This plan implements the minimum to make that lifecycle work end-to-end.
+Switchboard should feel like a modern parallel agent cockpit:
+
+- left: session management and attention queue
+- center: tabbed session surfaces
+- right: workspace transparency and review tools
+
+The mental model is no longer "open a terminal, then inspect code as the main thing."
+It is:
+
+1. launch or resume sessions
+2. watch which ones need attention
+3. inspect transcript, files, and diffs without losing session context
+4. merge, continue, or discard from a review-oriented workspace
+
+## Core Decisions
+
+### 1. No user-facing task-vs-interactive mode split
+
+Do not ask the user to think in terms of "task session" versus "interactive session."
+
+Keep a single new-session flow:
+
+- agent
+- optional initial prompt
+- optional isolated worktree
+
+The initial prompt is session metadata, not a mode switch. A session can start focused and later
+become conversational, or start conversational and later become a reviewable branch of work.
+
+### 2. One primary attention state: `Ready for review`
+
+User-facing session supervision should be simplified to two primary buckets in the main rail:
+
+- `Active`
+- `Ready for review`
+
+`Ready for review` is the single high-signal state that covers both:
+
+- the agent finished a turn and is waiting
+- the agent asked a question and needs user input
+
+We can still preserve finer-grained internal reasons, but the visible badge and queue label should
+stay simple.
+
+Recommended internal mapping:
+
+| Raw runtime status | Attention bucket | Secondary reason |
+|---|---|---|
+| `running` | `active` | `working` |
+| `idle` | `ready-for-review` | `turn-complete` |
+| `needs-input` | `ready-for-review` | `question` |
+| `done` / `stopped` / `error` | `history` | `exited` / `failed` |
+
+### 3. Review queue, not merge queue
+
+The queue should represent "sessions that need me," not only "branches ready to merge."
+
+That means the review rail includes:
+
+- sessions whose turn is complete
+- sessions waiting on a question
+- sessions with code changes ready to inspect
+
+Merge and PR actions remain important, but they belong inside review tooling, not as the primary
+top-level status taxonomy.
+
+### 4. Classic panes become the default shell
+
+Canvas remains valuable, but it should become the advanced workspace mode.
+
+Default shell:
+
+- left session rail
+- center pane workspace
+- right inspector
+
+This should feel closer to VS Code, Warp, and Cursor's newer ADE layout: structured, docked, and
+easy to reason about at a glance.
+
+### 5. Center surfaces must be tabbed, but session-first
+
+Transcript viewing and session switching should not behave like invisible overlays.
+
+The center workspace should use explicit tabs for session-oriented surfaces such as:
+
+- live session terminal
+- transcript view
+- history workspace
+- canvas surface
+
+Opening a transcript should create or focus a tab, not replace the current surface invisibly.
+
+### 6. Files and diffs belong in the right pane
+
+Files, diffs, and git actions remain essential for transparency, but they should live in a docked
+right-side review pane rather than competing with the session thread for the center.
+
+Default emphasis:
+
+- center = sessions, questions, transcript context
+- right = open files, diffs, changes, review details, merge actions
+
+This aligns the product with agentic development rather than hand-editing-first IDE workflows.
 
 ---
 
-## What's NOT in Scope (deferred)
+## What Changes From The Previous Plan
 
-- `ConflictResolver` component (three-pane)
-- `git merge-tree` conflict detection (`merge.rs`)
-- Local merge command (`git_merge_branch`)
-- PR creation changes — `git_create_pr` already exists in `git.rs:288`
-- `config.rs` for repo-scoped merge strategy preference
-- PTY idle detection (backlogged — existing Claude/Codex hooks cover it)
+The following assumptions from the prior version are replaced:
+
+1. `taskPrompt` should not define a distinct user-facing task mode.
+2. `idle` versus `merge-pending` should not become separate user-facing statuses.
+3. A dedicated right-side `MergeQueuePanel` is no longer the primary queue surface.
+
+Instead:
+
+- keep raw execution status minimal
+- derive a simpler attention bucket for the UI
+- make the left session rail the review queue
+- move merge and PR actions into a review-oriented inspector tab
+- treat tabbed center surfaces and classic panes as part of the same implementation, not separate ideas
+
+---
+
+## Target UX
+
+### Left Rail: Session Manager
+
+The left rail should be optimized for supervision.
+
+Recommended structure for the selected project rail:
+
+- `Active`
+- `Ready for Review`
+
+Keep the existing multi-project capability, but the selected project should get the primary session
+rail treatment. Other projects can remain compact above or below it.
+
+Session rows should prioritize:
+
+- session label
+- agent
+- branch or workspace identity
+- primary badge: `Running` or `Ready for review`
+- secondary subcopy: `Question waiting`, `Turn complete`, `Failed`, or relative time
+
+Past sessions should move out of the always-visible supervision rail.
+
+Recommended destination:
+
+- a dedicated `History` workspace opened intentionally from the titlebar or sidebar footer
+- project-scoped by default, with optional cross-project search later
+- opens as its own center tab/surface, so transcript browsing is a deliberate mode switch
+
+Why this is the right move:
+
+- past sessions stay one click away during active development
+- the left rail stays high-signal and low-noise
+- transcript review still feels first-class, but no longer competes with active supervision
+
+### Center: Tabbed Session Workspace
+
+The center surface becomes a real workspace, not a stack of replacements.
+
+Surface types:
+
+- live session terminal
+- transcript tab
+- history tab
+- canvas tab
+
+Rules:
+
+- opening the same transcript focuses the existing tab
+- transcript/history tabs are closable
+- live session tabs stay stable while the session exists
+- canvas is treated as a first-class tab or shell surface, not a hidden base layer
+
+This plan absorbs the intent from [middle-pane-surface-tabs.md](/Users/nyangshawbin/Documents/projects/switchboard/docs/plans/middle-pane-surface-tabs.md).
+
+### Right Review Pane: Files, Diffs, and Merge Context
+
+The right side should move closer to the Cursor reference: a tabbed document/review pane.
+
+The right pane should evolve from a simple inspector into a docked workspace for:
+
+- open file tabs
+- diff tabs
+- changes list
+- review tab
+
+Recommended layout inside the right pane:
+
+1. source switcher for `Explorer`, `Changes`, and `Review`
+2. navigator panel that changes with the selected source
+3. separate document tab strip
+4. active file/diff document surface below the tab strip
+
+Behavior:
+
+- `Explorer`, `Changes`, and `Review` only change the navigator panel
+- opening a file from the tree creates or focuses a right-pane file tab
+- opening a diff from changes creates or focuses a right-pane diff tab
+- multiple files can stay open as tabs in the document area
+- the document area remains stable while the navigator source changes
+- review actions remain docked in the right pane, not promoted to the center
+
+The `Review` tab becomes the place for:
+
+- launch prompt / task summary when present
+- branch and workspace identity
+- git diff stats
+- transcript summary or latest attention reason
+- merge / PR / discard actions
+
+This keeps code visibility close by without turning the app into a file-browser-first product.
+
+Reference layout:
+
+```text
++----------------------------------------------------------------------------------+
+| Explorer | Changes | Review                                                      |
++----------------------------------------------------------------------------------+
+| Navigator panel                    | Document tabs                               |
+|------------------------------------|---------------------------------------------|
+| file tree OR changed files OR      | [feature-prd.md] [presence.ts] [diff]       |
+| review summary/actions             |---------------------------------------------|
+|                                    | active file or diff preview                 |
+|                                    |                                             |
++----------------------------------------------------------------------------------+
+```
+
+### Shell Modes
+
+#### Pane Mode (default)
+
+Structured IDE-like layout:
+
+- left rail
+- center tabbed pane workspace
+- right inspector
+
+This is the default experience for most users.
+
+#### Canvas Mode (advanced)
+
+Canvas remains available for users who want spatial orchestration, but it should sit behind a
+clear shell toggle and should no longer force transcript/file previews into full-screen overlays.
+
+Canvas is the power-user workspace, not the default mental model.
+
+---
+
+## Technical Proposal
+
+### 1. Keep raw runtime status simple
+
+Do not add merge-lifecycle values like `merge-pending`, `merged`, or `pr-raised` to
+`SessionStatus` yet.
+
+Keep the current runtime-oriented statuses:
+
+```ts
+type SessionStatus =
+  | "running"
+  | "idle"
+  | "needs-input"
+  | "done"
+  | "error"
+  | "stopped";
+```
+
+If we need richer review semantics, derive them separately.
+
+### 2. Add a derived attention model
+
+Introduce a UI-facing derived model rather than bloating `SessionStatus`.
+
+Recommended shape:
+
+```ts
+type SessionRailBucket = "active" | "ready-for-review";
+type SessionArchiveState = "history";
+type SessionAttentionReason =
+  | "working"
+  | "turn-complete"
+  | "question"
+  | "exited"
+  | "failed";
+```
+
+This can live in a selector/helper instead of persisted session state.
+
+Suggested file:
+
+- `src/lib/session-attention.ts`
+
+### 3. Rename `taskPrompt` intent to neutral session metadata
+
+`NewSessionDialog` already collects a prompt-like field. Keep that capability, but stop treating it
+as a mode flag.
+
+If persisted, prefer a neutral field such as:
+
+```ts
+launchPrompt: string | null;
+```
+
+Meaning:
+
+- present when the session was launched with an initial instruction
+- absent for manually started shells or empty launches
+
+This metadata is useful in the review tab and session summaries, but it should not decide whether a
+session is "interactive" or "task mode."
+
+### 4. Introduce center-surface tabs
+
+Add a first-class center workspace model in app state.
+
+Recommended types:
+
+```ts
+type CenterSurfaceKind =
+  | "live-session"
+  | "transcript"
+  | "history"
+  | "canvas";
+
+interface CenterSurfaceTab {
+  id: string;
+  kind: CenterSurfaceKind;
+  title: string;
+  sessionId?: string;
+  closable: boolean;
+}
+```
+
+App state additions:
+
+```ts
+centerTabs: CenterSurfaceTab[];
+activeCenterTabId: string | null;
+workspaceShellMode: "pane" | "canvas";
+```
+
+### 5. Add a right-pane document model
+
+Files should open in the right pane, not the center pane.
+
+Recommended types:
+
+```ts
+type RightPaneSurfaceKind = "file" | "diff" | "review";
+
+interface RightPaneTab {
+  id: string;
+  kind: RightPaneSurfaceKind;
+  title: string;
+  filePath?: string;
+  diffPath?: string;
+  sessionId?: string;
+  closable: boolean;
+}
+```
+
+App state additions:
+
+```ts
+rightPaneTabs: RightPaneTab[];
+activeRightPaneTabId: string | null;
+rightPaneSource: "explorer" | "changes" | "review";
+rightPaneNavigatorWidth: number;
+```
+
+This gives Switchboard the UX you want from the reference:
+
+- session thread stays centered
+- code visibility stays docked on the right
+- multiple files can remain open without taking over the conversation pane
+
+### 6. Add a pane-layout model
+
+To support the classic multi-pane experience, the center workspace should be able to grow from one
+tab stack into multiple split panes.
+
+Recommended phased model:
+
+```ts
+type PaneNode =
+  | {
+      kind: "leaf";
+      id: string;
+      tabIds: string[];
+      activeTabId: string | null;
+    }
+  | {
+      kind: "split";
+      id: string;
+      axis: "horizontal" | "vertical";
+      size: number[];
+      children: [PaneNode, PaneNode];
+    };
+```
+
+Important implementation note:
+
+- phase 1 can ship with a single center pane plus one right review pane
+- the same model can later power drag-to-split without another state rewrite
+
+### 7. Expand the inspector into a tabbed right review pane
+
+`WorkspacePanel` should remain the right-side container, but it should evolve toward a document-like
+right pane rather than a simple static inspector.
+
+Recommended `WorkspaceTab`:
+
+```ts
+type WorkspaceTab = "files" | "changes" | "review";
+```
+
+Recommended first-pass composition:
+
+- `files` = source browser shown in the navigator panel; opened files go to document tabs
+- `changes` = status/diff navigator shown in the navigator panel; opened diffs go to document tabs
+- `review` = merge/PR/discard and session summary shown in the navigator panel
+
+Chosen interaction rule for V1:
+
+- source switcher changes the navigator panel only
+- document tabs persist independently of the selected navigator source
+
+Then, once stable, the header can become a document tab strip-first layout with the source switcher
+de-emphasized.
+
+### 8. Move past sessions into a dedicated history workspace
+
+Past sessions should not sit in the left supervision rail.
+
+Recommended location:
+
+- titlebar `History` entry
+- optional sidebar footer shortcut
+- keyboard shortcut such as `Cmd/Ctrl+Shift+H`
+
+History behavior:
+
+- opens a dedicated center tab called `History`
+- defaults to the current project
+- supports search by session title, agent, and branch
+- opening a past session transcript creates/focuses a transcript tab in the center
+
+### 9. Keep merge actions scoped to review tooling
+
+Merge/PR/discard actions should be available only when a selected session has a reviewable
+workspace and branch context.
+
+Do not create top-level lifecycle status values yet for:
+
+- merged
+- rejected
+- pr raised
+- conflict
+
+Those may become useful later, but they are not needed to ship the simpler session-first UX.
+
+---
+
+## Implementation Phases
+
+### Phase 1. Simplify attention and session rail
+
+Goal:
+
+- make the app easier to scan immediately and remove past-session noise from the main rail
+
+Changes:
+
+- add derived session attention helpers
+- group sidebar sessions by `Active` and `Ready for Review`
+- update session badges and row copy to use the simpler language
+- add a dedicated `History` entry outside the rail
+- keep raw runtime status unchanged underneath
+
+Primary files:
+
+- `src/components/sidebar/SessionSidebar.tsx`
+- `src/components/sidebar/SessionCard.tsx`
+- `src/state/types.ts`
+- `src/lib/session-attention.ts`
+
+### Phase 2. Replace center overlays with tabs
+
+Goal:
+
+- make transcripts and previews explicit, reversible, and non-destructive
+
+Changes:
+
+- introduce `centerTabs` and `activeCenterTabId`
+- convert transcript and history opening into tab-opening actions
+- remove `absolute inset-0` overlay behavior for transcript surfaces
+- keep `SessionTranscriptView` mostly intact
+
+Primary files:
+
+- `src/components/layout/AppLayout.tsx`
+- `src/components/terminal/SessionTranscriptView.tsx`
+- new `src/components/history/HistoryWorkspace.tsx`
+- new `src/components/layout/CenterTabStrip.tsx`
+
+### Phase 3. Ship classic pane mode as the default shell
+
+Goal:
+
+- make the default experience feel familiar and review-oriented
+
+Changes:
+
+- introduce `workspaceShellMode: "pane" | "canvas"`
+- make pane mode the default
+- keep canvas available behind a shell toggle
+- ensure canvas also respects the new center-surface model
+- keep the right review pane docked in pane mode
+
+Primary files:
+
+- `src/components/layout/AppLayout.tsx`
+- `src/components/layout/Titlebar.tsx`
+- new `src/components/layout/PaneWorkspace.tsx`
+- existing `src/components/canvas/CanvasView.tsx`
+
+### Phase 4. Add split panes and drag-to-arrange
+
+Goal:
+
+- let users keep multiple sessions visible in a classic docked workspace
+
+Changes:
+
+- implement pane tree state
+- allow dragging session tabs between panes
+- support split left/right and split up/down
+- preserve the existing terminal experience inside each pane
+- keep right review/document tabs as a stable docked region in the first split-pane pass
+
+Primary files:
+
+- `src/components/layout/PaneWorkspace.tsx`
+- new pane tree helpers/components
+- `src/components/terminal/XTermContainer.tsx` integration points
+
+### Phase 5. Add review tooling and merge actions
+
+Goal:
+
+- turn the right inspector into the place where session output becomes actionable
+
+Changes:
+
+- split the right pane into navigator panel + document pane
+- add file/diff tabs to the right pane
+- add `Review` tab to `WorkspacePanel`
+- show prompt summary, attention reason, diff stats, and branch/worktree identity
+- add merge / create PR / discard controls
+- optionally add lightweight conflict detection afterward
+
+Primary files:
+
+- `src/components/workspace/WorkspacePanel.tsx`
+- new `src/components/review/ReviewPanel.tsx`
+- `src/components/git/*`
+- `src-tauri/src/commands/git.rs`
 
 ---
 
 ## Critical Files
 
 | File | Change |
-|------|--------|
-| `src/state/types.ts` | Extend `SessionStatus` with 5 new values, add `taskPrompt` to `Session` |
-| `src/state/reducer.ts` | Auto-promote `idle → merge-pending` for dispatched sessions |
-| `src/components/layout/AppLayout.tsx` | Pass `config.task` into `session.taskPrompt` at lines 524-545 |
-| `src/components/sidebar/SessionCard.tsx` | Add badge labels + colors for new statuses |
-| `src/components/git/MergeQueuePanel.tsx` | New component — merge queue list (right panel) |
-| `src-tauri/src/commands/session.rs` | Add `task_prompt: Option<String>` with `#[serde(default)]` |
+|---|---|
+| `src/state/types.ts` | Add center tab, right-pane tab, shell mode, and pane layout types; optionally persist neutral `launchPrompt` metadata |
+| `src/state/reducer.ts` | Manage center-tab, right-pane-tab, history, and shell-mode actions |
+| `src/components/layout/AppLayout.tsx` | Replace overlay orchestration with a session-first center pane and a tabbed right review pane |
+| `src/components/layout/Titlebar.tsx` | Add shell toggle for `Pane` vs `Canvas` |
+| `src/components/sidebar/SessionSidebar.tsx` | Show only `Active` and `Ready for Review` in the primary rail and move history entry out of band |
+| `src/components/sidebar/SessionCard.tsx` | Simplify status presentation to `Running` / `Ready for review` plus secondary reason copy |
+| `src/components/workspace/WorkspacePanel.tsx` | Expand the right side into a tabbed review/document pane with `Files | Changes | Review` sources |
+| `src/components/canvas/CanvasView.tsx` | Keep canvas usable as an advanced shell without transcript/file overlay hacks |
+| `src/components/history/HistoryWorkspace.tsx` | New dedicated workspace for past sessions and transcript lookup |
+| `src-tauri/src/commands/session.rs` | Persist neutral `launch_prompt` metadata if we decide to retain initial prompt history |
 
 ---
 
-## Implementation
+## Reuse From Existing Work
 
-### 1. Extend `SessionStatus` — `src/state/types.ts`
+- `NewSessionDialog.tsx` already collects the initial prompt and worktree preference
+- `WorkspacePanel.tsx` already provides the right-side tab shell pattern
+- `SessionTranscriptView.tsx` is already a self-contained transcript surface
+- `CanvasView.tsx` already provides the advanced workspace foundation
+- the existing session-scoped inspector model remains valid and should continue to anchor workspace identity
 
-```typescript
-export type SessionStatus =
-  | "running"
-  | "idle"
-  | "needs-input"
-  | "done"
-  | "error"
-  | "stopped"
-  // Dispatched-session merge lifecycle:
-  | "merge-pending"    // task complete, in merge queue awaiting review
-  | "merge-conflict"   // conflict detected pre-merge (future: merge.rs)
-  | "merged"           // local merge complete
-  | "pr-raised"        // PR created on GitHub
-  | "rejected";        // task abandoned by user
-```
+Related reference docs:
 
-Add `taskPrompt` to `Session` (after the `env` field):
-
-```typescript
-/** Set when session was created via Dispatch (task mode). Null = regular interactive session. */
-taskPrompt: string | null;
-```
-
-Full status taxonomy:
-
-| Status | Meaning | Session type |
-|--------|---------|-------------|
-| running | Agent actively producing output | Both |
-| needs-input | Agent asked a clarifying question | Both |
-| idle | Agent finished a turn, waiting for input | Regular only |
-| merge-pending | Dispatched task complete, ready to review | Dispatched only |
-| merge-conflict | Conflict detected, needs resolution | Dispatched only |
-| merged | Local merge complete | Dispatched only |
-| pr-raised | PR created on GitHub | Dispatched only |
-| rejected | Task abandoned | Dispatched only |
-| done | PTY process exited | Both |
-| error | PTY exited with error | Both |
-| stopped | User manually stopped | Both |
+- [middle-pane-surface-tabs.md](/Users/nyangshawbin/Documents/projects/switchboard/docs/plans/middle-pane-surface-tabs.md)
+- [session-scoped-workspace-panel-plan.md](/Users/nyangshawbin/Documents/projects/switchboard/docs/session-scoped-workspace-panel-plan.md)
 
 ---
 
-### 2. Auto-promote in reducer — `src/state/reducer.ts` (lines 68-82)
+## Out Of Scope For This Revision
 
-Replace the `UPDATE_STATUS` case body:
-
-```typescript
-case "UPDATE_STATUS": {
-  const session = state.sessions[action.id];
-  if (!session) return state;
-  const isDispatched = Boolean(session.taskPrompt);
-  const effectiveStatus =
-    action.status === "idle" && isDispatched
-      ? "merge-pending"
-      : action.status;
-  return {
-    ...state,
-    sessions: {
-      ...state.sessions,
-      [action.id]: {
-        ...session,
-        status: effectiveStatus,
-        exitCode: action.exitCode ?? session.exitCode,
-      },
-    },
-  };
-}
-```
-
-The `Stop` hook already maps to `"idle"` in `src/hooks/useClaudeHooks.ts` (line 10).
-No hook changes needed — the reducer handles the promotion transparently.
-
----
-
-### 3. Plumb `taskPrompt` through session creation — `AppLayout.tsx` lines 524-545
-
-`NewSessionDialog` already collects `config.task` and `config.useWorktree`.
-In the session object construction block, add one field:
-
-```typescript
-taskPrompt: config.useWorktree && config.task ? config.task : null,
-```
-
-Rule: dispatched = created with worktree AND a task prompt. Regular sessions (no worktree,
-or no task prompt) remain `taskPrompt: null` and are unaffected.
-
----
-
-### 4. Rust session struct — `src-tauri/src/commands/session.rs`
-
-Add to the `Session` struct:
-
-```rust
-#[serde(default)]
-pub task_prompt: Option<String>,
-```
-
-`#[serde(default)]` ensures existing `~/.switchboard/sessions.json` files without this
-field continue to deserialize without error (defaults to `None`).
-
----
-
-### 5. SessionCard badges — `src/components/sidebar/SessionCard.tsx`
-
-Extend `STATUS_LABELS` (around line 22) with the new values:
-
-```typescript
-const STATUS_LABELS: Record<string, string> = {
-  // existing...
-  "merge-pending": "Ready to Merge",
-  "merge-conflict": "Conflict",
-  merged: "Merged",
-  "pr-raised": "PR Raised",
-  rejected: "Rejected",
-};
-```
-
-Add visual weight for actionable states. Use existing shadcn `Badge` with `variant` or
-`className`:
-- `merge-pending` → green (same treatment as a success/ready state)
-- `merge-conflict` → red/destructive
-- `merged` / `rejected` → muted (session is complete, de-emphasize)
-- `pr-raised` → blue/secondary
-
----
-
-### 6. MergeQueuePanel — new file `src/components/git/MergeQueuePanel.tsx`
-
-Filter sessions by merge-lifecycle status, show as a list in the right panel.
-
-```tsx
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import type { Session } from "../../state/types";
-
-const MERGE_STATUSES = ["merge-pending", "merge-conflict", "merged", "pr-raised"] as const;
-
-interface MergeQueuePanelProps {
-  sessions: Record<string, Session>;
-  onSelect: (session: Session) => void;
-}
-
-export function MergeQueuePanel({ sessions, onSelect }: MergeQueuePanelProps) {
-  const queue = Object.values(sessions)
-    .filter(s => MERGE_STATUSES.includes(s.status as any))
-    .sort((a, b) => {
-      // merge-conflict first (needs attention), then merge-pending, then rest
-      const order = { "merge-conflict": 0, "merge-pending": 1, "merged": 2, "pr-raised": 3 };
-      return (order[a.status as keyof typeof order] ?? 4) - (order[b.status as keyof typeof order] ?? 4);
-    });
-
-  if (queue.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-        <p className="text-sm font-medium text-muted-foreground">No agents done yet</p>
-        <p className="text-xs text-muted-foreground">
-          Completed agents appear here for review
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <ScrollArea className="h-full">
-      <div className="divide-y">
-        {queue.map(session => (
-          <MergeQueueItem key={session.id} session={session} onClick={() => onSelect(session)} />
-        ))}
-      </div>
-    </ScrollArea>
-  );
-}
-
-function MergeQueueItem({ session, onClick }: { session: Session; onClick: () => void }) {
-  return (
-    <button
-      className="w-full px-3 py-3 text-left hover:bg-muted/50 transition-colors"
-      onClick={onClick}
-    >
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="text-xs font-mono font-medium truncate">{session.branch ?? session.label}</span>
-        <Badge variant="outline" className="text-[10px] shrink-0">{session.status}</Badge>
-      </div>
-      {session.taskPrompt && (
-        <p className="text-xs text-muted-foreground truncate">{session.taskPrompt}</p>
-      )}
-      {/* Action buttons — stubs until merge.rs is implemented */}
-      {session.status === "merge-pending" && (
-        <div className="flex gap-1.5 mt-2">
-          <button
-            className="text-[10px] border border-border px-2 py-0.5 rounded hover:bg-muted"
-            onClick={e => { e.stopPropagation(); /* TODO: local merge */ }}
-          >
-            Merge Locally
-          </button>
-          <button
-            className="text-[10px] border border-border px-2 py-0.5 rounded hover:bg-muted"
-            onClick={e => { e.stopPropagation(); /* TODO: raise PR */ }}
-          >
-            Raise PR
-          </button>
-        </div>
-      )}
-    </button>
-  );
-}
-```
-
-Wire into `AppLayout.tsx`: add `MergeQueuePanel` to the right column. Can sit below or
-alongside the existing `WorkspacePanel`. A tab toggle ("Files / Changes / Queue") works
-well — the right column already has a tab pattern in `WorkspacePanel`.
-
----
-
-## Reused Existing Code
-
-- `NewSessionDialog.tsx` — already collects `task` and `useWorktree`, no UI changes
-- `SessionCard.tsx` — STATUS_LABELS extension only, no structural change
-- `DiffView.tsx` — will be used inside `MergeQueueItem` for diff preview (next phase)
-- `git_create_pr` in `git.rs:288` — reused as-is for "Raise PR" action (next phase)
-- `remove_worktree` in `worktree.rs` — reused for post-merge cleanup (next phase)
-- `useAgentHooks` in `useClaudeHooks.ts` — no changes, `Stop` → `idle` mapping unchanged
+- full browser-style tab persistence across app restarts
+- complex branch lifecycle analytics in the sidebar
+- conflict resolver UX in the first pass
+- replacing the right inspector with a full editor
+- removing canvas entirely
 
 ---
 
 ## Verification
 
-1. **Type check:** `npx tsc --noEmit` — catches exhaustiveness gaps in reducer switch
-   and any missing `taskPrompt` references.
+1. `npx tsc --noEmit`
+   Verify the new tab, shell, and attention models are wired consistently.
 
-2. **Rust serialization:** `cargo test --manifest-path src-tauri/Cargo.toml` — verify
-   a session without `task_prompt` in JSON deserializes cleanly (tests in `session.rs`
-   or `mod tests`).
+2. `cargo test --manifest-path src-tauri/Cargo.toml`
+   Needed only if we persist neutral launch prompt metadata or add backend session fields.
 
-3. **Manual — dispatched lifecycle:**
-   - Open Switchboard, create a new session with worktree checked + task prompt filled
-   - Observe: SessionCard shows "Running"
-   - When agent finishes its turn (Stop hook fires): card should show "Ready to Merge"
-   - Session should appear in MergeQueuePanel right column
+3. Manual: attention simplification
+   - start a running session and verify it appears under `In Progress`
+   - let a session become `idle` and verify it moves to `Ready for Review`
+   - trigger `needs-input` and verify it still appears as `Ready for Review`, with secondary reason copy
 
-4. **Manual — interactive sessions unaffected:**
-   - Create a regular session (no worktree, or no task prompt)
-   - When agent finishes a turn: card shows "Idle", NOT "Ready to Merge"
-   - Session does NOT appear in MergeQueuePanel
+4. Manual: center and history tabs
+   - open a live session, then open a transcript, then return to the live tab
+   - open history and verify it appears as a deliberate center tab, not in the live rail
+   - reopen the same transcript and verify the existing tab is focused
+
+5. Manual: right-pane files
+   - open a file from the explorer and verify it opens in the right pane
+   - open a diff from changes and verify it opens as a right-pane diff tab
+   - open multiple files and verify they remain tabbed on the right, similar to the target reference
+
+6. Manual: shell modes
+   - verify pane mode is the default
+   - switch to canvas mode and back without losing open tabs or selected session context
+
+7. Manual: split panes
+   - place two live sessions side by side
+   - drag a tab between panes
+   - confirm terminals remain stable and do not respawn
+
+8. Manual: review tooling
+   - select a `Ready for Review` session
+   - inspect `Files`, `Changes`, and `Review`
+   - verify merge/PR actions are available only when branch/worktree context is valid
+
+---
+
+## Recommendation
+
+Implement this in the order above, with Phase 1 through Phase 3 treated as the new minimum
+foundation.
+
+The key product move is not "add a merge queue." It is:
+
+- simplify attention
+- move history out of the live rail
+- make center session surfaces explicit with tabs
+- make files and diffs dock on the right
+- make classic panes the default
+- push review actions into the right pane
+
+That is the shape that best matches modern parallel agentic development and the direction you want
+Switchboard to own.

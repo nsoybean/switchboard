@@ -8,11 +8,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronRight, FolderGit2, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronDown, History, MoreHorizontal, Plus } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { SessionCard } from "./SessionCard";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getSessionRailBucket } from "@/lib/session-attention";
 import { formatCompactRelativeTime, formatTimestampTitle } from "@/lib/time";
 import type { Session } from "../../state/types";
 
@@ -36,6 +36,8 @@ interface SessionSidebarProps {
   onRenameSession?: (session: Session, label: string) => Promise<void>;
   onDeleteSession?: (session: Session) => Promise<void>;
   selectedSessionId?: string | null;
+  historyOpen?: boolean;
+  onHistoryOpenChange?: (open: boolean) => void;
 }
 
 interface ProjectSessionGroup {
@@ -46,6 +48,22 @@ interface ProjectSessionGroup {
 
 function getSessionProjectPath(session: Session): string {
   return session.workspace.repoRoot ?? session.cwd;
+}
+
+/** Letter avatar for a project name */
+function ProjectAvatar({ name, isActive }: { name: string; isActive: boolean }) {
+  const letter = (name[0] ?? "?").toUpperCase();
+  return (
+    <span
+      className={`flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold ${
+        isActive
+          ? "bg-foreground text-background"
+          : "bg-muted text-muted-foreground"
+      }`}
+    >
+      {letter}
+    </span>
+  );
 }
 
 export function SessionSidebar({
@@ -61,15 +79,31 @@ export function SessionSidebar({
   onRenameSession,
   onDeleteSession,
   selectedSessionId,
+  historyOpen,
+  onHistoryOpenChange,
 }: SessionSidebarProps) {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [renameTarget, setRenameTarget] = useState<Session | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
+  const [historyOpenInternal, setHistoryOpenInternal] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const effectiveSelectedSessionId = selectedSessionId ?? state.activeSessionId;
+  const effectiveHistoryOpen = historyOpen ?? historyOpenInternal;
+
+  const setHistoryOpen = useCallback(
+    (open: boolean) => {
+      if (onHistoryOpenChange) {
+        onHistoryOpenChange(open);
+        return;
+      }
+      setHistoryOpenInternal(open);
+    },
+    [onHistoryOpenChange],
+  );
 
   const projectGroups = useMemo<ProjectSessionGroup[]>(() => {
     const sessionsByProject = new Map<string, Session[]>();
@@ -94,10 +128,53 @@ export function SessionSidebar({
     }));
   }, [state.projectPath, state.projects, state.sessions]);
 
-  const totalSessionCount = useMemo(
-    () => projectGroups.reduce((count, group) => count + group.sessions.length, 0),
+  const totalHistoryCount = useMemo(
+    () =>
+      projectGroups.reduce(
+        (count, group) =>
+          count +
+          group.sessions.filter(
+            (session) => getSessionRailBucket(session.status) === "history",
+          ).length,
+        0,
+      ),
     [projectGroups],
   );
+
+  const filteredHistoryGroups = useMemo(() => {
+    const query = historyQuery.trim().toLowerCase();
+
+    return projectGroups
+      .map((group) => ({
+        ...group,
+        sessions: group.sessions.filter((session) => {
+          if (getSessionRailBucket(session.status) !== "history") {
+            return false;
+          }
+
+          if (!query) {
+            return true;
+          }
+
+          const haystack = [
+            session.label,
+            session.branch ?? "",
+            session.agent,
+            group.name,
+          ]
+            .join(" ")
+            .toLowerCase();
+
+          return haystack.includes(query);
+        }),
+      }))
+      .filter((group) => group.sessions.length > 0)
+      .sort((a, b) => {
+        if (a.path === state.projectPath) return -1;
+        if (b.path === state.projectPath) return 1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [historyQuery, projectGroups, state.projectPath]);
 
   useEffect(() => {
     const currentProjectPath = state.projectPath;
@@ -197,224 +274,183 @@ export function SessionSidebar({
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-card">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <h1 className="text-sm font-semibold tracking-wide">SWITCHBOARD</h1>
-        <Button size="sm" onClick={onNewSession}>
-          <Plus data-icon="inline-start" />
-          New
-        </Button>
-      </div>
-
+      {/* Session list */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-        <div className="flex flex-col gap-0.5 p-2">
-          <div className="pt-1 pb-2">
-            <div className="mb-2 flex items-center justify-between pl-1">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Projects
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={onAddProject}
-                title="Add new project"
-              >
-                <Plus />
-              </Button>
-            </div>
+        <div className="flex flex-col py-2">
+          {projectGroups.map((group) => {
+            const isActiveProject = group.path === state.projectPath;
+            const isCollapsed = collapsedProjects[group.path] ?? false;
+            const liveSessions = group.sessions.filter(
+              (session) => getSessionRailBucket(session.status) !== "history",
+            );
 
-            <div className="flex flex-col gap-1">
-              {projectGroups.map((group) => {
-                const isActiveProject = group.path === state.projectPath;
-                const isCollapsed = collapsedProjects[group.path] ?? false;
-                const activeSessions = group.sessions.filter(
-                  (session) =>
-                    session.status === "running" ||
-                    session.status === "idle" ||
-                    session.status === "needs-input",
-                );
-                const pastSessions = group.sessions.filter(
-                  (session) =>
-                    session.status === "done" ||
-                    session.status === "stopped" ||
-                    session.status === "error",
-                );
-
-                return (
-                  <div key={group.path} className="space-y-1">
-                    <div
-                      className={`group/project flex items-center gap-1 rounded-md py-0.5 transition-colors ${
-                        isActiveProject
-                          ? "bg-accent/70 text-accent-foreground"
-                          : "hover:bg-accent/40"
+            return (
+              <div key={group.path}>
+                {/* Project header */}
+                <div className="group/project flex items-center gap-2 px-3 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void handleSelectProject(group.path)}
+                    className="flex min-w-0 flex-1 items-center gap-2"
+                    title={group.path}
+                  >
+                    <ProjectAvatar name={group.name} isActive={isActiveProject} />
+                    <span className="truncate text-sm font-semibold">
+                      {group.name}
+                    </span>
+                    <ChevronDown
+                      className={`size-3 shrink-0 text-muted-foreground transition-transform ${
+                        isCollapsed ? "-rotate-90" : ""
                       }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleProject(group.path);
+                      }}
+                    />
+                  </button>
+
+                  <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/project:opacity-100 group-focus-within/project:opacity-100">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      className="size-6 text-muted-foreground hover:text-foreground"
+                      onClick={onNewSession}
+                      title="New session"
                     >
-                      <button
-                        type="button"
-                        onClick={() => toggleProject(group.path)}
-                        title={isCollapsed ? "Expand project sessions" : "Collapse project sessions"}
-                        className="relative flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        <FolderGit2 className="size-3.5 transition-opacity group-hover/project:opacity-0" />
-                        {isCollapsed ? (
-                          <ChevronRight className="absolute size-3.5 opacity-0 transition-opacity group-hover/project:opacity-100" />
-                        ) : (
-                          <ChevronDown className="absolute size-3.5 opacity-0 transition-opacity group-hover/project:opacity-100" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleSelectProject(group.path)}
-                        title={group.path}
-                        className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-sm py-1 text-left text-sm"
-                      >
-                        <span className="truncate font-medium">{group.name}</span>
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
-                          {group.sessions.length}
-                        </span>
-                      </button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-xs"
-                            className="mr-1 size-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/project:opacity-100 group-focus-within/project:opacity-100 data-[state=open]:opacity-100"
-                            onClick={(event) => event.stopPropagation()}
-                            title={`${group.name} actions`}
-                          >
-                            <MoreHorizontal className="size-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            disabled={!onOpenProject}
-                            onSelect={() => {
-                              void onOpenProject?.(group.path);
-                            }}
-                          >
-                            Open in Finder
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            disabled={!onRemoveProject}
-                            className="text-destructive focus:text-destructive"
-                            onSelect={() => {
-                              void onRemoveProject?.(group.path);
-                            }}
-                          >
-                            Remove
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-
-                    {!isCollapsed ? (
-                      <div className="space-y-1 pl-3">
-                        {activeSessions.length > 0 ? (
-                          <div className="space-y-1">
-                            <div className="px-3 pt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                              Active
-                            </div>
-                            {activeSessions.map((session) => (
-                              <SessionCard
-                                key={session.id}
-                                session={session}
-                                isActive={effectiveSelectedSessionId === session.id}
-                                timestampLabel={formatCompactRelativeTime(
-                                  session.createdAt,
-                                  now,
-                                )}
-                                timestampTitle={formatTimestampTitle(session.createdAt)}
-                                onStop={
-                                  session.status === "running" ||
-                                  session.status === "idle" ||
-                                  session.status === "needs-input"
-                                    ? () => void onStopSession?.(session.id)
-                                    : undefined
-                                }
-                                onRename={() => {
-                                  setRenameTarget(session);
-                                  setRenameValue(session.label);
-                                }}
-                                onDelete={() => setDeleteTarget(session)}
-                                onClick={() => {
-                                  void handleSelectSession(session);
-                                }}
-                              />
-                            ))}
-                          </div>
-                        ) : null}
-
-                        {pastSessions.length > 0 ? (
-                          <div className="space-y-1">
-                            <div className="px-3 pt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                              {activeSessions.length > 0 ? "Past Sessions" : "Sessions"}
-                            </div>
-                            {pastSessions.map((session) => {
-                              const canResume =
-                                session.agent === "claude-code" ||
-                                session.agent === "codex";
-
-                              return (
-                                <SessionCard
-                                  key={session.id}
-                                  session={session}
-                                  isActive={effectiveSelectedSessionId === session.id}
-                                  timestampLabel={formatCompactRelativeTime(
-                                    session.createdAt,
-                                    now,
-                                  )}
-                                  timestampTitle={formatTimestampTitle(
-                                    session.createdAt,
-                                  )}
-                                  onResume={
-                                    canResume && onResumeSession
-                                      ? () => void handleResumeSessionClick(session)
-                                      : undefined
-                                  }
-                                  onRename={() => {
-                                    setRenameTarget(session);
-                                    setRenameValue(session.label);
-                                  }}
-                                  onDelete={() => setDeleteTarget(session)}
-                                  onClick={() => {
-                                    void handleViewSession(session);
-                                  }}
-                                />
-                              );
-                            })}
-                          </div>
-                        ) : null}
-
-                        {group.sessions.length === 0 ? (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">
-                            No sessions yet.
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
+                      <Plus className="size-3.5" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="size-6 text-muted-foreground hover:text-foreground data-[state=open]:opacity-100"
+                          onClick={(event) => event.stopPropagation()}
+                          title={`${group.name} actions`}
+                        >
+                          <MoreHorizontal className="size-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          disabled={!onAddProject}
+                          onSelect={() => void onAddProject?.()}
+                        >
+                          Add project
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={!onOpenProject}
+                          onSelect={() => {
+                            void onOpenProject?.(group.path);
+                          }}
+                        >
+                          Open in Finder
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          disabled={!onRemoveProject}
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => {
+                            void onRemoveProject?.(group.path);
+                          }}
+                        >
+                          Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                );
-              })}
+                </div>
+
+                {/* Session list */}
+                {!isCollapsed && (
+                  <div className="pb-2">
+                    {liveSessions.length > 0 ? (
+                      <div className="flex flex-col gap-px px-1">
+                        {liveSessions.map((session, i) => (
+                          <SessionCard
+                            key={session.id}
+                            session={session}
+                            isActive={effectiveSelectedSessionId === session.id}
+                            index={i + 1}
+                            timestampLabel={formatCompactRelativeTime(
+                              session.createdAt,
+                              now,
+                            )}
+                            timestampTitle={formatTimestampTitle(session.createdAt)}
+                            onStop={
+                              session.status === "running" ||
+                              session.status === "idle" ||
+                              session.status === "needs-input"
+                                ? () => void onStopSession?.(session.id)
+                                : undefined
+                            }
+                            onRename={() => {
+                              setRenameTarget(session);
+                              setRenameValue(session.label);
+                            }}
+                            onDelete={() => setDeleteTarget(session)}
+                            onClick={() => {
+                              void handleSelectSession(session);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-2 text-[11px] text-muted-foreground">
+                        No live sessions
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {projectGroups.length === 0 && state.sessionsLoaded && (
+            <div className="flex h-32 items-center justify-center px-4">
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">No projects yet</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2"
+                  onClick={onAddProject}
+                >
+                  <Plus className="size-3.5" />
+                  Add project
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
-          <Separator className="my-2" />
-
-          {totalSessionCount === 0 && state.sessionsLoaded ? (
-            <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-              No sessions yet.
-            </div>
-          ) : null}
-
-          {!state.sessionsLoaded ? (
+          {!state.sessionsLoaded && (
             <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
               Loading sessions...
             </div>
-          ) : null}
+          )}
         </div>
       </div>
 
+      {/* Footer: History */}
+      <div className="border-t p-2">
+        <Button
+          variant="ghost"
+          className="w-full justify-between"
+          onClick={() => setHistoryOpen(true)}
+        >
+          <span className="inline-flex items-center gap-2">
+            <History className="size-4" />
+            History
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {totalHistoryCount}
+          </span>
+        </Button>
+      </div>
+
+      {/* Rename dialog */}
       <Dialog
         open={renameTarget !== null}
         onOpenChange={(open) => !open && closeRenameDialog()}
@@ -452,6 +488,7 @@ export function SessionSidebar({
         </DialogContent>
       </Dialog>
 
+      {/* Delete dialog */}
       <Dialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
@@ -474,6 +511,89 @@ export function SessionSidebar({
               Delete
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* History dialog */}
+      <Dialog open={effectiveHistoryOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="flex max-h-[80vh] w-[min(820px,92vw)] max-w-none flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>History</DialogTitle>
+            <DialogDescription>
+              Past sessions stay here so the main rail can focus on active work.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3 overflow-hidden">
+            <Input
+              value={historyQuery}
+              onChange={(event) => setHistoryQuery(event.target.value)}
+              placeholder="Search history by session, branch, agent, or project"
+            />
+
+            <div className="min-h-0 overflow-y-auto">
+              {filteredHistoryGroups.length === 0 ? (
+                <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                  {totalHistoryCount === 0 ? "No history yet." : "No history matches this search."}
+                </div>
+              ) : (
+                <div className="space-y-4 pr-1">
+                  {filteredHistoryGroups.map((group) => (
+                    <div key={group.path} className="space-y-2">
+                      <div className="flex items-center justify-between px-1">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          {group.name}
+                          {group.path === state.projectPath ? " · Current Project" : ""}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {group.sessions.length}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        {group.sessions.map((session) => {
+                          const canResume =
+                            session.agent === "claude-code" ||
+                            session.agent === "codex";
+
+                          return (
+                            <SessionCard
+                              key={session.id}
+                              session={session}
+                              isActive={false}
+                              timestampLabel={formatCompactRelativeTime(
+                                session.createdAt,
+                                now,
+                              )}
+                              timestampTitle={formatTimestampTitle(session.createdAt)}
+                              onResume={
+                                canResume && onResumeSession
+                                  ? () => {
+                                      setHistoryOpen(false);
+                                      void handleResumeSessionClick(session);
+                                    }
+                                  : undefined
+                              }
+                              onRename={() => {
+                                setHistoryOpen(false);
+                                setRenameTarget(session);
+                                setRenameValue(session.label);
+                              }}
+                              onDelete={() => setDeleteTarget(session)}
+                              onClick={() => {
+                                setHistoryOpen(false);
+                                void handleViewSession(session);
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

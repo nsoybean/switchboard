@@ -262,10 +262,18 @@ pub fn git_pull(cwd: String) -> Result<String, String> {
     run_git(&cwd, &["pull"])
 }
 
-/// Push current branch to remote
+/// Push current branch to remote, auto-setting upstream if needed
 #[tauri::command]
 pub fn git_push(cwd: String) -> Result<String, String> {
-    run_git(&cwd, &["push"])
+    match run_git(&cwd, &["push"]) {
+        Ok(out) => Ok(out),
+        Err(e) if e.contains("no upstream branch") || e.contains("has no upstream") => {
+            let branch = run_git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+            let branch = branch.trim();
+            run_git(&cwd, &["push", "--set-upstream", "origin", branch])
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Create a new branch

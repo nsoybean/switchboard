@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { File, FolderTree } from "lucide-react";
+import { FolderTree } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getBranchPrefix } from "@/lib/branches";
-import { useGitState } from "@/hooks/useGitState";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
-import { BranchPicker } from "../git/BranchPicker";
 import { CreateBranchDialog } from "../git/CreateBranchDialog";
+import { getBranchPrefix } from "@/lib/branches";
+import type { GitState, GitActions } from "@/hooks/useGitState";
 import type { Session } from "../../state/types";
 import type { AgentType } from "../../state/types";
 
@@ -25,11 +24,10 @@ export interface WorkspaceContext {
 interface WorkspacePanelProps {
   activeTab: WorkspaceTab;
   context: WorkspaceContext | null;
-  visible?: boolean;
+  git: GitState & GitActions;
   session?: Session | null;
   githubToken?: string | null;
-  onOpenSettings?: () => void;
-  onSessionBranchChange?: (sessionId: string, branch: string | null) => Promise<void> | void;
+  onFileSelect?: (filePath: string) => void;
   onTabChange: (tab: WorkspaceTab) => void;
 }
 
@@ -56,53 +54,40 @@ function EmptyWorkspaceState({
 export function WorkspacePanel({
   activeTab,
   context,
-  visible = true,
+  git,
   session,
   githubToken,
-  onOpenSettings,
-  onSessionBranchChange,
+  onFileSelect,
   onTabChange,
 }: WorkspacePanelProps) {
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
 
   const hasRoot = context?.availability === "ready" && !!context.rootPath;
-
-  const git = useGitState({
-    cwd: hasRoot ? context.rootPath! : "",
-    visible: hasRoot && visible,
-    sessionId: context?.kind === "session" ? session?.id : null,
-    onSessionBranchChange,
-  });
-
-  if (!context) return null;
-
-  const rootKey = `${context.kind}:${context.source}:${context.rootPath ?? "missing"}`;
-  const branchPrefix = context.kind === "session" && session?.agent
+  const branchPrefix = context?.kind === "session" && session?.agent
     ? getBranchPrefix(session.agent as AgentType)
     : undefined;
 
-  const renderContent = (tab: WorkspaceTab) => {
-    if (context.availability === "resolving") {
+  const renderUnavailableState = (currentContext: WorkspaceContext, tab: WorkspaceTab) => {
+    if (currentContext.availability === "resolving") {
       return (
         <EmptyWorkspaceState
           title="Resolving workspace"
           description="Switchboard is validating the selected session's workspace root."
-          icon={false}
         />
       );
     }
 
-    if (context.availability === "missing") {
+    if (currentContext.availability === "missing") {
       return (
         <EmptyWorkspaceState
-          title={tab === "files" ? "Workspace unavailable" : "Cannot load changes"}
-          description={`Switchboard can still show ${context.label}, but the saved workspace path is no longer available on disk.`}
+          title={tab === "changes" ? "Cannot load changes" : "Workspace unavailable"}
+          description={`Switchboard can still show ${currentContext.label}, but the saved workspace path is no longer available on disk.`}
           icon
         />
       );
     }
 
-    if (!context.rootPath) {
+    if (!currentContext.rootPath) {
       return (
         <EmptyWorkspaceState
           title="No workspace selected"
@@ -112,90 +97,72 @@ export function WorkspacePanel({
       );
     }
 
-    if (tab === "files") {
-      return <FilePanel key={`files:${rootKey}`} rootPath={context.rootPath} />;
-    }
-
-    return (
-      <GitPanel
-        key={`changes:${rootKey}`}
-        cwd={context.rootPath}
-        git={git}
-        githubToken={githubToken}
-        onOpenSettings={onOpenSettings}
-      />
-    );
+    return null;
   };
+
+  if (!context) {
+    return null;
+  }
+
+  const unavailableState = renderUnavailableState(context, activeTab);
+  const changedFileCount = git.files.length;
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
-      <div className="flex flex-wrap-reverse items-center border-b px-2">
-        <div className="flex shrink-0">
-          {(["files", "changes"] as WorkspaceTab[]).map((tab) => (
+      {/* Header: tabs */}
+      <div className="flex items-center justify-between border-b px-2 py-2">
+        <div className="flex items-center gap-1">
+          {([
+            { key: "files" as const, label: "Files" },
+            { key: "changes" as const, label: "Changes" },
+          ]).map((tab) => (
             <button
-              key={tab}
-              onClick={() => onTabChange(tab)}
+              key={tab.key}
+              type="button"
+              onClick={() => onTabChange(tab.key)}
               className={cn(
-                "border-b-2 px-3 py-2 text-xs font-medium transition-colors",
-                activeTab === tab
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
+                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                activeTab === tab.key
+                  ? "border-border bg-background text-foreground shadow-sm"
+                  : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground",
               )}
             >
-              {tab === "files" ? (
-                "Files"
-              ) : (
-                <span className="flex items-center gap-1.5">
-                  Changes
-                  {hasRoot && (
-                    <span className="flex items-center gap-1 text-[10px] font-normal tabular-nums">
-                      {git.stats.additions === 0 && git.stats.deletions === 0 && git.stats.files_changed === 0 ? (
-                        <span className="flex items-center gap-0.5 text-muted-foreground">
-                          <span className="flex flex-col leading-[0.85] text-[8px]">
-                            <span>+</span>
-                            <span>-</span>
-                          </span>
-                          0
-                        </span>
-                      ) : (
-                        <>
-                          <span className="text-[var(--sb-diff-add-fg)]">+{git.stats.additions}</span>
-                          <span className="text-[var(--sb-diff-del-fg)]">-{git.stats.deletions}</span>
-                          <span className="text-muted-foreground">·</span>
-                          <span className="inline-flex items-center gap-0.5 text-muted-foreground"><File className="size-2.5" />{git.stats.files_changed}</span>
-                        </>
-                      )}
-                    </span>
-                  )}
+              {tab.label}
+              {tab.key === "changes" && changedFileCount > 0 && (
+                <span className="text-[10px] tabular-nums text-muted-foreground">
+                  {changedFileCount}
                 </span>
               )}
             </button>
           ))}
         </div>
+      </div>
 
-        <div className="min-w-0 grow" />
-        {/* Branch picker — flush right, wraps above tabs when narrow */}
-        {hasRoot && (
-          <div className="min-w-0 py-1.5 pl-2">
-            <BranchPicker
-              branches={git.branches}
-              loading={git.branchesLoading && git.branches.length === 0}
-              value={git.branch}
-              disabled={git.branchActionPending}
-              triggerClassName="h-7 min-w-0 max-w-full justify-between gap-2 px-2 text-xs"
-              createLabel="Create and checkout new branch..."
-              onSelect={(branchName) => void git.switchBranch(branchName)}
-              onCreateBranch={() => setCreateBranchOpen(true)}
-            />
-          </div>
+      {/* Content: full-height panel */}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {unavailableState ? (
+          unavailableState
+        ) : (
+          <>
+            {activeTab === "files" ? (
+              <FilePanel
+                rootPath={context.rootPath!}
+                onFileSelect={onFileSelect}
+              />
+            ) : null}
+
+            {activeTab === "changes" ? (
+              <GitPanel
+                cwd={context.rootPath!}
+                git={git}
+                githubToken={githubToken}
+              />
+            ) : null}
+          </>
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {renderContent(activeTab)}
-      </div>
-
-      {hasRoot && (
+      {hasRoot ? (
         <CreateBranchDialog
           open={createBranchOpen}
           onOpenChange={setCreateBranchOpen}
@@ -206,7 +173,7 @@ export function WorkspacePanel({
             setCreateBranchOpen(false);
           }}
         />
-      )}
+      ) : null}
     </div>
   );
 }
