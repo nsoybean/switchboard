@@ -331,18 +331,41 @@ function XTermContainerComponent({
       }
     };
 
-    const syncTerminalSize = async () => {
+    // Debounce PTY resize IPC to avoid SIGWINCH storms during tile drags.
+    // fitAddon.fit() runs immediately so xterm matches the container, but
+    // the backend resize is debounced so the child process only re-renders
+    // once the user stops dragging.
+    let lastCols = 0;
+    let lastRows = 0;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const debouncedPtyResize = () => {
+      const cols = Math.max(20, terminal.cols);
+      const rows = Math.max(8, terminal.rows);
+
+      if (cols === lastCols && rows === lastRows) {
+        return;
+      }
+
+      lastCols = cols;
+      lastRows = rows;
+
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+      }
+
+      resizeTimer = setTimeout(() => {
+        void invoke("resize_terminal", { tileId, cols, rows });
+      }, 150);
+    };
+
+    const syncTerminalSize = () => {
       if (!sessionActiveRef.current) {
         return;
       }
 
       fitTerminal();
-
-      await invoke("resize_terminal", {
-        tileId,
-        cols: Math.max(20, terminal.cols),
-        rows: Math.max(8, terminal.rows),
-      });
+      debouncedPtyResize();
     };
 
     const disposables = [
@@ -358,7 +381,7 @@ function XTermContainerComponent({
     ];
 
     resizeObserverRef.current = new ResizeObserver(() => {
-      void syncTerminalSize();
+      syncTerminalSize();
     });
     resizeObserverRef.current.observe(host);
 
@@ -407,6 +430,9 @@ function XTermContainerComponent({
     return () => {
       sessionActiveRef.current = false;
       window.clearTimeout(startupTimer);
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+      }
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       fitAddonRef.current = null;

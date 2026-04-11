@@ -1,17 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
   Eye,
   FileText,
   Plus,
   X,
 } from "lucide-react";
+import {
+  ArrowLineDown,
+  ArrowLineLeft,
+  ArrowLineRight,
+  ArrowLineUp,
+  SplitHorizontal,
+} from "@phosphor-icons/react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -709,18 +718,10 @@ function PaneLeafView({
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5 px-2">
-            {([
-              { direction: "left", label: "Split left", icon: ArrowLeft },
-              { direction: "right", label: "Split right", icon: ArrowRight },
-              { direction: "up", label: "Split up", icon: ArrowUp },
-              { direction: "down", label: "Split down", icon: ArrowDown },
-            ] as const).map((action) => {
-              const Icon = action.icon;
-              return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <button
-                  key={action.direction}
                   type="button"
-                  onClick={() => onSplit(leaf.id, action.direction)}
                   disabled={!canSplit}
                   className={cn(
                     "inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors",
@@ -728,13 +729,32 @@ function PaneLeafView({
                       ? "hover:bg-accent hover:text-foreground"
                       : "cursor-not-allowed opacity-30",
                   )}
-                  title={canSplit ? action.label : "Open more than one tab in this pane to split it"}
-                  aria-label={action.label}
+                  title={canSplit ? "Split pane" : "Open more than one tab in this pane to split it"}
+                  aria-label="Split pane"
                 >
-                  <Icon className="size-3.5" />
+                  <SplitHorizontal className="size-3.5" />
                 </button>
-              );
-            })}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {([
+                  { direction: "right", label: "Split right", icon: ArrowLineRight },
+                  { direction: "left", label: "Split left", icon: ArrowLineLeft },
+                  { direction: "down", label: "Split down", icon: ArrowLineDown },
+                  { direction: "up", label: "Split up", icon: ArrowLineUp },
+                ] as const).map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={action.direction}
+                      onClick={() => onSplit(leaf.id, action.direction)}
+                    >
+                      <Icon className="size-3.5" />
+                      {action.label}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {paneCount > 1 ? (
               <button
