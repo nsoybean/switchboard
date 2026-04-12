@@ -536,7 +536,13 @@ export function SessionSidebar({
 
       {/* History dialog */}
       <Dialog open={effectiveHistoryOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="flex max-h-[80vh] w-[min(820px,92vw)] max-w-none flex-col overflow-hidden">
+        <DialogContent
+          className="flex max-h-[80vh] flex-col overflow-hidden"
+          style={{
+            width: "min(800px, 88vw)",
+            maxWidth: "min(800px, 88vw)",
+          }}
+        >
           <DialogHeader>
             <DialogTitle>History</DialogTitle>
             <DialogDescription>
