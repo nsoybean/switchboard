@@ -1,13 +1,8 @@
-import { useState } from "react";
 import { FolderTree } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
-import { CreateBranchDialog } from "../git/CreateBranchDialog";
-import { getBranchPrefix } from "@/lib/branches";
 import type { GitState, GitActions } from "@/hooks/useGitState";
-import type { Session } from "../../state/types";
-import type { AgentType } from "../../state/types";
 
 export type WorkspaceTab = "files" | "changes";
 
@@ -25,7 +20,6 @@ interface WorkspacePanelProps {
   activeTab: WorkspaceTab;
   context: WorkspaceContext | null;
   git: GitState & GitActions;
-  session?: Session | null;
   githubToken?: string | null;
   onFileSelect?: (filePath: string) => void;
   onTabChange: (tab: WorkspaceTab) => void;
@@ -55,18 +49,10 @@ export function WorkspacePanel({
   activeTab,
   context,
   git,
-  session,
   githubToken,
   onFileSelect,
   onTabChange,
 }: WorkspacePanelProps) {
-  const [createBranchOpen, setCreateBranchOpen] = useState(false);
-
-  const hasRoot = context?.availability === "ready" && !!context.rootPath;
-  const branchPrefix = context?.kind === "session" && session?.agent
-    ? getBranchPrefix(session.agent as AgentType)
-    : undefined;
-
   const renderUnavailableState = (currentContext: WorkspaceContext, tab: WorkspaceTab) => {
     if (currentContext.availability === "resolving") {
       return (
@@ -161,19 +147,6 @@ export function WorkspacePanel({
           </>
         )}
       </div>
-
-      {hasRoot ? (
-        <CreateBranchDialog
-          open={createBranchOpen}
-          onOpenChange={setCreateBranchOpen}
-          defaultBranchPrefix={branchPrefix}
-          pending={git.branchActionPending}
-          onCreate={async (branchName) => {
-            await git.createBranch(branchName);
-            setCreateBranchOpen(false);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

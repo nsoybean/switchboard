@@ -138,8 +138,12 @@ export function useGitState({
       await toast.promise(
         (async () => {
           await gitCommands.createBranch(cwd, branchName);
-          const status = await gitCommands.status(cwd);
+          const [status, nextBranches] = await Promise.all([
+            gitCommands.status(cwd),
+            gitCommands.listBranches(cwd).catch(() => branches),
+          ]);
           setBranch(status.branch);
+          setBranches(nextBranches);
           setFiles(status.files);
           setStats(status.stats);
           if (sessionId) {
@@ -155,7 +159,7 @@ export function useGitState({
     } finally {
       setBranchActionPending(false);
     }
-  }, [branchActionPending, cwd, sessionId, onSessionBranchChange]);
+  }, [branchActionPending, branches, cwd, sessionId, onSessionBranchChange]);
 
   const stageFiles = useCallback(async (paths: string[]) => {
     await gitCommands.stage(cwd, paths);
