@@ -56,6 +56,8 @@ export const gitCommands = {
     invoke<GitStatusResult>("git_status", { cwd }),
   listBranches: (cwd: string) =>
     invoke<GitBranchInfo[]>("git_list_branches", { cwd }),
+  listRemoteBranches: (cwd: string) =>
+    invoke<GitBranchInfo[]>("git_list_remote_branches", { cwd }),
   diff: (cwd: string, file?: string, staged = false) =>
     invoke<string>("git_diff", { cwd, file, staged }),
   stage: (cwd: string, files: string[]) =>

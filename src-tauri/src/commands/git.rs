@@ -173,6 +173,30 @@ pub fn git_list_branches(cwd: String) -> Result<Vec<GitBranchInfo>, String> {
     Ok(branches)
 }
 
+/// List remote origin branches for a directory, using PR-safe branch names.
+#[tauri::command]
+pub fn git_list_remote_branches(cwd: String) -> Result<Vec<GitBranchInfo>, String> {
+    let mut seen = HashSet::new();
+    let mut branches = Vec::new();
+
+    let remote_output = run_git(
+        &cwd,
+        &[
+            "for-each-ref",
+            "--format=%(refname:lstrip=3)",
+            "refs/remotes/origin",
+        ],
+    )?;
+
+    for line in remote_output.lines() {
+        push_branch(&mut branches, &mut seen, line, false, true);
+    }
+
+    branches.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Ok(branches)
+}
+
 fn parse_diff_stats(output: &str) -> DiffStats {
     let mut stats = DiffStats {
         additions: 0,
