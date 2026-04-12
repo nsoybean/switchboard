@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-shell";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import {
@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ExternalLink, Copy, Check } from "lucide-react";
-import { gitCommands } from "../../lib/tauri-commands";
+import { BranchPicker } from "./BranchPicker";
+import { gitCommands, type GitBranchInfo } from "../../lib/tauri-commands";
 
 interface CreatePrDialogProps {
   open: boolean;
@@ -31,10 +32,50 @@ export function CreatePrDialog({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [base, setBase] = useState("main");
+  const [baseBranches, setBaseBranches] = useState<GitBranchInfo[]>([]);
+  const [baseBranchesLoading, setBaseBranchesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prUrl, setPrUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || prUrl) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadBaseBranches = async () => {
+      setBaseBranchesLoading(true);
+      try {
+        const branches = await gitCommands.listRemoteBranches(cwd);
+        if (cancelled) return;
+
+        setBaseBranches(branches);
+        setBase((current) => {
+          if (branches.some((branch) => branch.name === current)) {
+            return current;
+          }
+          return branches[0]?.name ?? current;
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setBaseBranches([]);
+        setError((current) => current ?? `Failed to load remote branches: ${String(err)}`);
+      } finally {
+        if (!cancelled) {
+          setBaseBranchesLoading(false);
+        }
+      }
+    };
+
+    void loadBaseBranches();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cwd, isOpen, prUrl]);
 
   const handleSubmit = async () => {
     if (!title.trim()) {
@@ -81,6 +122,8 @@ export function CreatePrDialog({
     setTitle("");
     setBody("");
     setBase("main");
+    setBaseBranches([]);
+    setBaseBranchesLoading(false);
     setError(null);
     setPrUrl(null);
     setCopied(false);
@@ -161,11 +204,23 @@ export function CreatePrDialog({
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Base Branch
               </label>
-              <Input
-                value={base}
-                onChange={(e) => setBase(e.target.value)}
-                placeholder="main"
-              />
+              {baseBranches.length > 0 || baseBranchesLoading ? (
+                <BranchPicker
+                  branches={baseBranches}
+                  loading={baseBranchesLoading}
+                  value={base}
+                  onSelect={setBase}
+                  showCurrentBadge={false}
+                  triggerClassName="h-9 justify-between px-3 text-sm"
+                  emptyLabel="No remote branches available."
+                />
+              ) : (
+                <Input
+                  value={base}
+                  onChange={(e) => setBase(e.target.value)}
+                  placeholder="main"
+                />
+              )}
             </div>
 
             {error && (

@@ -46,6 +46,8 @@ interface ProjectSessionGroup {
   sessions: Session[];
 }
 
+const PROJECT_SESSION_PREVIEW_LIMIT = 5;
+
 function getSessionProjectPath(session: Session): string {
   return session.workspace.repoRoot ?? session.cwd;
 }
@@ -280,9 +282,7 @@ export function SessionSidebar({
           {projectGroups.map((group) => {
             const isActiveProject = group.path === state.projectPath;
             const isCollapsed = collapsedProjects[group.path] ?? false;
-            const liveSessions = group.sessions.filter(
-              (session) => getSessionRailBucket(session.status) !== "history",
-            );
+            const visibleSessions = group.sessions.slice(0, PROJECT_SESSION_PREVIEW_LIMIT);
 
             return (
               <div key={group.path}>
@@ -365,41 +365,61 @@ export function SessionSidebar({
 
                 {/* Session list */}
                 {!isCollapsed && (
-                  <div className="pb-2">
-                    {liveSessions.length > 0 ? (
+                  <div className="pb-2 pl-4">
+                    {visibleSessions.length > 0 ? (
                       <div className="flex flex-col gap-px px-1">
-                        {liveSessions.map((session, i) => (
-                          <SessionCard
-                            key={session.id}
-                            session={session}
-                            isActive={effectiveSelectedSessionId === session.id}
-                            index={i + 1}
-                            timestampLabel={formatCompactRelativeTime(
-                              session.createdAt,
-                              now,
-                            )}
-                            timestampTitle={formatTimestampTitle(session.createdAt)}
-                            onStop={
-                              session.status === "running" ||
-                              session.status === "idle" ||
-                              session.status === "needs-input"
-                                ? () => void onStopSession?.(session.id)
-                                : undefined
-                            }
-                            onRename={() => {
-                              setRenameTarget(session);
-                              setRenameValue(session.label);
-                            }}
-                            onDelete={() => setDeleteTarget(session)}
-                            onClick={() => {
-                              void handleSelectSession(session);
-                            }}
-                          />
-                        ))}
+                        {visibleSessions.map((session) => {
+                          const isHistorySession =
+                            getSessionRailBucket(session.status) === "history";
+                          const canResume =
+                            isHistorySession &&
+                            (session.agent === "claude-code" ||
+                              session.agent === "codex");
+
+                          return (
+                            <SessionCard
+                              key={session.id}
+                              session={session}
+                              isActive={effectiveSelectedSessionId === session.id}
+                              timestampLabel={formatCompactRelativeTime(
+                                session.createdAt,
+                                now,
+                              )}
+                              timestampTitle={formatTimestampTitle(session.createdAt)}
+                              onResume={
+                                canResume && onResumeSession
+                                  ? () => {
+                                      void handleResumeSessionClick(session);
+                                    }
+                                  : undefined
+                              }
+                              onStop={
+                                !isHistorySession &&
+                                (session.status === "running" ||
+                                  session.status === "idle" ||
+                                  session.status === "needs-input")
+                                  ? () => void onStopSession?.(session.id)
+                                  : undefined
+                              }
+                              onRename={() => {
+                                setRenameTarget(session);
+                                setRenameValue(session.label);
+                              }}
+                              onDelete={() => setDeleteTarget(session)}
+                              onClick={() => {
+                                if (isHistorySession) {
+                                  void handleViewSession(session);
+                                  return;
+                                }
+                                void handleSelectSession(session);
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="px-4 py-2 text-[11px] text-muted-foreground">
-                        No live sessions
+                        No sessions yet
                       </div>
                     )}
                   </div>
@@ -516,7 +536,13 @@ export function SessionSidebar({
 
       {/* History dialog */}
       <Dialog open={effectiveHistoryOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="flex max-h-[80vh] w-[min(820px,92vw)] max-w-none flex-col overflow-hidden">
+        <DialogContent
+          className="flex max-h-[80vh] flex-col overflow-hidden"
+          style={{
+            width: "min(800px, 88vw)",
+            maxWidth: "min(800px, 88vw)",
+          }}
+        >
           <DialogHeader>
             <DialogTitle>History</DialogTitle>
             <DialogDescription>

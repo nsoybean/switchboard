@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
-  ArrowRight,
   ExternalLink,
   GitPullRequest,
   LayoutGrid,
@@ -71,7 +70,6 @@ export function Titlebar({
   const projectPathLabel = projectPath
     ? projectPath.split("/").slice(-2).join("/")
     : null;
-  const [targetBranch, setTargetBranch] = useState("origin/main");
 
   useEffect(() => {
     // Check initial fullscreen state
@@ -153,7 +151,7 @@ export function Titlebar({
         </Tooltip>
       </div>
 
-      {/* Branch → target + Create PR */}
+      {/* Branch + Create PR */}
       {git?.branch && (
         <div className="flex items-center gap-2 text-[11px]">
           <BranchPicker
@@ -167,20 +165,7 @@ export function Titlebar({
             onCreateBranch={onCreateBranch}
           />
 
-          <ArrowRight className="size-3 shrink-0 text-muted-foreground" />
-
-          <BranchPicker
-            branches={git.branches}
-            loading={git.branchesLoading && git.branches.length === 0}
-            value={targetBranch}
-            disabled={false}
-            showIcon={false}
-            showCurrentBadge={false}
-            triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-accent/50 hover:text-foreground"
-            createLabel="Create branch..."
-            onSelect={(branchName) => setTargetBranch(branchName)}
-            onCreateBranch={onCreateBranch}
-          />
+          {/* Target branch picker hidden for now. The PR dialog owns base-branch selection. */}
 
           <Separator orientation="vertical" className="h-4" />
           <Tooltip>

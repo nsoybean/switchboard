@@ -3,6 +3,7 @@ import {
   Eye,
   FileText,
   Plus,
+  Play,
   X,
 } from "lucide-react";
 import {
@@ -649,6 +650,10 @@ function PaneLeafView({
     surfacesById.get(leaf.tabIds[0]) ??
     null;
   const canSplit = leaf.tabIds.length > 1 && Boolean(activeSurface);
+  const canResumeActiveTranscript =
+    activeSurface?.kind === "transcript" &&
+    activeSurface.session.agent !== "bash" &&
+    Boolean(onResumeTranscript);
 
   return (
     <div
@@ -718,6 +723,19 @@ function PaneLeafView({
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5 px-2">
+            {canResumeActiveTranscript ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1.5 px-2 text-[11px]"
+                onClick={() => onResumeTranscript?.()}
+              >
+                <Play className="size-3.5" />
+                Resume
+              </Button>
+            ) : null}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button

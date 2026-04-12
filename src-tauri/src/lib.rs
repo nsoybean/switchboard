@@ -60,6 +60,7 @@ pub fn run() {
             commands::worktree::list_worktrees,
             commands::git::git_status,
             commands::git::git_list_branches,
+            commands::git::git_list_remote_branches,
             commands::git::git_diff,
             commands::git::git_stage,
             commands::git::git_unstage,
