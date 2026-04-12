@@ -13,6 +13,7 @@ import {
   type WorkspaceContext,
   type WorkspaceTab,
 } from "../workspace/WorkspacePanel";
+import { CreateBranchDialog } from "../git/CreateBranchDialog";
 import { CreatePrDialog } from "../git/CreatePrDialog";
 import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useAgentHooks } from "../../hooks/useClaudeHooks";
@@ -148,6 +149,7 @@ export function AppLayout() {
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
+  const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [createPrOpen, setCreatePrOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1101,6 +1103,9 @@ export function AppLayout() {
   useAgentHooks(state.sessions, dispatch);
 
   const hasWorkspaceRoot = workspaceContext?.availability === "ready" && !!workspaceContext.rootPath;
+  const createBranchPrefix = workspaceContext?.kind === "session" && selectedSession?.agent
+    ? getBranchPrefix(selectedSession.agent)
+    : undefined;
   const git = useGitState({
     cwd: hasWorkspaceRoot ? workspaceContext!.rootPath! : "",
     visible: hasWorkspaceRoot && inspectorOpen,
@@ -1157,7 +1162,6 @@ export function AppLayout() {
       activeTab={workspaceTab}
       context={workspaceContext}
       git={git}
-      session={selectedSession}
       githubToken={state.githubToken}
       onFileSelect={setOpenFilePath}
       onTabChange={setWorkspaceTab}
@@ -1206,7 +1210,7 @@ export function AppLayout() {
         git={hasWorkspaceRoot ? git : undefined}
         githubToken={state.githubToken}
         cwd={workspaceContext?.rootPath}
-        onCreateBranch={() => {/* handled by WorkspacePanel's CreateBranchDialog */}}
+        onCreateBranch={() => setCreateBranchOpen(true)}
         onCreatePr={() => setCreatePrOpen(true)}
         updateVersion={availableUpdate?.version ?? null}
         checkingForUpdates={checkingForUpdates}
@@ -1387,6 +1391,20 @@ export function AppLayout() {
         onClose={() => setDialogOpen(false)}
         onSubmit={handleNewSession}
       />
+
+      {/* Create Branch Dialog */}
+      {hasWorkspaceRoot ? (
+        <CreateBranchDialog
+          open={createBranchOpen}
+          onOpenChange={setCreateBranchOpen}
+          defaultBranchPrefix={createBranchPrefix}
+          pending={git.branchActionPending}
+          onCreate={async (branchName) => {
+            await git.createBranch(branchName);
+            setCreateBranchOpen(false);
+          }}
+        />
+      ) : null}
 
       {/* Create PR Dialog */}
       {state.githubToken && workspaceContext?.rootPath && (
