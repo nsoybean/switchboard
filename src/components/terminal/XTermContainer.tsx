@@ -44,15 +44,15 @@ const LIGHT_THEME = {
   brightBlue: "#0366d6",
   brightCyan: "#0b7285",
   brightGreen: "#1a7f37",
-  brightMagenta: "#8250df",
+  brightMagenta: "#7c3aed",
   brightRed: "#cf222e",
-  brightWhite: "#3b3b3b",
+  brightWhite: "#d4d4d4",
   brightYellow: "#9a6700",
   cyan: "#0b6e6e",
   green: "#116329",
-  magenta: "#6f42c1",
+  magenta: "#7c3aed",
   red: "#b31d28",
-  white: "#4b4b4b",
+  white: "#a0a0a0",
   yellow: "#845306",
 };
 
@@ -216,13 +216,15 @@ function XTermContainerComponent({
       allowTransparency: true,
       convertEol: true,
       cursorBlink: true,
-      fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
-      fontSize: 13.5,
+      fontFamily: isDark
+        ? '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace'
+        : 'Menlo, Monaco, "SF Mono", "JetBrains Mono", monospace',
+      fontSize: isDark ? 13.5 : 14,
       fontWeight: isDark ? "normal" : "bold",
       fontWeightBold: "bold",
       lineHeight: 1.3,
       macOptionIsMeta: true,
-      minimumContrastRatio: isDark ? 1 : 7,
+      minimumContrastRatio: isDark ? 1 : 1,
       theme: isDark ? DARK_THEME : LIGHT_THEME,
     });
 
