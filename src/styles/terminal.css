@@ -26,6 +26,13 @@
   opacity: 1 !important;
 }
 
+/* Light mode: subpixel antialiasing makes text appear thicker on macOS.
+   We can't use fontWeight "bold" (breaks column calculations) so this
+   is the next best thing for perceived weight. */
+:root:not(.dark) .xterm canvas {
+  -webkit-font-smoothing: subpixel-antialiased !important;
+}
+
 .xterm-viewport::-webkit-scrollbar {
   width: 6px;
 }

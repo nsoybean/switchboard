@@ -218,7 +218,7 @@ function XTermContainerComponent({
       cursorBlink: true,
       fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
       fontSize: 13.5,
-      fontWeight: isDark ? "normal" : "bold",
+      fontWeight: "normal",
       fontWeightBold: "bold",
       lineHeight: 1.3,
       macOptionIsMeta: true,
@@ -335,41 +335,53 @@ function XTermContainerComponent({
       }
     };
 
-    // Debounce PTY resize IPC to avoid SIGWINCH storms during tile drags.
-    // fitAddon.fit() runs immediately so xterm matches the container, but
-    // the backend resize is debounced so the child process only re-renders
-    // once the user stops dragging.
+    // Batch fit + PTY resize together in a single rAF so xterm.js and
+    // the PTY always update atomically — no window where they disagree.
     let lastCols = 0;
     let lastRows = 0;
-    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const debouncedPtyResize = () => {
-      const cols = Math.max(20, terminal.cols);
-      const rows = Math.max(8, terminal.rows);
-
-      if (cols === lastCols && rows === lastRows) {
-        return;
-      }
-
-      lastCols = cols;
-      lastRows = rows;
-
-      if (resizeTimer) {
-        clearTimeout(resizeTimer);
-      }
-
-      resizeTimer = setTimeout(() => {
-        void invoke("resize_terminal", { tileId, cols, rows });
-      }, 150);
-    };
+    let resizeRaf = 0;
 
     const syncTerminalSize = () => {
       if (!sessionActiveRef.current) {
         return;
       }
 
-      fitTerminal();
-      debouncedPtyResize();
+      if (resizeRaf) {
+        cancelAnimationFrame(resizeRaf);
+      }
+
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        fitTerminal();
+
+        const cols = Math.max(20, terminal.cols);
+        const rows = Math.max(8, terminal.rows);
+
+        if (cols !== lastCols || rows !== lastRows) {
+          lastCols = cols;
+          lastRows = rows;
+          void invoke("resize_terminal", { tileId, cols, rows });
+        }
+      });
+    };
+
+    // Flush any pending resize immediately so the PTY has the correct
+    // column count before it processes incoming keystrokes.
+    const flushPendingResize = () => {
+      if (resizeRaf) {
+        cancelAnimationFrame(resizeRaf);
+        resizeRaf = 0;
+        fitTerminal();
+
+        const cols = Math.max(20, terminal.cols);
+        const rows = Math.max(8, terminal.rows);
+
+        if (cols !== lastCols || rows !== lastRows) {
+          lastCols = cols;
+          lastRows = rows;
+          void invoke("resize_terminal", { tileId, cols, rows });
+        }
+      }
     };
 
     const disposables = [
@@ -378,6 +390,7 @@ function XTermContainerComponent({
           return;
         }
 
+        flushPendingResize();
         void invoke("write_terminal", { tileId, data }).catch((error) => {
           console.error("Failed to write terminal input", error);
         });
@@ -434,8 +447,8 @@ function XTermContainerComponent({
     return () => {
       sessionActiveRef.current = false;
       window.clearTimeout(startupTimer);
-      if (resizeTimer) {
-        clearTimeout(resizeTimer);
+      if (resizeRaf) {
+        cancelAnimationFrame(resizeRaf);
       }
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
