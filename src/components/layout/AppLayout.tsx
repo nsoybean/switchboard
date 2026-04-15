@@ -1294,6 +1294,7 @@ export function AppLayout() {
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
         onWorkspaceShellModeChange={setWorkspaceShellMode}
         projectPath={state.projectPath}
+        hasActiveSession={liveSessions.length > 0}
         git={hasWorkspaceRoot ? git : undefined}
         githubToken={state.githubToken}
         cwd={workspaceContext?.rootPath}
@@ -1349,7 +1350,8 @@ export function AppLayout() {
                   liveSessions={liveSessions}
                   transcriptSession={resolvedViewingSession}
                   openFilePath={openFilePath}
-                  onNewSession={() => setDialogOpen(true)}
+                  projectPath={state.projectPath}
+                  onInlineNewSession={handleNewSession}
                   onSelectLiveSession={(sessionId) =>
                     dispatch({ type: "SET_ACTIVE", id: sessionId })
                   }
@@ -1372,7 +1374,7 @@ export function AppLayout() {
               )}
             </div>
 
-            {state.projectPath && inspectorOpen ? (
+            {state.projectPath && inspectorOpen && hasWorkspaceRoot ? (
               <>
                 <div
                   role="separator"
@@ -1425,7 +1427,7 @@ export function AppLayout() {
               </div>
             ) : null}
 
-            {state.projectPath ? (
+            {state.projectPath && hasWorkspaceRoot ? (
               <div
                 className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-1.5 pl-0.5 transition-[opacity,transform] duration-150 ${
                   inspectorOpen
