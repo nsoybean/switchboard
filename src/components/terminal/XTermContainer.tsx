@@ -216,11 +216,9 @@ function XTermContainerComponent({
       allowTransparency: true,
       convertEol: true,
       cursorBlink: true,
-      fontFamily: isDark
-        ? '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace'
-        : 'Menlo, Monaco, "SF Mono", "JetBrains Mono", monospace',
-      fontSize: isDark ? 13.5 : 14,
-      fontWeight: isDark ? "normal" : "bold",
+      fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
+      fontSize: 13.5,
+      fontWeight: "normal",
       fontWeightBold: "bold",
       lineHeight: 1.3,
       macOptionIsMeta: true,
@@ -404,12 +402,51 @@ function XTermContainerComponent({
     });
     resizeObserverRef.current.observe(host);
 
-    const startupTimer = window.setTimeout(() => {
-      fitTerminal();
-      // Double-fit: first fit may calculate wrong dimensions if container
-      // hasn't fully settled after layout changes (tab switch, split).
-      requestAnimationFrame(() => fitTerminal());
+    // Wait for the container size to stabilize before spawning the PTY
+    // so the child process gets accurate column/row dimensions on its
+    // first read.  We poll fitAddon until two consecutive frames agree
+    // on the same cols/rows (or bail after a timeout).
+    let stabilityTimer = 0;
+    let stabilityRaf = 0;
 
+    const waitForStableSize = (
+      onStable: (cols: number, rows: number) => void,
+    ) => {
+      let prevCols = 0;
+      let prevRows = 0;
+      let matchCount = 0;
+      const maxAttempts = 15; // ~250ms at 60fps
+      let attempts = 0;
+
+      const check = () => {
+        fitTerminal();
+        const cols = Math.max(20, terminal.cols);
+        const rows = Math.max(8, terminal.rows);
+
+        if (cols === prevCols && rows === prevRows) {
+          matchCount++;
+        } else {
+          matchCount = 0;
+        }
+
+        prevCols = cols;
+        prevRows = rows;
+        attempts++;
+
+        if (matchCount >= 2 || attempts >= maxAttempts) {
+          onStable(cols, rows);
+        } else {
+          stabilityRaf = requestAnimationFrame(check);
+        }
+      };
+
+      // Give the layout one frame to settle before starting checks.
+      stabilityTimer = window.setTimeout(() => {
+        stabilityRaf = requestAnimationFrame(check);
+      }, 20);
+    };
+
+    waitForStableSize((stableCols, stableRows) => {
       void invoke<boolean>("terminal_exists", { tileId })
         .then(async (exists) => {
           if (exists) {
@@ -419,7 +456,9 @@ function XTermContainerComponent({
             }
 
             sessionActiveRef.current = true;
-            await syncTerminalSize();
+            lastCols = stableCols;
+            lastRows = stableRows;
+            void invoke("resize_terminal", { tileId, cols: stableCols, rows: stableRows });
             terminal.focus();
             return;
           }
@@ -427,8 +466,8 @@ function XTermContainerComponent({
           await invoke<{ sessionId: string }>("create_terminal", {
             request: {
               tileId,
-              cols: Math.max(20, terminal.cols),
-              rows: Math.max(8, terminal.rows),
+              cols: stableCols,
+              rows: stableRows,
               command: command || null,
               args,
               startDir: cwd ?? null,
@@ -437,18 +476,11 @@ function XTermContainerComponent({
           });
 
           sessionActiveRef.current = true;
+          lastCols = stableCols;
+          lastRows = stableRows;
           onStartRef.current?.();
           terminal.focus();
-          // Force-fit and resize so the PTY picks up correct
-          // dimensions as early as possible.
-          fitTerminal();
-          {
-            const cols = Math.max(20, terminal.cols);
-            const rows = Math.max(8, terminal.rows);
-            lastCols = cols;
-            lastRows = rows;
-            void invoke("resize_terminal", { tileId, cols, rows });
-          }
+
           // The child process (e.g. Claude Code) queries terminal
           // dimensions during its own startup which races with
           // layout settling.  Send a follow-up resize after the
@@ -476,11 +508,12 @@ function XTermContainerComponent({
           terminal.writeln("");
           terminal.writeln(`\u001b[31mFailed to launch terminal: ${String(error)}\u001b[0m`);
         });
-    }, 40);
+    });
 
     return () => {
       sessionActiveRef.current = false;
-      window.clearTimeout(startupTimer);
+      window.clearTimeout(stabilityTimer);
+      cancelAnimationFrame(stabilityRaf);
       if (resizeRaf) {
         cancelAnimationFrame(resizeRaf);
       }
