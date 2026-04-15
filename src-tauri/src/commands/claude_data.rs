@@ -381,6 +381,11 @@ pub fn get_first_prompt_for_session(session_id: String) -> Result<Option<String>
 }
 
 #[tauri::command]
+pub fn claude_session_file_exists(session_id: String) -> bool {
+    find_claude_session_file(&session_id).is_some()
+}
+
+#[tauri::command]
 pub fn get_claude_session_transcript(
     session_id: String,
 ) -> Result<Vec<SessionTranscriptEvent>, String> {

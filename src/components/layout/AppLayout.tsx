@@ -864,6 +864,18 @@ export function AppLayout() {
         void syncCodexResumeTarget(session);
       }
 
+      // Auto-clean empty Claude sessions that never produced a conversation.
+      if (session?.agent === "claude-code") {
+        void invoke<boolean>("claude_session_file_exists", {
+          sessionId: session.resumeTargetId ?? sessionId,
+        }).then((exists) => {
+          if (!exists) {
+            void invoke("delete_session", { id: sessionId }).catch(() => {});
+            dispatch({ type: "REMOVE_SESSION", id: sessionId });
+          }
+        }).catch(() => {});
+      }
+
       void invoke("close_terminal", { tileId: sessionId }).catch(() => {
         // Terminal records can already be gone if the session was stopped manually.
       });

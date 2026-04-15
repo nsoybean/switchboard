@@ -48,6 +48,7 @@ pub fn run() {
             commands::claude_data::get_claude_sessions,
             commands::claude_data::get_claude_history,
             commands::claude_data::get_claude_session_transcript,
+            commands::claude_data::claude_session_file_exists,
             commands::claude_data::delete_claude_session,
             commands::claude_data::get_first_prompt_for_session,
             commands::codex_data::get_codex_sessions,

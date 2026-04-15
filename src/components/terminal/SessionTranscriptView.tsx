@@ -68,8 +68,14 @@ export function SessionTranscriptView({
         }
       } catch (err) {
         if (!cancelled) {
-          setError(String(err));
-          setLoading(false);
+          const message = String(err);
+          if (message.includes("Could not find") || message.includes("session file")) {
+            setEvents([]);
+            setLoading(false);
+          } else {
+            setError(message);
+            setLoading(false);
+          }
         }
       }
     }
@@ -117,6 +123,10 @@ export function SessionTranscriptView({
         ) : error ? (
           <div className="flex h-full items-center justify-center px-6 text-sm text-destructive">
             {error}
+          </div>
+        ) : events.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            No messages in this session
           </div>
         ) : (
           <TranscriptTimeline events={events} />
