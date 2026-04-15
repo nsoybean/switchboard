@@ -439,8 +439,8 @@ function XTermContainerComponent({
           sessionActiveRef.current = true;
           onStartRef.current?.();
           terminal.focus();
-          // Sync size immediately (not via rAF) so the PTY has the
-          // correct dimensions before the child process queries them.
+          // Force-fit and resize so the PTY picks up correct
+          // dimensions as early as possible.
           fitTerminal();
           {
             const cols = Math.max(20, terminal.cols);
@@ -449,18 +449,28 @@ function XTermContainerComponent({
             lastRows = rows;
             void invoke("resize_terminal", { tileId, cols, rows });
           }
-          // Belt-and-suspenders: if the container is still settling
-          // from initial app layout, catch it with a delayed re-sync.
-          requestAnimationFrame(() => {
+          // The child process (e.g. Claude Code) queries terminal
+          // dimensions during its own startup which races with
+          // layout settling.  Send a follow-up resize after the
+          // child has had time to initialize so it picks up
+          // correct dimensions via SIGWINCH.
+          const postCreationSync = () => {
+            if (!sessionActiveRef.current) return;
             fitTerminal();
             const cols = Math.max(20, terminal.cols);
             const rows = Math.max(8, terminal.rows);
             if (cols !== lastCols || rows !== lastRows) {
               lastCols = cols;
               lastRows = rows;
-              void invoke("resize_terminal", { tileId, cols, rows });
             }
-          });
+            // Always re-send so the child gets SIGWINCH even if
+            // dimensions haven't changed — it may have read stale
+            // values during its own init.
+            void invoke("resize_terminal", { tileId, cols, rows });
+          };
+          // Stagger re-syncs to cover font-load and child-init timing.
+          setTimeout(postCreationSync, 150);
+          setTimeout(postCreationSync, 500);
         })
         .catch((error) => {
           terminal.writeln("");
