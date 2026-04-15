@@ -199,6 +199,41 @@ pub fn delete_claude_session(session_id: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn delete_claude_sessions_batch(session_ids: Vec<String>) -> Result<(), String> {
+    let ids_set: std::collections::HashSet<&str> =
+        session_ids.iter().map(|s| s.as_str()).collect();
+
+    for session_id in &session_ids {
+        if let Some(session_file) = find_claude_session_file(session_id) {
+            if session_file.exists() {
+                let _ = fs::remove_file(&session_file);
+            }
+            let bundle_dir = session_file.with_extension("");
+            if bundle_dir.exists() {
+                let _ = fs::remove_dir_all(&bundle_dir);
+            }
+        }
+    }
+
+    if let Some(history_path) = claude_history_path() {
+        rewrite_jsonl_file(&history_path, |line| {
+            if line.trim().is_empty() {
+                return false;
+            }
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                return true;
+            };
+            let Some(sid) = value.get("sessionId").and_then(|v| v.as_str()) else {
+                return true;
+            };
+            !ids_set.contains(sid)
+        })?;
+    }
+
+    Ok(())
+}
+
 /// Parse a session JSONL file to extract the first user message and usage stats
 fn parse_session_summary(
     path: &PathBuf,

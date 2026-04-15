@@ -382,6 +382,66 @@ pub fn delete_codex_session(session_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn delete_codex_sessions_batch(session_ids: Vec<String>) -> Result<(), String> {
+    let ids_set: std::collections::HashSet<&str> =
+        session_ids.iter().map(|s| s.as_str()).collect();
+
+    // Build a single compound SQL statement for all sessions.
+    let mut sql = String::from("BEGIN IMMEDIATE;");
+    for session_id in &session_ids {
+        let escaped = escape_sql(session_id);
+        sql.push_str(&format!(
+            "UPDATE agent_job_items SET assigned_thread_id = NULL WHERE assigned_thread_id = '{escaped}';\
+             DELETE FROM logs WHERE thread_id = '{escaped}';\
+             DELETE FROM thread_spawn_edges WHERE parent_thread_id = '{escaped}' OR child_thread_id = '{escaped}';\
+             DELETE FROM threads WHERE id = '{escaped}';"
+        ));
+    }
+    sql.push_str("COMMIT;");
+    run_codex_statement(&sql)?;
+
+    for session_id in &session_ids {
+        if let Ok(path) = find_codex_transcript_path(session_id) {
+            if path.exists() {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
+
+    if let Some(history_path) = codex_history_path() {
+        rewrite_jsonl_file(&history_path, |line| {
+            if line.trim().is_empty() {
+                return false;
+            }
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                return true;
+            };
+            let Some(sid) = value.get("session_id").and_then(|v| v.as_str()) else {
+                return true;
+            };
+            !ids_set.contains(sid)
+        })?;
+    }
+
+    if let Some(index_path) = codex_session_index_path() {
+        rewrite_jsonl_file(&index_path, |line| {
+            if line.trim().is_empty() {
+                return false;
+            }
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                return true;
+            };
+            let Some(sid) = value.get("id").and_then(|v| v.as_str()) else {
+                return true;
+            };
+            !ids_set.contains(sid)
+        })?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_codex_session_transcript(
     session_id: String,
 ) -> Result<Vec<SessionTranscriptEvent>, String> {

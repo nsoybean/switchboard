@@ -81,3 +81,13 @@ pub fn delete_session_metadata(session_id: String) -> Result<(), String> {
     metadata.deleted = true;
     write_store(&store)
 }
+
+#[tauri::command]
+pub fn delete_session_metadata_batch(session_ids: Vec<String>) -> Result<(), String> {
+    let mut store = read_store()?;
+    for session_id in session_ids {
+        let metadata = store.sessions.entry(session_id).or_default();
+        metadata.deleted = true;
+    }
+    write_store(&store)
+}

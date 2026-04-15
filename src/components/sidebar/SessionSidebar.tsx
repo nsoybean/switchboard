@@ -36,6 +36,7 @@ interface SessionSidebarProps {
   onStopSession?: (sessionId: string) => Promise<void>;
   onRenameSession?: (session: Session, label: string) => Promise<void>;
   onDeleteSession?: (session: Session) => Promise<void>;
+  onDeleteSessionsBatch?: (sessions: Session[]) => Promise<void>;
   selectedSessionId?: string | null;
   historyOpen?: boolean;
   onHistoryOpenChange?: (open: boolean) => void;
@@ -81,6 +82,7 @@ export function SessionSidebar({
   onStopSession,
   onRenameSession,
   onDeleteSession,
+  onDeleteSessionsBatch,
   selectedSessionId,
   historyOpen,
   onHistoryOpenChange,
@@ -302,21 +304,25 @@ export function SessionSidebar({
   }, [allVisibleHistoryIds]);
 
   const handleDeleteSelected = useCallback(async () => {
-    if (!onDeleteSession || selectedHistoryIds.size === 0) return;
+    if (selectedHistoryIds.size === 0) return;
     setDeletingSelected(true);
     const sessions = Object.values(state.sessions).filter((s) =>
       selectedHistoryIds.has(s.id),
     );
-    for (const session of sessions) {
-      try {
-        await onDeleteSession(session);
-      } catch {
-        // Continue deleting remaining sessions.
+    try {
+      if (onDeleteSessionsBatch) {
+        await onDeleteSessionsBatch(sessions);
+      } else if (onDeleteSession) {
+        for (const session of sessions) {
+          await onDeleteSession(session).catch(() => {});
+        }
       }
+    } catch {
+      // Errors are toasted by the parent handler.
     }
     setSelectedHistoryIds(new Set());
     setDeletingSelected(false);
-  }, [onDeleteSession, selectedHistoryIds, state.sessions]);
+  }, [onDeleteSession, onDeleteSessionsBatch, selectedHistoryIds, state.sessions]);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-card">

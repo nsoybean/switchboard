@@ -1004,20 +1004,16 @@ export function AppLayout() {
           });
         }
 
-        if (session.agent === "claude-code") {
-          if (!metadataSessionId) {
-            throw new Error("Could not resolve Claude session id.");
+        if (metadataSessionId) {
+          if (session.agent === "claude-code") {
+            await invoke("delete_claude_session", {
+              sessionId: metadataSessionId,
+            }).catch(() => {});
+          } else if (session.agent === "codex") {
+            await invoke("delete_codex_session", {
+              sessionId: metadataSessionId,
+            }).catch(() => {});
           }
-          await invoke("delete_claude_session", {
-            sessionId: metadataSessionId,
-          });
-        } else if (session.agent === "codex") {
-          if (!metadataSessionId) {
-            throw new Error("Could not resolve Codex session id.");
-          }
-          await invoke("delete_codex_session", {
-            sessionId: metadataSessionId,
-          });
         }
 
         if (localSession) {
@@ -1036,6 +1032,69 @@ export function AppLayout() {
         dispatch({ type: "SET_PREVIEW_FILE", path: null });
       } catch (err) {
         toast.error("Failed to delete session", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch, state.sessions, syncCodexResumeTarget],
+  );
+
+  const handleDeleteSessionsBatch = useCallback(
+    async (sessions: Session[]) => {
+      if (sessions.length === 0) return;
+
+      // Resolve metadata IDs and group by agent type.
+      const claudeIds: string[] = [];
+      const codexIds: string[] = [];
+      const metadataIds: string[] = [];
+      const switchboardIds: string[] = [];
+
+      for (const session of sessions) {
+        const localSession = state.sessions[session.id];
+        const metadataSessionId =
+          getDurableHistorySessionId(localSession ?? session) ??
+          (localSession?.agent === "codex"
+            ? await syncCodexResumeTarget(localSession).catch(() => null)
+            : null);
+
+        if (localSession) {
+          await invoke("close_terminal", { tileId: localSession.id }).catch(() => {});
+          switchboardIds.push(localSession.id);
+        }
+
+        if (metadataSessionId) {
+          metadataIds.push(metadataSessionId);
+          if (session.agent === "claude-code") {
+            claudeIds.push(metadataSessionId);
+          } else if (session.agent === "codex") {
+            codexIds.push(metadataSessionId);
+          }
+        }
+      }
+
+      try {
+        // Run agent-side batch deletes in parallel.
+        await Promise.all([
+          claudeIds.length > 0
+            ? invoke("delete_claude_sessions_batch", { sessionIds: claudeIds }).catch(() => {})
+            : null,
+          codexIds.length > 0
+            ? invoke("delete_codex_sessions_batch", { sessionIds: codexIds }).catch(() => {})
+            : null,
+          switchboardIds.length > 0
+            ? invoke("delete_sessions_batch", { ids: switchboardIds })
+            : null,
+          metadataIds.length > 0
+            ? invoke("delete_session_metadata_batch", { sessionIds: metadataIds }).catch(() => {})
+            : null,
+        ]);
+
+        for (const id of switchboardIds) {
+          dispatch({ type: "REMOVE_SESSION", id });
+        }
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      } catch (err) {
+        toast.error("Failed to delete sessions", {
           description: String(err),
         });
       }
@@ -1178,6 +1237,7 @@ export function AppLayout() {
       onStopSession={handleStopSession}
       onRenameSession={handleRenameSession}
       onDeleteSession={handleDeleteSession}
+      onDeleteSessionsBatch={handleDeleteSessionsBatch}
       selectedSessionId={selectedSessionId}
       historyOpen={historyOpen}
       onHistoryOpenChange={setHistoryOpen}
