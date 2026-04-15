@@ -28,6 +28,8 @@ export interface Session {
   id: string;
   agent: AgentType;
   label: string;
+  /** True when label was not set by user and should be replaced by first prompt */
+  isAutoLabel?: boolean;
   status: SessionStatus;
   resumeTargetId: string | null;
   worktreePath: string | null;

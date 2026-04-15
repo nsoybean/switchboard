@@ -1,6 +1,7 @@
 import { GitBranch, FolderOpen, Coins, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useTokenUsage } from "../../hooks/useTokenUsage";
 import { useAppState } from "../../state/context";
 import { formatTokens, formatCost } from "../../lib/pricing";
@@ -41,8 +42,8 @@ export function TerminalToolbar({
 
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b bg-background text-sm shrink-0">
-      <span className="max-w-[15ch] truncate font-semibold" title={session.label}>
-        {session.label}
+      <span className={cn("max-w-[15ch] truncate font-semibold", !session.label && "italic text-muted-foreground")} title={session.label || "New session"}>
+        {session.label || "New session"}
       </span>
       <Badge variant="secondary" className="text-[11px]">
         {AGENT_LABELS[session.agent] ?? session.agent}

@@ -490,6 +490,7 @@ export function AppLayout() {
     async (config: {
       agent: AgentType;
       label: string;
+      isAutoLabel: boolean;
       task: string;
       useWorktree: boolean;
       baseBranch: string | null;
@@ -503,7 +504,7 @@ export function AppLayout() {
 
       if (config.useWorktree) {
         try {
-          const slug = slugifyLabel(config.label);
+          const slug = slugifyLabel(config.label || `session-${Date.now().toString(36)}`);
           const branchName = `${getBranchPrefix(config.agent)}${slug}`;
           const info = await worktreeCommands.create(
             state.projectPath,
@@ -550,6 +551,7 @@ export function AppLayout() {
         id,
         agent: config.agent,
         label: config.label,
+        isAutoLabel: config.isAutoLabel,
         status: "idle",
         resumeTargetId,
         worktreePath,
@@ -1100,7 +1102,20 @@ export function AppLayout() {
     ],
   );
   useKeyboardShortcuts(shortcutHandlers);
-  useAgentHooks(state.sessions, dispatch);
+
+  const handleAutoLabel = useCallback(
+    async (sessionId: string, label: string) => {
+      const session = state.sessions[sessionId];
+      if (!session || !session.isAutoLabel) return;
+
+      const updated: Session = { ...session, label, isAutoLabel: false };
+      dispatch({ type: "RENAME_SESSION", id: sessionId, label });
+      await persistSession(updated);
+    },
+    [dispatch, persistSession, state.sessions],
+  );
+
+  useAgentHooks(state.sessions, dispatch, handleAutoLabel);
 
   const hasWorkspaceRoot = workspaceContext?.availability === "ready" && !!workspaceContext.rootPath;
   const createBranchPrefix = workspaceContext?.kind === "session" && selectedSession?.agent

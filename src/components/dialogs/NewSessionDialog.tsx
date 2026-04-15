@@ -25,6 +25,7 @@ interface NewSessionDialogProps {
   onSubmit: (config: {
     agent: AgentType;
     label: string;
+    isAutoLabel: boolean;
     task: string;
     useWorktree: boolean;
     baseBranch: string | null;
@@ -149,9 +150,11 @@ export function NewSessionDialog({
   };
 
   const handleSubmit = () => {
+    const trimmedLabel = label.trim();
     onSubmit({
       agent,
-      label: label.trim() || `${agent}-${Date.now().toString(36)}`,
+      label: trimmedLabel,
+      isAutoLabel: !trimmedLabel,
       task: task.trim(),
       useWorktree,
       baseBranch: useWorktree ? baseBranch : null,

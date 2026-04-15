@@ -345,6 +345,41 @@ pub fn get_claude_history() -> Result<Vec<ClaudeSessionSummary>, String> {
     Ok(entries)
 }
 
+/// Look up the first prompt (display text) for a Claude Code session from history.jsonl.
+#[tauri::command]
+pub fn get_first_prompt_for_session(session_id: String) -> Result<Option<String>, String> {
+    let history_path = dirs::home_dir()
+        .ok_or_else(|| "Could not determine home directory".to_string())?
+        .join(".claude")
+        .join("history.jsonl");
+
+    if !history_path.exists() {
+        return Ok(None);
+    }
+
+    let file = fs::File::open(&history_path).map_err(|e| format!("Open failed: {}", e))?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry: HistoryEntry = match serde_json::from_str(&line) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if entry.session_id.as_deref() == Some(session_id.as_str()) {
+            return Ok(entry.display);
+        }
+    }
+
+    Ok(None)
+}
+
 #[tauri::command]
 pub fn get_claude_session_transcript(
     session_id: String,
