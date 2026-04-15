@@ -439,9 +439,28 @@ function XTermContainerComponent({
           sessionActiveRef.current = true;
           onStartRef.current?.();
           terminal.focus();
-          // Re-sync after creation: the container may have settled to
-          // different dimensions since the initial fit at 40ms.
-          syncTerminalSize();
+          // Sync size immediately (not via rAF) so the PTY has the
+          // correct dimensions before the child process queries them.
+          fitTerminal();
+          {
+            const cols = Math.max(20, terminal.cols);
+            const rows = Math.max(8, terminal.rows);
+            lastCols = cols;
+            lastRows = rows;
+            void invoke("resize_terminal", { tileId, cols, rows });
+          }
+          // Belt-and-suspenders: if the container is still settling
+          // from initial app layout, catch it with a delayed re-sync.
+          requestAnimationFrame(() => {
+            fitTerminal();
+            const cols = Math.max(20, terminal.cols);
+            const rows = Math.max(8, terminal.rows);
+            if (cols !== lastCols || rows !== lastRows) {
+              lastCols = cols;
+              lastRows = rows;
+              void invoke("resize_terminal", { tileId, cols, rows });
+            }
+          });
         })
         .catch((error) => {
           terminal.writeln("");
