@@ -218,7 +218,7 @@ function XTermContainerComponent({
       cursorBlink: true,
       fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
       fontSize: 13.5,
-      fontWeight: "normal",
+      fontWeight: isDark ? "normal" : "bold",
       fontWeightBold: "bold",
       lineHeight: 1.3,
       macOptionIsMeta: true,
