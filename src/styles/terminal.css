@@ -19,6 +19,13 @@
   background: transparent !important;
 }
 
+/* Light mode: override dim/faint text (SGR 2) — xterm.js renders at ~50% opacity
+   which is unreadable on white. Set to 1.0 and let color alone convey emphasis,
+   matching how Warp handles dim text in light mode. */
+:root:not(.dark) .xterm .xterm-dim {
+  opacity: 1 !important;
+}
+
 .xterm-viewport::-webkit-scrollbar {
   width: 6px;
 }
