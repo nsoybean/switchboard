@@ -439,6 +439,9 @@ function XTermContainerComponent({
           sessionActiveRef.current = true;
           onStartRef.current?.();
           terminal.focus();
+          // Re-sync after creation: the container may have settled to
+          // different dimensions since the initial fit at 40ms.
+          syncTerminalSize();
         })
         .catch((error) => {
           terminal.writeln("");
