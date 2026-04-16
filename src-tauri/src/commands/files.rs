@@ -133,6 +133,27 @@ pub fn read_file_contents(path: String) -> Result<String, String> {
     Ok(contents)
 }
 
+/// Save raw image bytes to a temporary file and return the path.
+/// Used for pasting clipboard images into the inline session input.
+#[tauri::command]
+pub fn save_temp_image(data: Vec<u8>, extension: String) -> Result<String, String> {
+    let temp_dir = std::env::temp_dir().join("switchboard");
+    fs::create_dir_all(&temp_dir).map_err(|e| format!("Failed to create temp dir: {}", e))?;
+
+    let name = format!(
+        "paste-{}.{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+        extension,
+    );
+
+    let path = temp_dir.join(&name);
+    fs::write(&path, &data).map_err(|e| format!("Failed to write temp image: {}", e))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// Use `git check-ignore` to filter out ignored paths
 fn get_git_ignored(cwd: &str, entries: &[FileEntry]) -> std::collections::HashSet<String> {
     let mut ignored = std::collections::HashSet::new();

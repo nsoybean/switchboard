@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, GitFork } from "lucide-react";
+import { ChevronDown, CornerDownLeft, GitFork, X } from "lucide-react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { BranchPicker } from "@/components/git/BranchPicker";
@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getBranchPrefix } from "@/lib/branches";
-import { gitCommands, type GitBranchInfo } from "@/lib/tauri-commands";
+import { fileCommands, gitCommands, type GitBranchInfo } from "@/lib/tauri-commands";
 import type { AgentType } from "@/state/types";
 
 const AGENTS: { id: AgentType; name: string }[] = [
@@ -20,6 +20,13 @@ const AGENTS: { id: AgentType; name: string }[] = [
   { id: "codex", name: "Codex" },
   { id: "bash", name: "Shell" },
 ];
+
+interface PastedImage {
+  /** Object URL for thumbnail preview */
+  previewUrl: string;
+  /** Saved temp file path on disk */
+  filePath: string;
+}
 
 export interface InlineNewSessionConfig {
   agent: AgentType;
@@ -35,6 +42,14 @@ interface InlineNewSessionProps {
   onSubmit: (config: InlineNewSessionConfig) => void;
 }
 
+function extensionFromMime(mime: string): string {
+  if (mime === "image/png") return "png";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/gif") return "gif";
+  if (mime === "image/webp") return "webp";
+  return "png";
+}
+
 export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProps) {
   const [agent, setAgent] = useState<AgentType>("claude-code");
   const [task, setTask] = useState("");
@@ -44,10 +59,21 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   const [baseBranch, setBaseBranch] = useState("");
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [createBranchPending, setCreateBranchPending] = useState(false);
+  const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const currentBranch = branches.find((b) => b.is_current)?.name ?? "";
   const defaultBranchPrefix = getBranchPrefix(agent);
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      for (const img of pastedImages) {
+        URL.revokeObjectURL(img.previewUrl);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load branches on mount
   useEffect(() => {
@@ -112,22 +138,39 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     [projectPath, refreshBranches],
   );
 
+  const removeImage = useCallback((index: number) => {
+    setPastedImages((prev) => {
+      const removed = prev[index];
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
   const handleSubmit = useCallback(() => {
-    const trimmedTask = task.trim();
-    if (!trimmedTask && agent !== "bash") return;
+    // Build the task text, appending image paths if any
+    let fullTask = task.trim();
+    if (pastedImages.length > 0) {
+      const paths = pastedImages.map((img) => img.filePath).join(" ");
+      fullTask = fullTask ? `${fullTask} ${paths}` : paths;
+    }
 
     onSubmit({
       agent,
       label: "",
       isAutoLabel: true,
-      task: trimmedTask,
+      task: fullTask,
       useWorktree,
       baseBranch: useWorktree ? baseBranch : null,
     });
 
+    // Clean up
+    for (const img of pastedImages) {
+      URL.revokeObjectURL(img.previewUrl);
+    }
     setTask("");
+    setPastedImages([]);
     setUseWorktree(false);
-  }, [agent, task, useWorktree, baseBranch, onSubmit]);
+  }, [agent, task, pastedImages, useWorktree, baseBranch, onSubmit]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -137,6 +180,35 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
       }
     },
     [handleSubmit],
+  );
+
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith("image/")) continue;
+
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) continue;
+
+        const ext = extensionFromMime(item.type);
+        const buffer = await blob.arrayBuffer();
+        const data = Array.from(new Uint8Array(buffer));
+
+        try {
+          const filePath = await fileCommands.saveTempImage(data, ext);
+          const previewUrl = URL.createObjectURL(blob);
+          setPastedImages((prev) => [...prev, { previewUrl, filePath }]);
+        } catch (error) {
+          toast.error("Failed to save image", { description: String(error) });
+        }
+        break; // Handle one image per paste
+      }
+    },
+    [],
   );
 
   // Auto-resize textarea
@@ -208,6 +280,28 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
 
         {/* Chat input */}
         <div className="relative rounded-lg border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring">
+          {/* Pasted image thumbnails */}
+          {pastedImages.length > 0 && (
+            <div className="flex gap-2 px-4 pt-3">
+              {pastedImages.map((img, i) => (
+                <div key={img.filePath} className="group relative">
+                  <img
+                    src={img.previewUrl}
+                    alt="Pasted"
+                    className="size-14 rounded-md border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute -top-1.5 -right-1.5 hidden size-4 items-center justify-center rounded-full bg-foreground text-background group-hover:inline-flex"
+                    aria-label="Remove image"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={task}
@@ -216,18 +310,22 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
               handleInput();
             }}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               agent === "bash"
                 ? "Start a shell session..."
                 : "Describe a task or ask a question..."
             }
             rows={1}
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             className="block w-full resize-none bg-transparent px-4 py-3 pr-12 text-sm placeholder:text-muted-foreground focus:outline-none"
           />
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={disableSubmit || (!task.trim() && agent !== "bash")}
+            disabled={disableSubmit}
             className="absolute bottom-2.5 right-2.5 inline-flex size-7 items-center justify-center rounded-md bg-foreground text-background transition-opacity disabled:opacity-30"
             aria-label="Start session"
           >
@@ -236,7 +334,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
         </div>
 
         <p className="mt-2 text-center text-[11px] text-muted-foreground/60">
-          Press Enter to start &middot; Shift+Enter for new line
+          Enter to start &middot; Shift+Enter for new line
         </p>
       </div>
 

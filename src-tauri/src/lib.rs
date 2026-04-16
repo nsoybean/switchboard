@@ -98,6 +98,7 @@ pub fn run() {
             commands::files::list_directory,
             commands::files::inspect_directory,
             commands::files::read_file_contents,
+            commands::files::save_temp_image,
             // commands::session::get_notification_prefs,
             // commands::session::set_notification_prefs,
             commands::hooks::write_claude_hook_config,

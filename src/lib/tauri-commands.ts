@@ -101,6 +101,8 @@ export const fileCommands = {
     invoke<DirectoryStatus>("inspect_directory", { path }),
   readFile: (path: string) =>
     invoke<string>("read_file_contents", { path }),
+  saveTempImage: (data: number[], extension: string) =>
+    invoke<string>("save_temp_image", { data, extension }),
 };
 
 export const projectCommands = {
