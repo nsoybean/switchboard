@@ -48,14 +48,14 @@ export function SessionCard({
   const isRunning = session.status === "running";
   const canManage = Boolean(onPin || onResume || onStop || onRename || onDelete);
 
-  // When this card is the drag source, show a placeholder
+  // When this card is the drag source, show a compact solid card
   if (isDragSource) {
     return (
       <div
         ref={dragRef}
-        className="flex w-full min-w-0 items-center rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 px-2 py-1.5 text-sm"
+        className="inline-flex min-w-0 items-center rounded bg-card px-1.5 shadow-sm ring-1 ring-border"
       >
-        <span className="truncate text-[12px] text-muted-foreground">
+        <span className="truncate text-[12px] font-medium">
           {session.label || "New session"}
         </span>
       </div>
