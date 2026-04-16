@@ -71,8 +71,11 @@ export function SessionCard({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-[13px] font-medium">
-            {session.label}
+          <span className={cn(
+            "truncate text-[13px] font-medium",
+            !session.label && "italic text-muted-foreground",
+          )}>
+            {session.label || "New session"}
           </span>
         </div>
         <div

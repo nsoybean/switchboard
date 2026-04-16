@@ -199,6 +199,41 @@ pub fn delete_claude_session(session_id: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn delete_claude_sessions_batch(session_ids: Vec<String>) -> Result<(), String> {
+    let ids_set: std::collections::HashSet<&str> =
+        session_ids.iter().map(|s| s.as_str()).collect();
+
+    for session_id in &session_ids {
+        if let Some(session_file) = find_claude_session_file(session_id) {
+            if session_file.exists() {
+                let _ = fs::remove_file(&session_file);
+            }
+            let bundle_dir = session_file.with_extension("");
+            if bundle_dir.exists() {
+                let _ = fs::remove_dir_all(&bundle_dir);
+            }
+        }
+    }
+
+    if let Some(history_path) = claude_history_path() {
+        rewrite_jsonl_file(&history_path, |line| {
+            if line.trim().is_empty() {
+                return false;
+            }
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                return true;
+            };
+            let Some(sid) = value.get("sessionId").and_then(|v| v.as_str()) else {
+                return true;
+            };
+            !ids_set.contains(sid)
+        })?;
+    }
+
+    Ok(())
+}
+
 /// Parse a session JSONL file to extract the first user message and usage stats
 fn parse_session_summary(
     path: &PathBuf,
@@ -343,6 +378,46 @@ pub fn get_claude_history() -> Result<Vec<ClaudeSessionSummary>, String> {
     }
 
     Ok(entries)
+}
+
+/// Look up the first prompt (display text) for a Claude Code session from history.jsonl.
+#[tauri::command]
+pub fn get_first_prompt_for_session(session_id: String) -> Result<Option<String>, String> {
+    let history_path = dirs::home_dir()
+        .ok_or_else(|| "Could not determine home directory".to_string())?
+        .join(".claude")
+        .join("history.jsonl");
+
+    if !history_path.exists() {
+        return Ok(None);
+    }
+
+    let file = fs::File::open(&history_path).map_err(|e| format!("Open failed: {}", e))?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry: HistoryEntry = match serde_json::from_str(&line) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if entry.session_id.as_deref() == Some(session_id.as_str()) {
+            return Ok(entry.display);
+        }
+    }
+
+    Ok(None)
+}
+
+#[tauri::command]
+pub fn claude_session_file_exists(session_id: String) -> bool {
+    find_claude_session_file(&session_id).is_some()
 }
 
 #[tauri::command]

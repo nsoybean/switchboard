@@ -32,6 +32,7 @@ interface TitlebarProps {
   onToggleInspector: () => void;
   onWorkspaceShellModeChange?: (mode: "pane" | "canvas") => void;
   projectPath?: string | null;
+  hasActiveSession?: boolean;
   git?: GitState & { switchBranch: (name: string) => Promise<void> };
   githubToken?: string | null;
   cwd?: string | null;
@@ -53,6 +54,7 @@ export function Titlebar({
   onToggleInspector,
   onWorkspaceShellModeChange,
   projectPath,
+  hasActiveSession = false,
   git,
   onCreateBranch,
   onCreatePr,
@@ -151,8 +153,8 @@ export function Titlebar({
         </Tooltip>
       </div>
 
-      {/* Branch + Create PR */}
-      {git?.branch && (
+      {/* Branch + Create PR — only shown when a session is active */}
+      {hasActiveSession && git?.branch && (
         <div className="flex items-center gap-2 text-[11px]">
           <BranchPicker
             branches={git.branches}

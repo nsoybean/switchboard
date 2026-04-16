@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, type Dispatch } from "react";
 import type { AppAction, Session, SessionStatus } from "@/state/types";
 
@@ -25,13 +26,19 @@ const EVENT_TO_STATUS: Record<string, SessionStatus> = {
 export function useAgentHooks(
   sessions: Record<string, Session>,
   dispatch: Dispatch<AppAction>,
+  onAutoLabel?: (sessionId: string, label: string) => void,
 ) {
   const sessionsRef = useRef(sessions);
+  const onAutoLabelRef = useRef(onAutoLabel);
 
-  // Keep ref current to avoid stale closures in the event listener
+  // Keep refs current to avoid stale closures in the event listener
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
+
+  useEffect(() => {
+    onAutoLabelRef.current = onAutoLabel;
+  }, [onAutoLabel]);
 
   useEffect(() => {
     const unlisten = listen<AgentHookEvent>("agent-hook", (event) => {
@@ -59,6 +66,31 @@ export function useAgentHooks(
           id: session.id,
           resumeTargetId: session_id,
         });
+      }
+
+      // Auto-label: on first prompt, replace empty label with the prompt text
+      if (
+        event_name === "UserPromptSubmit" &&
+        session.isAutoLabel &&
+        (session.agent === "claude-code" || session.agent === "codex")
+      ) {
+        const nativeSessionId = session.resumeTargetId ?? session.id;
+        // Small delay to let history.jsonl be written
+        setTimeout(async () => {
+          try {
+            const prompt = await invoke<string | null>(
+              "get_first_prompt_for_session",
+              { sessionId: nativeSessionId },
+            );
+            if (prompt) {
+              const label =
+                prompt.length > 80 ? prompt.slice(0, 77) + "…" : prompt;
+              onAutoLabelRef.current?.(session.id, label);
+            }
+          } catch {
+            // Auto-label is best-effort; don't disrupt the session
+          }
+        }, 500);
       }
 
       // Skip if status hasn't changed

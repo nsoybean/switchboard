@@ -8,7 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, History, MoreHorizontal, Plus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronDown, History, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { SessionCard } from "./SessionCard";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ interface SessionSidebarProps {
   onStopSession?: (sessionId: string) => Promise<void>;
   onRenameSession?: (session: Session, label: string) => Promise<void>;
   onDeleteSession?: (session: Session) => Promise<void>;
+  onDeleteSessionsBatch?: (sessions: Session[]) => Promise<void>;
   selectedSessionId?: string | null;
   historyOpen?: boolean;
   onHistoryOpenChange?: (open: boolean) => void;
@@ -80,6 +82,7 @@ export function SessionSidebar({
   onStopSession,
   onRenameSession,
   onDeleteSession,
+  onDeleteSessionsBatch,
   selectedSessionId,
   historyOpen,
   onHistoryOpenChange,
@@ -91,6 +94,8 @@ export function SessionSidebar({
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
   const [historyOpenInternal, setHistoryOpenInternal] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
+  const [deletingSelected, setDeletingSelected] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const effectiveSelectedSessionId = selectedSessionId ?? state.activeSessionId;
@@ -273,6 +278,51 @@ export function SessionSidebar({
     await onDeleteSession(deleteTarget);
     setDeleteTarget(null);
   };
+
+  const toggleHistorySelection = useCallback((sessionId: string) => {
+    setSelectedHistoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  }, []);
+
+  const allVisibleHistoryIds = useMemo(
+    () => filteredHistoryGroups.flatMap((g) => g.sessions.map((s) => s.id)),
+    [filteredHistoryGroups],
+  );
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedHistoryIds((prev) => {
+      const allSelected = allVisibleHistoryIds.every((id) => prev.has(id));
+      return allSelected ? new Set() : new Set(allVisibleHistoryIds);
+    });
+  }, [allVisibleHistoryIds]);
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (selectedHistoryIds.size === 0) return;
+    setDeletingSelected(true);
+    const sessions = Object.values(state.sessions).filter((s) =>
+      selectedHistoryIds.has(s.id),
+    );
+    try {
+      if (onDeleteSessionsBatch) {
+        await onDeleteSessionsBatch(sessions);
+      } else if (onDeleteSession) {
+        for (const session of sessions) {
+          await onDeleteSession(session).catch(() => {});
+        }
+      }
+    } catch {
+      // Errors are toasted by the parent handler.
+    }
+    setSelectedHistoryIds(new Set());
+    setDeletingSelected(false);
+  }, [onDeleteSession, onDeleteSessionsBatch, selectedHistoryIds, state.sessions]);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-card">
@@ -535,7 +585,13 @@ export function SessionSidebar({
       </Dialog>
 
       {/* History dialog */}
-      <Dialog open={effectiveHistoryOpen} onOpenChange={setHistoryOpen}>
+      <Dialog
+        open={effectiveHistoryOpen}
+        onOpenChange={(open) => {
+          if (!open) setSelectedHistoryIds(new Set());
+          setHistoryOpen(open);
+        }}
+      >
         <DialogContent
           className="flex max-h-[80vh] flex-col overflow-hidden"
           style={{
@@ -545,17 +601,28 @@ export function SessionSidebar({
         >
           <DialogHeader>
             <DialogTitle>History</DialogTitle>
-            <DialogDescription>
-              Past sessions stay here so the main rail can focus on active work.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3 overflow-hidden">
-            <Input
-              value={historyQuery}
-              onChange={(event) => setHistoryQuery(event.target.value)}
-              placeholder="Search history by session, branch, agent, or project"
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                value={historyQuery}
+                onChange={(event) => setHistoryQuery(event.target.value)}
+                placeholder="Search history by session, branch, agent, or project"
+                className="flex-1"
+              />
+              {selectedHistoryIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={deletingSelected}
+                  onClick={() => void handleDeleteSelected()}
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete {selectedHistoryIds.size}
+                </Button>
+              )}
+            </div>
 
             <div className="min-h-0 overflow-y-auto">
               {filteredHistoryGroups.length === 0 ? (
@@ -564,6 +631,20 @@ export function SessionSidebar({
                 </div>
               ) : (
                 <div className="space-y-4 pr-1">
+                  {allVisibleHistoryIds.length > 0 && (
+                    <div className="flex items-center gap-2 px-1">
+                      <Checkbox
+                        checked={
+                          allVisibleHistoryIds.length > 0 &&
+                          allVisibleHistoryIds.every((id) => selectedHistoryIds.has(id))
+                        }
+                        onCheckedChange={toggleSelectAll}
+                      />
+                      <span className="text-[11px] text-muted-foreground">
+                        Select all
+                      </span>
+                    </div>
+                  )}
                   {filteredHistoryGroups.map((group) => (
                     <div key={group.path} className="space-y-2">
                       <div className="flex items-center justify-between px-1">
@@ -581,36 +662,45 @@ export function SessionSidebar({
                           const canResume =
                             session.agent === "claude-code" ||
                             session.agent === "codex";
+                          const isSelected = selectedHistoryIds.has(session.id);
 
                           return (
-                            <SessionCard
-                              key={session.id}
-                              session={session}
-                              isActive={false}
-                              timestampLabel={formatCompactRelativeTime(
-                                session.createdAt,
-                                now,
-                              )}
-                              timestampTitle={formatTimestampTitle(session.createdAt)}
-                              onResume={
-                                canResume && onResumeSession
-                                  ? () => {
-                                      setHistoryOpen(false);
-                                      void handleResumeSessionClick(session);
-                                    }
-                                  : undefined
-                              }
-                              onRename={() => {
-                                setHistoryOpen(false);
-                                setRenameTarget(session);
-                                setRenameValue(session.label);
-                              }}
-                              onDelete={() => setDeleteTarget(session)}
-                              onClick={() => {
-                                setHistoryOpen(false);
-                                void handleViewSession(session);
-                              }}
-                            />
+                            <div key={session.id} className="flex items-center gap-2">
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleHistorySelection(session.id)}
+                                className="shrink-0 ml-1"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <SessionCard
+                                  session={session}
+                                  isActive={false}
+                                  timestampLabel={formatCompactRelativeTime(
+                                    session.createdAt,
+                                    now,
+                                  )}
+                                  timestampTitle={formatTimestampTitle(session.createdAt)}
+                                  onResume={
+                                    canResume && onResumeSession
+                                      ? () => {
+                                          setHistoryOpen(false);
+                                          void handleResumeSessionClick(session);
+                                        }
+                                      : undefined
+                                  }
+                                  onRename={() => {
+                                    setHistoryOpen(false);
+                                    setRenameTarget(session);
+                                    setRenameValue(session.label);
+                                  }}
+                                  onDelete={() => setDeleteTarget(session)}
+                                  onClick={() => {
+                                    setHistoryOpen(false);
+                                    void handleViewSession(session);
+                                  }}
+                                />
+                              </div>
+                            </div>
                           );
                         })}
                       </div>

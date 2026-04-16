@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Eye,
   FileText,
-  Plus,
   Play,
   X,
 } from "lucide-react";
@@ -29,6 +28,7 @@ import {
 } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/state/types";
+import { InlineNewSession, type InlineNewSessionConfig } from "../session/InlineNewSession";
 import { FilePreview } from "../files/FilePreview";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
@@ -38,7 +38,8 @@ interface PaneWorkspaceProps {
   liveSessions: Session[];
   transcriptSession: Session | null;
   openFilePath: string | null;
-  onNewSession: () => void;
+  projectPath: string | null;
+  onInlineNewSession: (config: InlineNewSessionConfig) => void;
   onSelectLiveSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
@@ -571,27 +572,6 @@ function syncPaneLayout(
   };
 }
 
-function EmptyPaneState({
-  onNewSession,
-}: {
-  onNewSession: () => void;
-}) {
-  return (
-    <div className="flex h-full items-center justify-center bg-background">
-      <div className="max-w-sm text-center">
-        <h2 className="mb-3 text-lg font-semibold">Session Workspace</h2>
-        <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
-          Keep sessions in a tabbed center workspace, then split panes left, right, up, or down as
-          you need parallel terminal visibility.
-        </p>
-        <Button onClick={onNewSession}>
-          <Plus data-icon="inline-start" />
-          Start Session
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 function PaneSurfaceBadge({ surface }: { surface: PaneSurface }) {
   if (surface.kind === "live-session") {
@@ -931,7 +911,8 @@ export function PaneWorkspace({
   liveSessions,
   transcriptSession,
   openFilePath,
-  onNewSession,
+  projectPath,
+  onInlineNewSession,
   onSelectLiveSession,
   onCloseSession,
   onCloseTranscript,
@@ -945,7 +926,7 @@ export function PaneWorkspace({
       id: `live:${session.id}`,
       kind: "live-session",
       session,
-      title: session.label,
+      title: session.label || "New session",
       closable: true,
     }));
 
@@ -996,7 +977,7 @@ export function PaneWorkspace({
   const paneCount = countLeaves(layout.root);
 
   if (surfaces.length === 0 || !layout.root) {
-    return <EmptyPaneState onNewSession={onNewSession} />;
+    return <InlineNewSession projectPath={projectPath} onSubmit={onInlineNewSession} />;
   }
 
   return (

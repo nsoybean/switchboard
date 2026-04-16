@@ -290,6 +290,21 @@ export function AppLayout() {
     state.projectPath,
   ]);
 
+  // Clear active session when it is no longer live (stopped/done/error)
+  // so the sidebar highlight and inspector panel disappear.
+  useEffect(() => {
+    if (
+      state.activeSessionId &&
+      activeSessionCandidate &&
+      activeSessionCandidate.status !== "running" &&
+      activeSessionCandidate.status !== "idle" &&
+      activeSessionCandidate.status !== "needs-input"
+    ) {
+      const nextLive = liveSessions[0]?.id ?? null;
+      dispatch({ type: "SET_ACTIVE", id: nextLive });
+    }
+  }, [activeSessionCandidate, dispatch, liveSessions, state.activeSessionId]);
+
   useEffect(() => {
     sessionsRef.current = state.sessions;
   }, [state.sessions]);
@@ -321,7 +336,21 @@ export function AppLayout() {
   useEffect(() => {
     let cancelled = false;
 
-    setWorkspaceContext(workspaceCandidate);
+    // Only reset to the unresolved candidate when the session or project
+    // actually changed — not on every re-render.  Setting the "resolving"
+    // candidate unconditionally would briefly make hasWorkspaceRoot false,
+    // which unmounts the inspector panel and causes a visible width flicker
+    // as the terminal fills the gap then shrinks back.
+    setWorkspaceContext((prev) => {
+      if (!prev || prev.availability !== "ready") return workspaceCandidate;
+      // Same session — keep the already-resolved context while re-resolving
+      const prevKey = prev.kind === "session" ? prev.label : "project";
+      const nextKey = workspaceCandidate?.kind === "session"
+        ? workspaceCandidate.label
+        : "project";
+      if (prevKey === nextKey) return prev;
+      return workspaceCandidate;
+    });
 
     if (!state.projectPath) {
       return () => {
@@ -490,6 +519,7 @@ export function AppLayout() {
     async (config: {
       agent: AgentType;
       label: string;
+      isAutoLabel: boolean;
       task: string;
       useWorktree: boolean;
       baseBranch: string | null;
@@ -503,7 +533,7 @@ export function AppLayout() {
 
       if (config.useWorktree) {
         try {
-          const slug = slugifyLabel(config.label);
+          const slug = slugifyLabel(config.label || `session-${Date.now().toString(36)}`);
           const branchName = `${getBranchPrefix(config.agent)}${slug}`;
           const info = await worktreeCommands.create(
             state.projectPath,
@@ -550,6 +580,7 @@ export function AppLayout() {
         id,
         agent: config.agent,
         label: config.label,
+        isAutoLabel: config.isAutoLabel,
         status: "idle",
         resumeTargetId,
         worktreePath,
@@ -862,6 +893,18 @@ export function AppLayout() {
         void syncCodexResumeTarget(session);
       }
 
+      // Auto-clean empty Claude sessions that never produced a conversation.
+      if (session?.agent === "claude-code") {
+        void invoke<boolean>("claude_session_file_exists", {
+          sessionId: session.resumeTargetId ?? sessionId,
+        }).then((exists) => {
+          if (!exists) {
+            void invoke("delete_session", { id: sessionId }).catch(() => {});
+            dispatch({ type: "REMOVE_SESSION", id: sessionId });
+          }
+        }).catch(() => {});
+      }
+
       void invoke("close_terminal", { tileId: sessionId }).catch(() => {
         // Terminal records can already be gone if the session was stopped manually.
       });
@@ -990,20 +1033,16 @@ export function AppLayout() {
           });
         }
 
-        if (session.agent === "claude-code") {
-          if (!metadataSessionId) {
-            throw new Error("Could not resolve Claude session id.");
+        if (metadataSessionId) {
+          if (session.agent === "claude-code") {
+            await invoke("delete_claude_session", {
+              sessionId: metadataSessionId,
+            }).catch(() => {});
+          } else if (session.agent === "codex") {
+            await invoke("delete_codex_session", {
+              sessionId: metadataSessionId,
+            }).catch(() => {});
           }
-          await invoke("delete_claude_session", {
-            sessionId: metadataSessionId,
-          });
-        } else if (session.agent === "codex") {
-          if (!metadataSessionId) {
-            throw new Error("Could not resolve Codex session id.");
-          }
-          await invoke("delete_codex_session", {
-            sessionId: metadataSessionId,
-          });
         }
 
         if (localSession) {
@@ -1022,6 +1061,69 @@ export function AppLayout() {
         dispatch({ type: "SET_PREVIEW_FILE", path: null });
       } catch (err) {
         toast.error("Failed to delete session", {
+          description: String(err),
+        });
+      }
+    },
+    [dispatch, state.sessions, syncCodexResumeTarget],
+  );
+
+  const handleDeleteSessionsBatch = useCallback(
+    async (sessions: Session[]) => {
+      if (sessions.length === 0) return;
+
+      // Resolve metadata IDs and group by agent type.
+      const claudeIds: string[] = [];
+      const codexIds: string[] = [];
+      const metadataIds: string[] = [];
+      const switchboardIds: string[] = [];
+
+      for (const session of sessions) {
+        const localSession = state.sessions[session.id];
+        const metadataSessionId =
+          getDurableHistorySessionId(localSession ?? session) ??
+          (localSession?.agent === "codex"
+            ? await syncCodexResumeTarget(localSession).catch(() => null)
+            : null);
+
+        if (localSession) {
+          await invoke("close_terminal", { tileId: localSession.id }).catch(() => {});
+          switchboardIds.push(localSession.id);
+        }
+
+        if (metadataSessionId) {
+          metadataIds.push(metadataSessionId);
+          if (session.agent === "claude-code") {
+            claudeIds.push(metadataSessionId);
+          } else if (session.agent === "codex") {
+            codexIds.push(metadataSessionId);
+          }
+        }
+      }
+
+      try {
+        // Run agent-side batch deletes in parallel.
+        await Promise.all([
+          claudeIds.length > 0
+            ? invoke("delete_claude_sessions_batch", { sessionIds: claudeIds }).catch(() => {})
+            : null,
+          codexIds.length > 0
+            ? invoke("delete_codex_sessions_batch", { sessionIds: codexIds }).catch(() => {})
+            : null,
+          switchboardIds.length > 0
+            ? invoke("delete_sessions_batch", { ids: switchboardIds })
+            : null,
+          metadataIds.length > 0
+            ? invoke("delete_session_metadata_batch", { sessionIds: metadataIds }).catch(() => {})
+            : null,
+        ]);
+
+        for (const id of switchboardIds) {
+          dispatch({ type: "REMOVE_SESSION", id });
+        }
+        dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      } catch (err) {
+        toast.error("Failed to delete sessions", {
           description: String(err),
         });
       }
@@ -1100,7 +1202,20 @@ export function AppLayout() {
     ],
   );
   useKeyboardShortcuts(shortcutHandlers);
-  useAgentHooks(state.sessions, dispatch);
+
+  const handleAutoLabel = useCallback(
+    async (sessionId: string, label: string) => {
+      const session = state.sessions[sessionId];
+      if (!session || !session.isAutoLabel) return;
+
+      const updated: Session = { ...session, label, isAutoLabel: false };
+      dispatch({ type: "RENAME_SESSION", id: sessionId, label });
+      await persistSession(updated);
+    },
+    [dispatch, persistSession, state.sessions],
+  );
+
+  useAgentHooks(state.sessions, dispatch, handleAutoLabel);
 
   const hasWorkspaceRoot = workspaceContext?.availability === "ready" && !!workspaceContext.rootPath;
   const createBranchPrefix = workspaceContext?.kind === "session" && selectedSession?.agent
@@ -1151,6 +1266,7 @@ export function AppLayout() {
       onStopSession={handleStopSession}
       onRenameSession={handleRenameSession}
       onDeleteSession={handleDeleteSession}
+      onDeleteSessionsBatch={handleDeleteSessionsBatch}
       selectedSessionId={selectedSessionId}
       historyOpen={historyOpen}
       onHistoryOpenChange={setHistoryOpen}
@@ -1207,6 +1323,7 @@ export function AppLayout() {
         onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
         onWorkspaceShellModeChange={setWorkspaceShellMode}
         projectPath={state.projectPath}
+        hasActiveSession={liveSessions.length > 0}
         git={hasWorkspaceRoot ? git : undefined}
         githubToken={state.githubToken}
         cwd={workspaceContext?.rootPath}
@@ -1262,7 +1379,8 @@ export function AppLayout() {
                   liveSessions={liveSessions}
                   transcriptSession={resolvedViewingSession}
                   openFilePath={openFilePath}
-                  onNewSession={() => setDialogOpen(true)}
+                  projectPath={state.projectPath}
+                  onInlineNewSession={handleNewSession}
                   onSelectLiveSession={(sessionId) =>
                     dispatch({ type: "SET_ACTIVE", id: sessionId })
                   }
@@ -1285,7 +1403,7 @@ export function AppLayout() {
               )}
             </div>
 
-            {state.projectPath && inspectorOpen ? (
+            {state.projectPath && inspectorOpen && selectedSession ? (
               <>
                 <div
                   role="separator"
@@ -1298,7 +1416,7 @@ export function AppLayout() {
                   className="h-full shrink-0 overflow-hidden border-l bg-card"
                   style={{ width: inspectorWidth }}
                 >
-                  {inspectorContent}
+                  {hasWorkspaceRoot ? inspectorContent : null}
                 </div>
               </>
             ) : null}
@@ -1338,7 +1456,7 @@ export function AppLayout() {
               </div>
             ) : null}
 
-            {state.projectPath ? (
+            {state.projectPath && hasWorkspaceRoot ? (
               <div
                 className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-1.5 pl-0.5 transition-[opacity,transform] duration-150 ${
                   inspectorOpen

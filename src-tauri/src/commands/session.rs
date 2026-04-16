@@ -92,6 +92,16 @@ pub fn delete_session(id: String) -> Result<(), String> {
     write_store(&store)
 }
 
+/// Remove multiple sessions from the persistent store in one write
+#[tauri::command]
+pub fn delete_sessions_batch(ids: Vec<String>) -> Result<(), String> {
+    let mut store = read_store()?;
+    for id in &ids {
+        store.sessions.remove(id);
+    }
+    write_store(&store)
+}
+
 /// Delete all Switchboard data (~/.switchboard directory)
 #[tauri::command]
 pub fn delete_all_data() -> Result<(), String> {
