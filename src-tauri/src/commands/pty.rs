@@ -88,6 +88,14 @@ impl SessionRegistry {
         command_builder.args(&resolved_args);
         command_builder.cwd(cwd);
         command_builder.env("TERM", "xterm-256color");
+        command_builder.env("COLORTERM", "truecolor");
+        command_builder.env("FORCE_COLOR", "3");
+
+        // Ensure UTF-8 locale so wide/CJK characters render correctly
+        if std::env::var("LANG").map_or(true, |v| !v.contains("UTF-8")) {
+            command_builder.env("LANG", "en_US.UTF-8");
+        }
+
         if let Some(env) = request.env {
             for (key, value) in env {
                 command_builder.env(key, value);
@@ -303,6 +311,17 @@ fn trim_output_buffer(buffer: &mut String, limit: usize) {
     buffer.drain(..boundary);
 }
 
+/// Return the number of leading bytes that form complete UTF-8 characters.
+/// Any trailing incomplete multi-byte sequence is excluded so the caller
+/// can carry it over to the next read — avoiding `from_utf8_lossy` corruption
+/// that breaks the ANSI escape sequence stream in xterm.js.
+fn utf8_complete_len(bytes: &[u8]) -> usize {
+    match std::str::from_utf8(bytes) {
+        Ok(_) => bytes.len(),
+        Err(e) => e.valid_up_to(),
+    }
+}
+
 fn spawn_reader(
     app: AppHandle,
     tile_id: String,
@@ -311,25 +330,66 @@ fn spawn_reader(
 ) {
     std::thread::spawn(move || {
         let mut buffer = [0_u8; 8192];
+        // Carry-over buffer for incomplete UTF-8 sequences split across reads
+        let mut carry = Vec::<u8>::new();
+
         loop {
-            match reader.read(&mut buffer) {
+            // Read into the buffer, leaving room at the start for carried-over bytes
+            let start = carry.len();
+            let n = match reader.read(&mut buffer[start..]) {
                 Ok(0) => break,
-                Ok(size) => {
-                    let data = String::from_utf8_lossy(&buffer[..size]).into_owned();
-                    if let Ok(mut buffered_output) = output_buffer.lock() {
-                        buffered_output.push_str(&data);
-                        trim_output_buffer(&mut buffered_output, TERMINAL_BUFFER_LIMIT);
-                    }
-                    let _ = app.emit(
-                        "workspace-output",
-                        WorkspaceOutputPayload {
-                            tile_id: tile_id.clone(),
-                            data,
-                        },
-                    );
-                }
+                Ok(n) => n,
                 Err(_) => break,
+            };
+
+            // Prepend any carried-over bytes from the previous read
+            if !carry.is_empty() {
+                buffer[..start].copy_from_slice(&carry);
+                carry.clear();
             }
+
+            let total = start + n;
+            let valid = utf8_complete_len(&buffer[..total]);
+
+            // Stash any trailing incomplete UTF-8 bytes for the next iteration
+            if valid < total {
+                carry.extend_from_slice(&buffer[valid..total]);
+            }
+
+            if valid == 0 {
+                continue;
+            }
+
+            // SAFETY: utf8_complete_len guarantees buffer[..valid] is valid UTF-8
+            let data = unsafe { std::str::from_utf8_unchecked(&buffer[..valid]) }.to_owned();
+
+            if let Ok(mut buffered_output) = output_buffer.lock() {
+                buffered_output.push_str(&data);
+                trim_output_buffer(&mut buffered_output, TERMINAL_BUFFER_LIMIT);
+            }
+            let _ = app.emit(
+                "workspace-output",
+                WorkspaceOutputPayload {
+                    tile_id: tile_id.clone(),
+                    data,
+                },
+            );
+        }
+
+        // Flush any remaining carried-over bytes (lossy is fine at EOF)
+        if !carry.is_empty() {
+            let data = String::from_utf8_lossy(&carry).into_owned();
+            if let Ok(mut buffered_output) = output_buffer.lock() {
+                buffered_output.push_str(&data);
+                trim_output_buffer(&mut buffered_output, TERMINAL_BUFFER_LIMIT);
+            }
+            let _ = app.emit(
+                "workspace-output",
+                WorkspaceOutputPayload {
+                    tile_id: tile_id.clone(),
+                    data,
+                },
+            );
         }
 
         let _ = app.emit(
@@ -431,7 +491,7 @@ pub fn get_terminal_buffer(
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_dimensions, default_args_for_command, SessionRegistry};
+    use super::{clamp_dimensions, default_args_for_command, utf8_complete_len, SessionRegistry};
 
     #[test]
     fn tracks_and_removes_session_bookkeeping() {
@@ -477,5 +537,27 @@ mod tests {
             default_args_for_command("codex", vec!["resume".into(), "--last".into()]),
             vec!["resume", "--last"]
         );
+    }
+
+    #[test]
+    fn utf8_complete_len_returns_full_length_for_ascii() {
+        assert_eq!(utf8_complete_len(b"hello"), 5);
+    }
+
+    #[test]
+    fn utf8_complete_len_excludes_incomplete_multibyte() {
+        // '€' is 3 bytes: 0xE2 0x82 0xAC
+        // If only the first 2 bytes are present, they should be excluded
+        let mut bytes = "hello€".as_bytes().to_vec();
+        bytes.pop(); // remove last byte of '€'
+        assert_eq!(utf8_complete_len(&bytes), 5); // only "hello" is complete
+    }
+
+    #[test]
+    fn utf8_complete_len_handles_emoji_boundary() {
+        // '🚀' is 4 bytes: 0xF0 0x9F 0x9A 0x80
+        let mut bytes = "ok🚀".as_bytes().to_vec();
+        bytes.pop(); // remove last byte of '🚀'
+        assert_eq!(utf8_complete_len(&bytes), 2); // only "ok" is complete
     }
 }
