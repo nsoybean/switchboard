@@ -4,9 +4,14 @@ import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { useTheme } from "@/components/theme-provider";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
+
+// ---------------------------------------------------------------------------
+// Theme
+// ---------------------------------------------------------------------------
 
 const DARK_THEME = {
   background: "#000000",
@@ -56,6 +61,56 @@ const LIGHT_THEME = {
   yellow: "#845306",
 };
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Strip SGR dim (code 2) for light theme readability. */
+function stripAnsiDim(data: string): string {
+  return data.replace(/\x1b\[([0-9;]*)m/g, (match, params: string) => {
+    if (!params) return match;
+
+    const tokens = params.split(";").filter((p) => p.length > 0);
+    const next: string[] = [];
+
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      // Preserve extended color sequences (38;2;r;g;b / 48;2;r;g;b / 38;5;n / 48;5;n)
+      if ((t === "38" || t === "48" || t === "58") && tokens[i + 1] === "2" && tokens.length >= i + 5) {
+        next.push(t, tokens[i + 1], tokens[i + 2], tokens[i + 3], tokens[i + 4]);
+        i += 4;
+        continue;
+      }
+      if ((t === "38" || t === "48" || t === "58") && tokens[i + 1] === "5" && tokens.length >= i + 3) {
+        next.push(t, tokens[i + 1], tokens[i + 2]);
+        i += 2;
+        continue;
+      }
+      if (t === "2") continue; // Drop dim
+      next.push(t);
+    }
+
+    if (next.length === tokens.length) return match;
+    if (next.length === 0) return "";
+    return `\x1b[${next.join(";")}m`;
+  });
+}
+
+function normalizeOutput(data: string, isDark: boolean): string {
+  return isDark ? data : stripAnsiDim(data);
+}
+
+function dims(terminal: Terminal) {
+  return {
+    cols: Math.max(20, terminal.cols),
+    rows: Math.max(8, terminal.rows),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Props & memo helpers
+// ---------------------------------------------------------------------------
+
 interface XTermContainerProps {
   tileId: string;
   command?: string;
@@ -67,106 +122,23 @@ interface XTermContainerProps {
   closeOnUnmount?: boolean;
 }
 
-function areArgsEqual(left: string[] | undefined, right: string[] | undefined) {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right || left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
+function arrayEq(a: string[] | undefined, b: string[] | undefined) {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
 }
 
-function areEnvEqual(
-  left: Record<string, string> | undefined,
-  right: Record<string, string> | undefined,
-) {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return !left && !right;
-  }
-
-  const leftEntries = Object.entries(left);
-  const rightEntries = Object.entries(right);
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-
-  return leftEntries.every(([key, value]) => right[key] === value);
+function recordEq(a: Record<string, string> | undefined, b: Record<string, string> | undefined) {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+  const ae = Object.entries(a);
+  if (ae.length !== Object.keys(b).length) return false;
+  return ae.every(([k, v]) => b[k] === v);
 }
 
-function stripAnsiDim(data: string): string {
-  return data.replace(/\x1b\[([0-9;]*)m/g, (match, params: string) => {
-    if (!params) {
-      return match;
-    }
-
-    const tokens = params.split(";").filter((part) => part.length > 0);
-    const nextTokens: string[] = [];
-
-    for (let index = 0; index < tokens.length; index += 1) {
-      const token = tokens[index];
-
-      // Preserve extended color sequences like 38;2;r;g;b and 48;2;r;g;b.
-      if (
-        (token === "38" || token === "48" || token === "58") &&
-        tokens[index + 1] === "2" &&
-        tokens.length >= index + 5
-      ) {
-        nextTokens.push(
-          token,
-          tokens[index + 1],
-          tokens[index + 2],
-          tokens[index + 3],
-          tokens[index + 4],
-        );
-        index += 4;
-        continue;
-      }
-
-      // Preserve indexed color sequences like 38;5;n and 48;5;n.
-      if (
-        (token === "38" || token === "48" || token === "58") &&
-        tokens[index + 1] === "5" &&
-        tokens.length >= index + 3
-      ) {
-        nextTokens.push(token, tokens[index + 1], tokens[index + 2]);
-        index += 2;
-        continue;
-      }
-
-      // Drop standalone dim SGR only.
-      if (token === "2") {
-        continue;
-      }
-
-      nextTokens.push(token);
-    }
-
-    if (nextTokens.length === tokens.length) {
-      return match;
-    }
-
-    if (nextTokens.length === 0) {
-      return "";
-    }
-
-    return `\x1b[${nextTokens.join(";")}m`;
-  });
-}
-
-function normalizeTerminalOutput(data: string, isDark: boolean): string {
-  if (isDark) {
-    return data;
-  }
-
-  return stripAnsiDim(data);
-}
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 function XTermContainerComponent({
   tileId,
@@ -181,7 +153,6 @@ function XTermContainerComponent({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const sessionActiveRef = useRef(false);
   const onStartRef = useRef(onStart);
   const onExitRef = useRef(onExit);
@@ -189,32 +160,30 @@ function XTermContainerComponent({
 
   const isDark =
     theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const isShellCommand =
-    /(^|\/)(zsh|bash|sh|fish)$/.test(command);
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const isDarkRef = useRef(isDark);
+  isDarkRef.current = isDark;
 
-  useEffect(() => {
-    onStartRef.current = onStart;
-  }, [onStart]);
+  const isShellCommand = /(^|\/)(zsh|bash|sh|fish)$/.test(command);
 
-  useEffect(() => {
-    onExitRef.current = onExit;
-  }, [onExit]);
+  useEffect(() => { onStartRef.current = onStart; }, [onStart]);
+  useEffect(() => { onExitRef.current = onExit; }, [onExit]);
 
+  // -----------------------------------------------------------------------
+  // Core terminal lifecycle — single effect owns PTY + listeners
+  // -----------------------------------------------------------------------
   useEffect(() => {
     const host = containerRef.current;
-    if (!host) {
-      return;
-    }
+    if (!host) return;
 
-    const isMacPlatform =
+    const isMac =
       typeof navigator !== "undefined" &&
       /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
 
+    // --- 1. Create xterm.js instance ---
     const terminal = new Terminal({
       allowTransparency: true,
-      convertEol: true,
+      allowProposedApi: true,
       cursorBlink: true,
       fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
       fontSize: 13.5,
@@ -222,366 +191,299 @@ function XTermContainerComponent({
       fontWeightBold: "bold",
       lineHeight: 1.3,
       macOptionIsMeta: true,
-      minimumContrastRatio: isDark ? 1 : 1,
-      theme: isDark ? DARK_THEME : LIGHT_THEME,
+      minimumContrastRatio: 1,
+      scrollback: 200000,
+      theme: isDarkRef.current ? DARK_THEME : LIGHT_THEME,
     });
 
+    // --- 2. Custom key handlers ---
     terminal.attachCustomKeyEventHandler((event) => {
-      // Shift+Enter → newline for Claude Code / Codex multi-line input
-      if (
-        !isShellCommand &&
-        event.type === "keydown" &&
-        event.key === "Enter" &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
+      if (event.type !== "keydown") return true;
+
+      // Shift+Enter → newline (Claude Code / Codex multi-line)
+      if (!isShellCommand && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
-
         if (sessionActiveRef.current) {
-          void invoke("write_terminal", { tileId, data: "\n" }).catch((error) => {
-            console.error("Failed to write terminal newline", error);
-          });
+          void invoke("write_terminal", { tileId, data: "\n" });
         }
-
         return false;
       }
 
-      if (
-        isMacPlatform &&
-        isShellCommand &&
-        event.type === "keydown" &&
-        event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.shiftKey &&
-        (event.key === "ArrowLeft" || event.key === "ArrowRight")
-      ) {
+      // Alt+Arrow → word navigation (shell)
+      if (isMac && isShellCommand && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
         event.preventDefault();
-
         if (sessionActiveRef.current) {
-          const data = event.key === "ArrowLeft" ? "\u001bb" : "\u001bf";
-          void invoke("write_terminal", { tileId, data }).catch((error) => {
-            console.error("Failed to write terminal shortcut input", error);
-          });
+          void invoke("write_terminal", { tileId, data: event.key === "ArrowLeft" ? "\u001bb" : "\u001bf" });
         }
-
         return false;
       }
 
-      if (
-        isMacPlatform &&
-        !isShellCommand &&
-        event.type === "keydown" &&
-        event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        (event.key === "ArrowLeft" || event.key === "ArrowRight")
-      ) {
+      // Cmd+Arrow → line start/end (Claude Code / Codex)
+      if (isMac && !isShellCommand && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
         event.preventDefault();
-
         if (sessionActiveRef.current) {
-          const data = event.key === "ArrowLeft" ? "\u0001" : "\u0005";
-          void invoke("write_terminal", { tileId, data }).catch((error) => {
-            console.error("Failed to write terminal shortcut input", error);
-          });
+          void invoke("write_terminal", { tileId, data: event.key === "ArrowLeft" ? "\u0001" : "\u0005" });
         }
-
         return false;
       }
 
-      if (
-        isMacPlatform &&
-        event.type === "keydown" &&
-        event.key === "Backspace" &&
-        event.altKey &&
-        !event.ctrlKey &&
-        !event.metaKey
-      ) {
+      // Alt+Backspace → delete word
+      if (isMac && event.key === "Backspace" && event.altKey && !event.ctrlKey && !event.metaKey) {
         event.preventDefault();
-
         if (sessionActiveRef.current) {
-          void invoke("write_terminal", { tileId, data: "\u0017" }).catch((error) => {
-            console.error("Failed to write terminal shortcut input", error);
-          });
+          void invoke("write_terminal", { tileId, data: "\u0017" });
         }
-
         return false;
       }
 
       return true;
     });
 
+    // --- 3. Load addons and open ---
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(host);
 
+    // Unicode 11 for proper character width measurement
+    const unicode11 = new Unicode11Addon();
+    terminal.loadAddon(unicode11);
+    terminal.unicode.activeVersion = "11";
+
+    // WebGL renderer with context loss recovery
     try {
-      terminal.loadAddon(new WebglAddon());
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => {
+        webgl.dispose();
+      });
+      terminal.loadAddon(webgl);
     } catch {
-      // WebGL can fail on some GPUs; xterm falls back automatically.
+      // WebGL can fail; xterm falls back to canvas automatically.
     }
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
-    const fitTerminal = () => {
-      try {
-        fitAddon.fit();
-      } catch {
-        // Ignore fit failures while the container is still settling.
-      }
+    const fit = () => {
+      try { fitAddon.fit(); } catch { /* container settling */ }
     };
 
-    // Batch fit + PTY resize together in a single rAF so xterm.js and
-    // the PTY always update atomically — no window where they disagree.
+    // --- 4. Resize pipeline ---
+    //
+    // ResizeObserver → fit xterm (visual) → resize PTY (SIGWINCH)
+    //
+    // The first resize is sent immediately so the child process gets
+    // correct dimensions before it draws anything. Subsequent resizes
+    // are debounced via rAF so we send at most one per frame — fast
+    // enough for smooth window drags, slow enough to avoid flooding
+    // the child with SIGWINCH mid-redraw.
+    //
+    // We never call terminal.clear() — the child process handles its
+    // own redraw in response to SIGWINCH. Clearing scrollback causes
+    // visible flicker, especially with TUI apps like Claude Code.
     let lastCols = 0;
     let lastRows = 0;
     let resizeRaf = 0;
+    let initialResizeDone = false;
 
-    const syncTerminalSize = () => {
-      if (!sessionActiveRef.current) {
-        return;
+    const resizePty = () => {
+      if (!sessionActiveRef.current) return;
+      const { cols, rows } = dims(terminal);
+      if (cols !== lastCols || rows !== lastRows) {
+        lastCols = cols;
+        lastRows = rows;
+        void invoke("resize_terminal", { tileId, cols, rows });
       }
-
-      if (resizeRaf) {
-        cancelAnimationFrame(resizeRaf);
-      }
-
-      resizeRaf = requestAnimationFrame(() => {
-        resizeRaf = 0;
-        fitTerminal();
-
-        const cols = Math.max(20, terminal.cols);
-        const rows = Math.max(8, terminal.rows);
-
-        if (cols !== lastCols || rows !== lastRows) {
-          lastCols = cols;
-          lastRows = rows;
-          void invoke("resize_terminal", { tileId, cols, rows });
-        }
-      });
+      initialResizeDone = true;
     };
 
-    // Flush any pending resize immediately so the PTY has the correct
-    // column count before it processes incoming keystrokes.
-    const flushPendingResize = () => {
-      if (resizeRaf) {
+    const observer = new ResizeObserver(() => {
+      fit();
+      if (!initialResizeDone) {
         cancelAnimationFrame(resizeRaf);
-        resizeRaf = 0;
-        fitTerminal();
-
-        const cols = Math.max(20, terminal.cols);
-        const rows = Math.max(8, terminal.rows);
-
-        if (cols !== lastCols || rows !== lastRows) {
-          lastCols = cols;
-          lastRows = rows;
-          void invoke("resize_terminal", { tileId, cols, rows });
-        }
+        resizePty();
+      } else {
+        cancelAnimationFrame(resizeRaf);
+        resizeRaf = requestAnimationFrame(() => resizePty());
       }
-    };
+    });
+    observer.observe(host);
 
+    // --- 5. Input ---
     const disposables = [
       terminal.onData((data) => {
-        if (!sessionActiveRef.current) {
-          return;
-        }
-
-        flushPendingResize();
-        void invoke("write_terminal", { tileId, data }).catch((error) => {
-          console.error("Failed to write terminal input", error);
-        });
+        if (!sessionActiveRef.current) return;
+        void invoke("write_terminal", { tileId, data });
       }),
     ];
 
-    resizeObserverRef.current = new ResizeObserver(() => {
-      syncTerminalSize();
-    });
-    resizeObserverRef.current.observe(host);
+    // --- 6. Output buffering ---
+    //
+    // Coalesce rapid PTY writes into a single xterm.write() call.
+    // Prevents renderer artifacts from high-frequency event bursts
+    // (e.g. large command output, TUI redraws).
+    let pendingData = "";
+    let flushTimer = 0;
+    const FLUSH_INTERVAL = 5; // ms
 
-    // Wait for the container size to stabilize before spawning the PTY
-    // so the child process gets accurate column/row dimensions on its
-    // first read.  We poll fitAddon until two consecutive frames agree
-    // on the same cols/rows (or bail after a timeout).
-    let stabilityTimer = 0;
-    let stabilityRaf = 0;
+    const flushOutput = () => {
+      flushTimer = 0;
+      if (pendingData && terminal) {
+        terminal.write(normalizeOutput(pendingData, isDarkRef.current));
+        pendingData = "";
+      }
+    };
 
-    const waitForStableSize = (
-      onStable: (cols: number, rows: number) => void,
-    ) => {
-      let prevCols = 0;
-      let prevRows = 0;
-      let matchCount = 0;
-      const maxAttempts = 15; // ~250ms at 60fps
-      let attempts = 0;
+    const bufferOutput = (data: string) => {
+      pendingData += data;
+      if (!flushTimer) {
+        flushTimer = window.setTimeout(flushOutput, FLUSH_INTERVAL);
+      }
+    };
 
-      const check = () => {
-        fitTerminal();
-        const cols = Math.max(20, terminal.cols);
-        const rows = Math.max(8, terminal.rows);
+    // --- 7. Event listeners (registered BEFORE PTY creation) ---
+    let cancelled = false;
+    const unsubs: Array<() => void> = [];
 
-        if (cols === prevCols && rows === prevRows) {
-          matchCount++;
-        } else {
-          matchCount = 0;
-        }
+    const registerListenersAndInit = async () => {
+      // Register listeners FIRST to avoid race with PTY output
+      unsubs.push(
+        await listen<{ tileId: string; data: string }>("workspace-output", (event) => {
+          if (cancelled || event.payload.tileId !== tileId) return;
+          bufferOutput(event.payload.data);
+        }),
+      );
 
-        prevCols = cols;
-        prevRows = rows;
-        attempts++;
+      unsubs.push(
+        await listen<{ tileId: string; code: number | null }>("workspace-exit", (event) => {
+          if (cancelled || event.payload.tileId !== tileId) return;
+          // Flush any remaining buffered output before marking exit
+          if (pendingData) {
+            window.clearTimeout(flushTimer);
+            flushOutput();
+          }
+          sessionActiveRef.current = false;
+          onExitRef.current?.(event.payload.code);
+        }),
+      );
 
-        if (matchCount >= 2 || attempts >= maxAttempts) {
-          onStable(cols, rows);
-        } else {
-          stabilityRaf = requestAnimationFrame(check);
+      if (cancelled) return;
+
+      // --- 8. Create or reconnect PTY (after listeners are ready) ---
+      //
+      // Wait for the container size to stabilize before measuring.
+      // The layout may still be settling (inspector panel mounting,
+      // sidebar animation, React re-renders).  We poll until the
+      // container width/height is unchanged for 2 consecutive frames,
+      // capped at 10 frames (~160ms) to avoid infinite waits.
+      try { await document.fonts.ready; } catch { /* older browsers */ }
+      if (cancelled) return;
+
+      const waitForStableLayout = async () => {
+        let prevW = host.clientWidth;
+        let prevH = host.clientHeight;
+        let stableFrames = 0;
+        const MAX_FRAMES = 10;
+        let totalFrames = 0;
+
+        while (stableFrames < 2 && totalFrames < MAX_FRAMES) {
+          await new Promise<void>((r) => requestAnimationFrame(() => r()));
+          if (cancelled) return;
+          totalFrames++;
+          const w = host.clientWidth;
+          const h = host.clientHeight;
+          if (w === prevW && h === prevH) {
+            stableFrames++;
+          } else {
+            stableFrames = 0;
+            prevW = w;
+            prevH = h;
+          }
         }
       };
 
-      // Give the layout one frame to settle before starting checks.
-      stabilityTimer = window.setTimeout(() => {
-        stabilityRaf = requestAnimationFrame(check);
-      }, 20);
+      await waitForStableLayout();
+      if (cancelled) return;
+
+      fit();
+      const { cols, rows } = dims(terminal);
+      lastCols = cols;
+      lastRows = rows;
+
+      try {
+        const exists = await invoke<boolean>("terminal_exists", { tileId });
+        if (cancelled) return;
+
+        if (exists) {
+          const buf = await invoke<string>("get_terminal_buffer", { tileId });
+          if (buf) terminal.write(normalizeOutput(buf, isDarkRef.current));
+          sessionActiveRef.current = true;
+          void invoke("resize_terminal", { tileId, cols, rows });
+          terminal.focus();
+          return;
+        }
+
+        await invoke<{ sessionId: string }>("create_terminal", {
+          request: {
+            tileId,
+            cols,
+            rows,
+            command: command || null,
+            args,
+            startDir: cwd ?? null,
+            env: env ?? null,
+          },
+        });
+
+        if (cancelled) return;
+        sessionActiveRef.current = true;
+        onStartRef.current?.();
+        terminal.focus();
+      } catch (error) {
+        if (cancelled) return;
+        terminal.writeln("");
+        terminal.writeln(`\x1b[31mFailed to launch terminal: ${String(error)}\x1b[0m`);
+      }
     };
 
-    waitForStableSize((stableCols, stableRows) => {
-      void invoke<boolean>("terminal_exists", { tileId })
-        .then(async (exists) => {
-          if (exists) {
-            const bufferedOutput = await invoke<string>("get_terminal_buffer", { tileId });
-            if (bufferedOutput) {
-              terminal.write(normalizeTerminalOutput(bufferedOutput, isDark));
-            }
+    void registerListenersAndInit();
 
-            sessionActiveRef.current = true;
-            lastCols = stableCols;
-            lastRows = stableRows;
-            void invoke("resize_terminal", { tileId, cols: stableCols, rows: stableRows });
-            terminal.focus();
-            return;
-          }
-
-          await invoke<{ sessionId: string }>("create_terminal", {
-            request: {
-              tileId,
-              cols: stableCols,
-              rows: stableRows,
-              command: command || null,
-              args,
-              startDir: cwd ?? null,
-              env: env ?? null,
-            },
-          });
-
-          sessionActiveRef.current = true;
-          lastCols = stableCols;
-          lastRows = stableRows;
-          onStartRef.current?.();
-          terminal.focus();
-
-          // The child process (e.g. Claude Code) queries terminal
-          // dimensions during its own startup which races with
-          // layout settling.  Send a follow-up resize after the
-          // child has had time to initialize so it picks up
-          // correct dimensions via SIGWINCH.
-          const postCreationSync = () => {
-            if (!sessionActiveRef.current) return;
-            fitTerminal();
-            const cols = Math.max(20, terminal.cols);
-            const rows = Math.max(8, terminal.rows);
-            if (cols !== lastCols || rows !== lastRows) {
-              lastCols = cols;
-              lastRows = rows;
-            }
-            // Always re-send so the child gets SIGWINCH even if
-            // dimensions haven't changed — it may have read stale
-            // values during its own init.
-            void invoke("resize_terminal", { tileId, cols, rows });
-          };
-          // Stagger re-syncs to cover font-load and child-init timing.
-          setTimeout(postCreationSync, 150);
-          setTimeout(postCreationSync, 500);
-        })
-        .catch((error) => {
-          terminal.writeln("");
-          terminal.writeln(`\u001b[31mFailed to launch terminal: ${String(error)}\u001b[0m`);
-        });
-    });
-
+    // --- 9. Cleanup ---
     return () => {
+      cancelled = true;
       sessionActiveRef.current = false;
-      window.clearTimeout(stabilityTimer);
-      cancelAnimationFrame(stabilityRaf);
-      if (resizeRaf) {
-        cancelAnimationFrame(resizeRaf);
-      }
-      resizeObserverRef.current?.disconnect();
-      resizeObserverRef.current = null;
+      cancelAnimationFrame(resizeRaf);
+      window.clearTimeout(flushTimer);
+      observer.disconnect();
       fitAddonRef.current = null;
       terminalRef.current = null;
-      disposables.forEach((disposable) => disposable.dispose());
+      disposables.forEach((d) => d.dispose());
+      unsubs.forEach((fn) => fn());
       terminal.dispose();
       if (closeOnUnmount) {
-        void invoke("close_terminal", { tileId }).catch(() => {
-          // App shutdown can race with Tauri teardown; ignore cleanup failures.
-        });
+        void invoke("close_terminal", { tileId }).catch(() => {});
       }
     };
   }, [args, closeOnUnmount, command, cwd, env, tileId]);
 
+  // -----------------------------------------------------------------------
+  // Theme sync (visual only — no listener re-registration)
+  // -----------------------------------------------------------------------
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.options.theme = isDark ? DARK_THEME : LIGHT_THEME;
     }
   }, [isDark]);
 
-  useEffect(() => {
-    let mounted = true;
-    const unsubscribe: Array<() => void> = [];
-
-    const bind = async () => {
-      unsubscribe.push(
-        await listen<{ tileId: string; data: string }>("workspace-output", (event) => {
-          if (!mounted || event.payload.tileId !== tileId) {
-            return;
-          }
-
-          terminalRef.current?.write(normalizeTerminalOutput(event.payload.data, isDark));
-        }),
-      );
-
-      unsubscribe.push(
-        await listen<{ tileId: string; code: number | null }>("workspace-exit", (event) => {
-          if (!mounted || event.payload.tileId !== tileId) {
-            return;
-          }
-
-          sessionActiveRef.current = false;
-          onExitRef.current?.(event.payload.code);
-        }),
-      );
-    };
-
-    void bind();
-
-    return () => {
-      mounted = false;
-      unsubscribe.forEach((dispose) => dispose());
-    };
-  }, [isDark, tileId]);
-
   return <div ref={containerRef} className="h-full w-full min-h-0 min-w-0 overflow-hidden" />;
 }
 
 export const XTermContainer = memo(
   XTermContainerComponent,
-  (prevProps, nextProps) =>
-    prevProps.tileId === nextProps.tileId &&
-    prevProps.command === nextProps.command &&
-    prevProps.closeOnUnmount === nextProps.closeOnUnmount &&
-    prevProps.cwd === nextProps.cwd &&
-    areArgsEqual(prevProps.args, nextProps.args) &&
-    areEnvEqual(prevProps.env, nextProps.env),
+  (prev, next) =>
+    prev.tileId === next.tileId &&
+    prev.command === next.command &&
+    prev.closeOnUnmount === next.closeOnUnmount &&
+    prev.cwd === next.cwd &&
+    arrayEq(prev.args, next.args) &&
+    recordEq(prev.env, next.env),
 );

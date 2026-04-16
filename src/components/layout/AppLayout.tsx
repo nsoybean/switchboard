@@ -321,7 +321,21 @@ export function AppLayout() {
   useEffect(() => {
     let cancelled = false;
 
-    setWorkspaceContext(workspaceCandidate);
+    // Only reset to the unresolved candidate when the session or project
+    // actually changed — not on every re-render.  Setting the "resolving"
+    // candidate unconditionally would briefly make hasWorkspaceRoot false,
+    // which unmounts the inspector panel and causes a visible width flicker
+    // as the terminal fills the gap then shrinks back.
+    setWorkspaceContext((prev) => {
+      if (!prev || prev.availability !== "ready") return workspaceCandidate;
+      // Same session — keep the already-resolved context while re-resolving
+      const prevKey = prev.kind === "session" ? prev.label : "project";
+      const nextKey = workspaceCandidate?.kind === "session"
+        ? workspaceCandidate.label
+        : "project";
+      if (prevKey === nextKey) return prev;
+      return workspaceCandidate;
+    });
 
     if (!state.projectPath) {
       return () => {
@@ -1374,7 +1388,7 @@ export function AppLayout() {
               )}
             </div>
 
-            {state.projectPath && inspectorOpen && hasWorkspaceRoot ? (
+            {state.projectPath && inspectorOpen && selectedSession ? (
               <>
                 <div
                   role="separator"
@@ -1387,7 +1401,7 @@ export function AppLayout() {
                   className="h-full shrink-0 overflow-hidden border-l bg-card"
                   style={{ width: inspectorWidth }}
                 >
-                  {inspectorContent}
+                  {hasWorkspaceRoot ? inspectorContent : null}
                 </div>
               </>
             ) : null}
