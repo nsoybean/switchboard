@@ -6,6 +6,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { fileCommands } from "@/lib/tauri-commands";
 import { useTheme } from "@/components/theme-provider";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
@@ -65,6 +66,14 @@ const LIGHT_THEME = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function extensionFromMime(mime: string): string {
+  if (mime === "image/png") return "png";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/gif") return "gif";
+  if (mime === "image/webp") return "webp";
+  return "png";
+}
 
 /** Strip SGR dim (code 2) for light theme readability. */
 function stripAnsiDim(data: string): string {
@@ -353,6 +362,39 @@ function XTermContainerComponent({
       }),
     ];
 
+    // --- 5b. Image paste ---
+    //
+    // Intercept paste events containing images, save to a temp file,
+    // and write the file path into the PTY so Claude Code can pick it up.
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith("image/")) continue;
+
+        e.preventDefault();
+        e.stopPropagation();
+        const blob = item.getAsFile();
+        if (!blob) continue;
+
+        const ext = extensionFromMime(item.type);
+        const buffer = await blob.arrayBuffer();
+        const data = Array.from(new Uint8Array(buffer));
+
+        try {
+          const filePath = await fileCommands.saveTempImage(data, ext);
+          if (sessionActiveRef.current) {
+            void invoke("write_terminal", { tileId, data: filePath });
+          }
+        } catch {
+          // Failed to save image — fall through to default paste
+        }
+        return;
+      }
+    };
+    host.addEventListener("paste", handlePaste);
+
     // --- 6. Output buffering ---
     //
     // Coalesce rapid PTY writes into a single xterm.write() call.
@@ -491,6 +533,7 @@ function XTermContainerComponent({
       cancelAnimationFrame(resizeRaf);
       window.clearTimeout(flushTimer);
       observer.disconnect();
+      host.removeEventListener("paste", handlePaste);
       fitAddonRef.current = null;
       searchAddonRef.current = null;
       terminalRef.current = null;
