@@ -78,14 +78,11 @@ function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & 
   return <SessionCard {...cardProps} dragRef={ref} isDragSource={isDragActive} />;
 }
 
-/** Droppable pinned zone */
-function PinnedDropZone({ isOver, children }: { isOver: boolean; children: React.ReactNode }) {
+/** Droppable area inside the pinned section (just the content, not the header) */
+function PinnedDropArea({ isOver, children }: { isOver: boolean; children: React.ReactNode }) {
   const { ref } = useDroppable({ id: "pinned-drop-zone" });
   return (
-    <div
-      ref={ref}
-      className={`mb-1 mx-2 rounded-md transition-colors ${isOver ? "bg-accent/40 ring-1 ring-accent-foreground/20" : ""}`}
-    >
+    <div ref={ref} className={`pb-2 pl-4 rounded-md transition-colors ${isOver ? "bg-accent/40" : ""}`}>
       {children}
     </div>
   );
@@ -426,7 +423,7 @@ export function SessionSidebar({
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col py-2">
           {/* Pinned section */}
-          <PinnedDropZone isOver={dragOverPinned}>
+          <div className="mb-1">
               <div
                 className="flex items-center gap-1.5 px-3 py-1.5 w-full text-left cursor-pointer"
                 onClick={() => setPinnedCollapsed((prev) => !prev)}
@@ -442,7 +439,7 @@ export function SessionSidebar({
                 />
               </div>
               {!pinnedCollapsed && (
-                <div className="pb-2 pl-4">
+                <PinnedDropArea isOver={dragOverPinned}>
                   {pinnedSessions.length > 0 ? (
                     <div className="flex flex-col gap-px px-1">
                       {pinnedSessions.map((session) => {
@@ -501,9 +498,9 @@ export function SessionSidebar({
                       Drag to pin
                     </div>
                   )}
-                </div>
+                </PinnedDropArea>
               )}
-          </PinnedDropZone>
+          </div>
 
           {projectGroups.map((group) => {
             const isActiveProject = group.path === state.projectPath;
