@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown, History, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, History, MoreHorizontal, Pin, Plus, Trash2 } from "lucide-react";
+import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { SessionCard } from "./SessionCard";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,26 @@ function ProjectAvatar({ name, isActive }: { name: string; isActive: boolean }) 
   );
 }
 
+/** Wrapper that makes a SessionCard draggable via dnd-kit */
+function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & { dragId: string; isDragActive?: boolean }) {
+  const { dragId, isDragActive, ...cardProps } = props;
+  const { ref } = useDraggable({ id: dragId });
+  return <SessionCard {...cardProps} dragRef={ref} isDragSource={isDragActive} />;
+}
+
+/** Droppable pinned zone */
+function PinnedDropZone({ isOver, children }: { isOver: boolean; children: React.ReactNode }) {
+  const { ref } = useDroppable({ id: "pinned-drop-zone" });
+  return (
+    <div
+      ref={ref}
+      className={`mb-1 mx-2 rounded-md transition-colors ${isOver ? "bg-accent/40 ring-1 ring-accent-foreground/20" : ""}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function SessionSidebar({
   onNewSession,
   onAddProject,
@@ -98,6 +119,17 @@ export function SessionSidebar({
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("switchboard-pinned-sessions");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
+  const [dragOverPinned, setDragOverPinned] = useState(false);
+  const [dragActiveId, setDragActiveId] = useState<string | null>(null);
   const effectiveSelectedSessionId = selectedSessionId ?? state.activeSessionId;
   const effectiveHistoryOpen = historyOpen ?? historyOpenInternal;
 
@@ -110,6 +142,30 @@ export function SessionSidebar({
       setHistoryOpenInternal(open);
     },
     [onHistoryOpenChange],
+  );
+
+  const persistPinnedIds = useCallback((ids: string[]) => {
+    setPinnedIds(ids);
+    localStorage.setItem("switchboard-pinned-sessions", JSON.stringify(ids));
+  }, []);
+
+  const togglePin = useCallback(
+    (sessionId: string) => {
+      persistPinnedIds(
+        pinnedIds.includes(sessionId)
+          ? pinnedIds.filter((id) => id !== sessionId)
+          : [...pinnedIds, sessionId],
+      );
+    },
+    [pinnedIds, persistPinnedIds],
+  );
+
+  const pinnedSessions = useMemo(
+    () =>
+      pinnedIds
+        .map((id) => state.sessions[id])
+        .filter((s): s is Session => s != null),
+    [pinnedIds, state.sessions],
   );
 
   const projectGroups = useMemo<ProjectSessionGroup[]>(() => {
@@ -202,6 +258,7 @@ export function SessionSidebar({
 
     return () => window.clearInterval(intervalId);
   }, []);
+
 
   const toggleProject = useCallback((path: string) => {
     setCollapsedProjects((current) => ({
@@ -325,6 +382,32 @@ export function SessionSidebar({
   }, [onDeleteSession, onDeleteSessionsBatch, selectedHistoryIds, state.sessions]);
 
   return (
+    <DragDropProvider
+      onDragStart={(event) => {
+        setDragActiveId(String(event.operation.source?.id ?? null));
+      }}
+      onDragOver={(event) => {
+        setDragOverPinned(event.operation.target?.id === "pinned-drop-zone");
+      }}
+      onDragEnd={(event) => {
+        if (!event.canceled) {
+          const sourceId = String(event.operation.source?.id ?? "");
+          const droppedOnPin = event.operation.target?.id === "pinned-drop-zone";
+          const isPinnedSource = sourceId.startsWith("pinned-");
+          const sessionId = isPinnedSource ? sourceId.replace("pinned-", "") : sourceId;
+
+          if (droppedOnPin && sessionId && !pinnedIds.includes(sessionId)) {
+            // Dragged unpinned session onto pin zone → pin it
+            persistPinnedIds([...pinnedIds, sessionId]);
+          } else if (isPinnedSource && !droppedOnPin && sessionId) {
+            // Dragged pinned session outside pin zone → unpin it
+            persistPinnedIds(pinnedIds.filter((id) => id !== sessionId));
+          }
+        }
+        setDragActiveId(null);
+        setDragOverPinned(false);
+      }}
+    >
     <div className="flex h-full w-full flex-col overflow-hidden bg-card">
       {/* New session button */}
       <div className="shrink-0 px-3 pt-2">
@@ -342,10 +425,91 @@ export function SessionSidebar({
       {/* Session list */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col py-2">
+          {/* Pinned section */}
+          <PinnedDropZone isOver={dragOverPinned}>
+              <div
+                className="flex items-center gap-1.5 px-3 py-1.5 w-full text-left cursor-pointer"
+                onClick={() => setPinnedCollapsed((prev) => !prev)}
+              >
+                <Pin className="size-3 text-muted-foreground" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Pinned
+                </span>
+                <ChevronDown
+                  className={`size-3 text-muted-foreground transition-transform ${
+                    pinnedCollapsed ? "-rotate-90" : ""
+                  }`}
+                />
+              </div>
+              {!pinnedCollapsed && (
+                <div className="pb-2 pl-4">
+                  {pinnedSessions.length > 0 ? (
+                    <div className="flex flex-col gap-px px-1">
+                      {pinnedSessions.map((session) => {
+                        const isHistorySession =
+                          getSessionRailBucket(session.status) === "history";
+                        const canResume =
+                          isHistorySession &&
+                          (session.agent === "claude-code" || session.agent === "codex");
+
+                        return (
+                          <DraggableSessionCard
+                            dragId={`pinned-${session.id}`}
+                            isDragActive={dragActiveId === `pinned-${session.id}`}
+                            key={session.id}
+                            session={session}
+                            isActive={effectiveSelectedSessionId === session.id}
+                            isPinned
+                            timestampLabel={formatCompactRelativeTime(session.createdAt, now)}
+                            timestampTitle={formatTimestampTitle(session.createdAt)}
+                            onPin={() => togglePin(session.id)}
+                            onResume={
+                              canResume && onResumeSession
+                                ? () => void handleResumeSessionClick(session)
+                                : undefined
+                            }
+                            onStop={
+                              !isHistorySession &&
+                              (session.status === "running" ||
+                                session.status === "idle" ||
+                                session.status === "needs-input")
+                                ? () => void onStopSession?.(session.id)
+                                : undefined
+                            }
+                            onRename={() => {
+                              setRenameTarget(session);
+                              setRenameValue(session.label);
+                            }}
+                            onDelete={() => setDeleteTarget(session)}
+                            onClick={() => {
+                              if (isHistorySession) {
+                                void handleViewSession(session);
+                                return;
+                              }
+                              void handleSelectSession(session);
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : dragOverPinned ? (
+                    <div className="mx-1 rounded-md border border-dashed border-foreground/30 bg-accent/30 px-3 py-2.5 text-center text-[11px] text-muted-foreground">
+                      Drop here to pin
+                    </div>
+                  ) : (
+                    <div className="px-4 py-2 text-[11px] text-muted-foreground">
+                      Drag to pin
+                    </div>
+                  )}
+                </div>
+              )}
+          </PinnedDropZone>
+
           {projectGroups.map((group) => {
             const isActiveProject = group.path === state.projectPath;
             const isCollapsed = collapsedProjects[group.path] ?? false;
-            const visibleSessions = group.sessions.slice(0, PROJECT_SESSION_PREVIEW_LIMIT);
+            const unpinnedSessions = group.sessions.filter((s) => !pinnedIds.includes(s.id));
+            const visibleSessions = unpinnedSessions.slice(0, PROJECT_SESSION_PREVIEW_LIMIT);
 
             return (
               <div key={group.path}>
@@ -440,15 +604,19 @@ export function SessionSidebar({
                               session.agent === "codex");
 
                           return (
-                            <SessionCard
+                            <DraggableSessionCard
+                              dragId={session.id}
+                              isDragActive={dragActiveId === session.id}
                               key={session.id}
                               session={session}
                               isActive={effectiveSelectedSessionId === session.id}
+                              isPinned={pinnedIds.includes(session.id)}
                               timestampLabel={formatCompactRelativeTime(
                                 session.createdAt,
                                 now,
                               )}
                               timestampTitle={formatTimestampTitle(session.createdAt)}
+                              onPin={() => togglePin(session.id)}
                               onResume={
                                 canResume && onResumeSession
                                   ? () => {
@@ -726,5 +894,6 @@ export function SessionSidebar({
         </DialogContent>
       </Dialog>
     </div>
+    </DragDropProvider>
   );
 }
