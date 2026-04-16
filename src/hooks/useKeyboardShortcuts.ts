@@ -1,4 +1,35 @@
 import { useEffect } from "react";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+
+// ---------------------------------------------------------------------------
+// Zoom (Cmd+= / Cmd+- / Cmd+0)
+// ---------------------------------------------------------------------------
+const ZOOM_STEP = 0.1;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 2.0;
+const ZOOM_STORAGE_KEY = "switchboard-zoom-level";
+
+function getStoredZoom(): number {
+  const raw = localStorage.getItem(ZOOM_STORAGE_KEY);
+  if (raw == null) return 1.0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, n)) : 1.0;
+}
+
+let currentZoom = getStoredZoom();
+
+function applyZoom(level: number) {
+  currentZoom = Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level)) * 100) / 100;
+  localStorage.setItem(ZOOM_STORAGE_KEY, String(currentZoom));
+  getCurrentWebviewWindow().setZoom(currentZoom).catch(() => {});
+}
+
+/** Restore persisted zoom level on app startup. */
+export function initZoom() {
+  if (currentZoom !== 1.0) {
+    getCurrentWebviewWindow().setZoom(currentZoom).catch(() => {});
+  }
+}
 
 interface ShortcutHandlers {
   onSwitchSession: (index: number) => void;
@@ -29,6 +60,9 @@ interface ShortcutHandlers {
  * - Ctrl+E: Open inspector on Files tab
  * - Ctrl+Shift+H: Open history
  * - Escape: Focus terminal
+ * - Ctrl+=: Zoom in
+ * - Ctrl+-: Zoom out
+ * - Ctrl+0: Reset zoom
  */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
   useEffect(() => {
@@ -90,6 +124,27 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "h") {
         e.preventDefault();
         handlers.onOpenHistory?.();
+        return;
+      }
+
+      // Cmd/Ctrl + = — zoom in
+      if ((e.ctrlKey || e.metaKey) && e.key === "=") {
+        e.preventDefault();
+        applyZoom(currentZoom + ZOOM_STEP);
+        return;
+      }
+
+      // Cmd/Ctrl + - — zoom out
+      if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+        e.preventDefault();
+        applyZoom(currentZoom - ZOOM_STEP);
+        return;
+      }
+
+      // Cmd/Ctrl + 0 — reset zoom
+      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        applyZoom(1.0);
         return;
       }
 
