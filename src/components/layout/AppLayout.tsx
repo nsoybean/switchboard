@@ -41,7 +41,7 @@ import type {
 } from "../../state/types";
 import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
 
-const MIN_SIDEBAR_WIDTH = 260;
+const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 520;
 const MIN_INSPECTOR_WIDTH = 200;
 const MAX_INSPECTOR_WIDTH = 760;
@@ -1330,6 +1330,7 @@ export function AppLayout() {
     <div className="flex flex-col h-full bg-background">
       <Titlebar
         sidebarOpen={sidebarOpen}
+        sidebarWidth={sidebarWidth}
         inspectorOpen={inspectorOpen}
         workspaceShellMode={workspaceShellMode}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}

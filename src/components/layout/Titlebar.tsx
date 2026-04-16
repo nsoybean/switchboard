@@ -26,6 +26,7 @@ import type { GitState } from "@/hooks/useGitState";
 
 interface TitlebarProps {
   sidebarOpen: boolean;
+  sidebarWidth?: number;
   inspectorOpen: boolean;
   workspaceShellMode?: "pane" | "canvas";
   onToggleSidebar: () => void;
@@ -48,6 +49,7 @@ interface TitlebarProps {
 
 export function Titlebar({
   sidebarOpen,
+  sidebarWidth = 320,
   inspectorOpen,
   workspaceShellMode = "pane",
   onToggleSidebar,
@@ -113,47 +115,53 @@ export function Titlebar({
       data-tauri-drag-region
       className="flex items-center h-[52px] border-b bg-background select-none shrink-0"
     >
-      {/* Window controls — hidden in fullscreen */}
-      {!isFullscreen && (
-        <div className="flex items-center gap-1.5 pl-3 pr-2">
-          <button
-            onClick={() => appWindow.close()}
-            className="size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
-            aria-label="Close"
-          />
-          <button
-            onClick={() => appWindow.minimize()}
-            className="size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
-            aria-label="Minimize"
-          />
-          <button
-            onClick={handleMaximize}
-            className="size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
-            aria-label="Fullscreen"
-          />
+      {/* Left section — width matches sidebar so branch selector aligns with middle pane */}
+      <div
+        className="flex shrink-0 items-center"
+        style={{ width: sidebarOpen ? sidebarWidth : undefined }}
+      >
+        {/* Window controls — hidden in fullscreen */}
+        {!isFullscreen && (
+          <div className="flex items-center gap-1.5 pl-3 pr-2">
+            <button
+              onClick={() => appWindow.close()}
+              className="size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
+              aria-label="Close"
+            />
+            <button
+              onClick={() => appWindow.minimize()}
+              className="size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
+              aria-label="Minimize"
+            />
+            <button
+              onClick={handleMaximize}
+              className="size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
+              aria-label="Fullscreen"
+            />
+          </div>
+        )}
+
+        {!isFullscreen && <Separator orientation="vertical" className="h-4" />}
+
+        {/* Sidebar toggle */}
+        <div className="flex items-center px-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-9"
+                onClick={onToggleSidebar}
+              >
+                <PanelLeft className={sidebarOpen ? "size-4" : "size-4 opacity-40"} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
+          </Tooltip>
         </div>
-      )}
-
-      {!isFullscreen && <Separator orientation="vertical" className="h-4" />}
-
-      {/* Left controls */}
-      <div className="flex items-center px-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9"
-              onClick={onToggleSidebar}
-            >
-              <PanelLeft className={sidebarOpen ? "size-4" : "size-4 opacity-40"} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Toggle Sidebar (⌘B)</TooltipContent>
-        </Tooltip>
       </div>
 
-      {/* Branch + Create PR — only shown when a session is active */}
+      {/* Branch + Create PR — aligned to left edge of middle pane */}
       {hasActiveSession && git?.branch && (
         <div className="flex items-center gap-2 text-[11px]">
           <BranchPicker

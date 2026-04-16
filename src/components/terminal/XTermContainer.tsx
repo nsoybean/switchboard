@@ -1,10 +1,12 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { fileCommands } from "@/lib/tauri-commands";
 import { useTheme } from "@/components/theme-provider";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
@@ -64,6 +66,14 @@ const LIGHT_THEME = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function extensionFromMime(mime: string): string {
+  if (mime === "image/png") return "png";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/gif") return "gif";
+  if (mime === "image/webp") return "webp";
+  return "png";
+}
 
 /** Strip SGR dim (code 2) for light theme readability. */
 function stripAnsiDim(data: string): string {
@@ -153,10 +163,15 @@ function XTermContainerComponent({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
   const sessionActiveRef = useRef(false);
   const onStartRef = useRef(onStart);
   const onExitRef = useRef(onExit);
   const { theme } = useTheme();
+
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isDark =
     theme === "dark" ||
@@ -165,6 +180,27 @@ function XTermContainerComponent({
   isDarkRef.current = isDark;
 
   const isShellCommand = /(^|\/)(zsh|bash|sh|fish)$/.test(command);
+
+  const openSearch = useCallback(() => {
+    setSearchVisible(true);
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    setSearchVisible(false);
+    setSearchQuery("");
+    searchAddonRef.current?.clearDecorations();
+    terminalRef.current?.focus();
+  }, []);
+
+  const doSearch = useCallback((query: string, direction: "next" | "prev" = "next") => {
+    if (!searchAddonRef.current || !query) return;
+    if (direction === "next") {
+      searchAddonRef.current.findNext(query);
+    } else {
+      searchAddonRef.current.findPrevious(query);
+    }
+  }, []);
 
   useEffect(() => { onStartRef.current = onStart; }, [onStart]);
   useEffect(() => { onExitRef.current = onExit; }, [onExit]);
@@ -199,6 +235,13 @@ function XTermContainerComponent({
     // --- 2. Custom key handlers ---
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
+
+      // Cmd+F → open search bar
+      if (event.key === "f" && (isMac ? event.metaKey : event.ctrlKey) && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        openSearch();
+        return false;
+      }
 
       // Shift+Enter → newline (Claude Code / Codex multi-line)
       if (!isShellCommand && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -241,7 +284,10 @@ function XTermContainerComponent({
 
     // --- 3. Load addons and open ---
     const fitAddon = new FitAddon();
+    const searchAddon = new SearchAddon();
     terminal.loadAddon(fitAddon);
+    terminal.loadAddon(searchAddon);
+    searchAddonRef.current = searchAddon;
     terminal.open(host);
 
     // Unicode 11 for proper character width measurement
@@ -315,6 +361,39 @@ function XTermContainerComponent({
         void invoke("write_terminal", { tileId, data });
       }),
     ];
+
+    // --- 5b. Image paste ---
+    //
+    // Intercept paste events containing images, save to a temp file,
+    // and write the file path into the PTY so Claude Code can pick it up.
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith("image/")) continue;
+
+        e.preventDefault();
+        e.stopPropagation();
+        const blob = item.getAsFile();
+        if (!blob) continue;
+
+        const ext = extensionFromMime(item.type);
+        const buffer = await blob.arrayBuffer();
+        const data = Array.from(new Uint8Array(buffer));
+
+        try {
+          const filePath = await fileCommands.saveTempImage(data, ext);
+          if (sessionActiveRef.current) {
+            void invoke("write_terminal", { tileId, data: filePath });
+          }
+        } catch {
+          // Failed to save image — fall through to default paste
+        }
+        return;
+      }
+    };
+    host.addEventListener("paste", handlePaste);
 
     // --- 6. Output buffering ---
     //
@@ -454,7 +533,9 @@ function XTermContainerComponent({
       cancelAnimationFrame(resizeRaf);
       window.clearTimeout(flushTimer);
       observer.disconnect();
+      host.removeEventListener("paste", handlePaste);
       fitAddonRef.current = null;
+      searchAddonRef.current = null;
       terminalRef.current = null;
       disposables.forEach((d) => d.dispose());
       unsubs.forEach((fn) => fn());
@@ -463,7 +544,7 @@ function XTermContainerComponent({
         void invoke("close_terminal", { tileId }).catch(() => {});
       }
     };
-  }, [args, closeOnUnmount, command, cwd, env, tileId]);
+  }, [args, closeOnUnmount, command, cwd, env, openSearch, tileId]);
 
   // -----------------------------------------------------------------------
   // Theme sync (visual only — no listener re-registration)
@@ -474,7 +555,59 @@ function XTermContainerComponent({
     }
   }, [isDark]);
 
-  return <div ref={containerRef} className="h-full w-full min-h-0 min-w-0 overflow-hidden" />;
+  return (
+    <div className="relative h-full w-full min-h-0 min-w-0 overflow-hidden">
+      {searchVisible && (
+        <div className="absolute top-1 right-2 z-10 flex items-center gap-1 rounded border border-border bg-background px-2 py-1 shadow-sm">
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              doSearch(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                closeSearch();
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                doSearch(searchQuery, e.shiftKey ? "prev" : "next");
+              }
+            }}
+            placeholder="Search..."
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            className="h-6 w-48 border-none bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            style={{ fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace' }}
+          />
+          <button
+            onClick={() => doSearch(searchQuery, "prev")}
+            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+            title="Previous (Shift+Enter)"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 9.5V2.5M6 2.5L2.5 6M6 2.5L9.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <button
+            onClick={() => doSearch(searchQuery, "next")}
+            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+            title="Next (Enter)"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2.5V9.5M6 9.5L2.5 6M6 9.5L9.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <button
+            onClick={closeSearch}
+            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+            title="Close (Esc)"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3L9 9M9 3L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      )}
+      <div ref={containerRef} className="h-full w-full" />
+    </div>
+  );
 }
 
 export const XTermContainer = memo(
