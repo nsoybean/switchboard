@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, GitFork, X } from "lucide-react";
+import { ChevronDown, CornerDownLeft, FolderOpen, GitFork, Monitor, X } from "lucide-react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { BranchPicker } from "@/components/git/BranchPicker";
@@ -11,6 +11,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { getBranchPrefix } from "@/lib/branches";
 import { fileCommands, gitCommands, type GitBranchInfo } from "@/lib/tauri-commands";
 import type { AgentType } from "@/state/types";
@@ -62,7 +67,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const currentBranch = branches.find((b) => b.is_current)?.name ?? "";
+
   const defaultBranchPrefix = getBranchPrefix(agent);
 
   // Clean up object URLs on unmount
@@ -160,7 +165,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
       isAutoLabel: true,
       task: fullTask,
       useWorktree,
-      baseBranch: useWorktree ? baseBranch : null,
+      baseBranch: baseBranch || null,
     });
 
     // Clean up
@@ -253,29 +258,64 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {/* Local badge — hidden until remote sessions are supported */}
+          {/* <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
+                <Monitor className="size-3" />
+                <span>Local</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Run locally on this machine</TooltipContent>
+          </Tooltip> */}
+
+          {/* Project badge — hidden for now, only one project open at a time */}
+          {/* {projectPath && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
+                  <FolderOpen className="size-3" />
+                  <span>{projectPath.split("/").pop()}</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{projectPath}</TooltipContent>
+            </Tooltip>
+          )} */}
+
           {/* Branch badge */}
-          <BranchPicker
-            branches={branches}
-            loading={branchesLoading}
-            value={useWorktree ? baseBranch : currentBranch}
-            onSelect={setBaseBranch}
-            onCreateBranch={() => setCreateBranchOpen(true)}
-            disabled={!useWorktree}
-            triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
-            showCurrentBadge={false}
-            showIcon
-          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <BranchPicker
+                  branches={branches}
+                  loading={branchesLoading}
+                  value={baseBranch}
+                  onSelect={setBaseBranch}
+                  onCreateBranch={() => setCreateBranchOpen(true)}
+                  triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
+                  showCurrentBadge={false}
+                  showIcon
+                />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Branch to start from</TooltipContent>
+          </Tooltip>
 
           {/* Worktree badge */}
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-            <Checkbox
-              checked={useWorktree}
-              onCheckedChange={(checked) => setUseWorktree(checked === true)}
-              className="size-3"
-            />
-            <GitFork className="size-3" />
-            <span>Worktree</span>
-          </label>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                <Checkbox
+                  checked={useWorktree}
+                  onCheckedChange={(checked) => setUseWorktree(checked === true)}
+                  className="size-3"
+                />
+                <GitFork className="size-3" />
+                <span>Worktree</span>
+              </label>
+            </TooltipTrigger>
+            <TooltipContent>Work in an isolated copy of the repo</TooltipContent>
+          </Tooltip>
         </div>
 
         {/* Chat input */}
