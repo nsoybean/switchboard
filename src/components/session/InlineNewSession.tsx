@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, GitFork, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, CornerDownLeft, GitFork, Info, X } from "lucide-react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { BranchPicker } from "@/components/git/BranchPicker";
@@ -227,6 +227,12 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   const selectedAgent = AGENTS.find((a) => a.id === agent) ?? AGENTS[0];
   const disableSubmit = useWorktree && (branchesLoading || !baseBranch);
 
+  const currentBranch = useMemo(
+    () => branches.find((b) => b.is_current)?.name ?? null,
+    [branches],
+  );
+  const isSwitchingBranch = !useWorktree && !!baseBranch && !!currentBranch && baseBranch !== currentBranch;
+
   return (
     <div className="flex h-full items-center justify-center bg-background">
       <div className="w-full max-w-xl px-6">
@@ -317,6 +323,24 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
             <TooltipContent>Work in an isolated copy of the repo</TooltipContent>
           </Tooltip>
         </div>
+
+        {/* Branch switch hint */}
+        {isSwitchingBranch && (
+          <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-muted-foreground">
+            <Info className="mt-0.5 size-3 shrink-0 text-amber-500" />
+            <span>
+              This will checkout <span className="font-medium text-foreground">{baseBranch}</span> in the main repo, affecting all local sessions.{" "}
+              <button
+                type="button"
+                onClick={() => setUseWorktree(true)}
+                className="font-medium text-amber-600 underline underline-offset-2 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300"
+              >
+                Enable worktree
+              </button>
+              {" "}to work on this branch in isolation.
+            </span>
+          </div>
+        )}
 
         {/* Chat input */}
         <div className="relative rounded-lg border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring">

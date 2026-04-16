@@ -23,6 +23,7 @@ import { buildResumeArgs, buildSpawnArgs } from "../../lib/agents";
 import { getBranchPrefix } from "../../lib/branches";
 import {
   fileCommands,
+  gitCommands,
   hookCommands,
   projectCommands,
   worktreeCommands,
@@ -547,6 +548,18 @@ export function AppLayout() {
           baseBranchName = config.baseBranch;
         } catch (err) {
           toast.error("Failed to create worktree", {
+            description: String(err),
+          });
+          return;
+        }
+      } else if (config.baseBranch) {
+        // Checkout selected branch in the shared working directory.
+        // Branch is not persisted on the session — useGitState polls the
+        // real HEAD and keeps all local sessions up to date.
+        try {
+          await gitCommands.checkoutBranch(state.projectPath, config.baseBranch);
+        } catch (err) {
+          toast.error("Failed to checkout branch", {
             description: String(err),
           });
           return;
