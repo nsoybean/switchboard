@@ -326,6 +326,19 @@ export function SessionSidebar({
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-card">
+      {/* New session button */}
+      <div className="shrink-0 px-3 pt-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-center gap-1.5 text-xs"
+          onClick={onNewSession}
+        >
+          <Plus className="size-3.5" />
+          New Session
+        </Button>
+      </div>
+
       {/* Session list */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <div className="flex flex-col py-2">
