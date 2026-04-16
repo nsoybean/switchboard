@@ -82,7 +82,7 @@ function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & 
 function PinnedDropArea({ isOver, children }: { isOver: boolean; children: React.ReactNode }) {
   const { ref } = useDroppable({ id: "pinned-drop-zone" });
   return (
-    <div ref={ref} className={`pb-2 pl-4 rounded-md transition-colors ${isOver ? "bg-accent/40" : ""}`}>
+    <div ref={ref} className="pb-2 pl-4">
       {children}
     </div>
   );
@@ -425,10 +425,12 @@ export function SessionSidebar({
           {/* Pinned section */}
           <div className="mb-1">
               <div
-                className="flex items-center gap-1.5 px-3 py-1.5 w-full text-left cursor-pointer"
+                className="flex items-center gap-2 px-3 py-1.5 w-full text-left cursor-pointer"
                 onClick={() => setPinnedCollapsed((prev) => !prev)}
               >
-                <Pin className="size-3 text-muted-foreground" />
+                <span className="flex size-6 shrink-0 items-center justify-center">
+                  <Pin className="size-3 text-muted-foreground" />
+                </span>
                 <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Pinned
                 </span>
@@ -494,7 +496,7 @@ export function SessionSidebar({
                       Drop here to pin
                     </div>
                   ) : (
-                    <div className="px-4 py-2 text-[11px] text-muted-foreground">
+                    <div className="px-3 py-2 text-[11px] text-muted-foreground">
                       Drag to pin
                     </div>
                   )}
