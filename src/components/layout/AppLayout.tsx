@@ -290,6 +290,21 @@ export function AppLayout() {
     state.projectPath,
   ]);
 
+  // Clear active session when it is no longer live (stopped/done/error)
+  // so the sidebar highlight and inspector panel disappear.
+  useEffect(() => {
+    if (
+      state.activeSessionId &&
+      activeSessionCandidate &&
+      activeSessionCandidate.status !== "running" &&
+      activeSessionCandidate.status !== "idle" &&
+      activeSessionCandidate.status !== "needs-input"
+    ) {
+      const nextLive = liveSessions[0]?.id ?? null;
+      dispatch({ type: "SET_ACTIVE", id: nextLive });
+    }
+  }, [activeSessionCandidate, dispatch, liveSessions, state.activeSessionId]);
+
   useEffect(() => {
     sessionsRef.current = state.sessions;
   }, [state.sessions]);
