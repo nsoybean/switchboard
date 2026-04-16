@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, FolderOpen, GitFork, Monitor, X } from "lucide-react";
+import { ChevronDown, CornerDownLeft, GitFork, X } from "lucide-react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { BranchPicker } from "@/components/git/BranchPicker";
