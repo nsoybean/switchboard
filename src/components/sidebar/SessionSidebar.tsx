@@ -104,7 +104,17 @@ function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & 
 /** Sortable pinned session card with reorder animation */
 function SortablePinnedCard(props: React.ComponentProps<typeof SessionCard> & { sortableId: string }) {
   const { sortableId, ...cardProps } = props;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({ id: sortableId });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+    activeIndex,
+    overIndex,
+  } = useSortable({ id: sortableId });
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
@@ -112,10 +122,15 @@ function SortablePinnedCard(props: React.ComponentProps<typeof SessionCard> & { 
     zIndex: isDragging ? 50 : undefined,
     position: "relative" as const,
   };
+  const indicatorBelow = isOver && !isDragging && activeIndex !== -1 && activeIndex < overIndex;
+  const indicatorAbove = isOver && !isDragging && !indicatorBelow;
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative">
-      {isOver && !isDragging && (
+      {indicatorAbove && (
         <div className="absolute top-0 left-0 right-0 h-[2px] -translate-y-[1px] bg-primary rounded-full" />
+      )}
+      {indicatorBelow && (
+        <div className="absolute bottom-0 left-0 right-0 h-[2px] translate-y-[1px] bg-primary rounded-full" />
       )}
       <SessionCard {...cardProps} isDragSource={isDragging} />
     </div>
