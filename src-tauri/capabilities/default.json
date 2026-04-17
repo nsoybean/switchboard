@@ -30,6 +30,7 @@
     "notification:allow-cancel",
     "notification:allow-get-active",
     "notification:allow-remove-active",
-    "core:webview:allow-set-webview-zoom"
+    "core:webview:allow-set-webview-zoom",
+    "core:window:allow-set-cursor-icon"
   ]
 }

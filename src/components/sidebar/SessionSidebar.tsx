@@ -10,7 +10,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown, History, MoreHorizontal, Pin, Plus, Trash2 } from "lucide-react";
-import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
+import {
+  DndContext,
+  useDraggable,
+  useDroppable,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragOverEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { SessionCard } from "./SessionCard";
 import { Button } from "@/components/ui/button";
@@ -71,18 +87,46 @@ function ProjectAvatar({ name, isActive }: { name: string; isActive: boolean }) 
   );
 }
 
-/** Wrapper that makes a SessionCard draggable via dnd-kit */
+/** Wrapper that makes a SessionCard draggable via dnd-kit v6 */
 function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & { dragId: string; isDragActive?: boolean }) {
   const { dragId, isDragActive, ...cardProps } = props;
-  const { ref } = useDraggable({ id: dragId });
-  return <SessionCard {...cardProps} dragRef={ref} isDragSource={isDragActive} />;
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: dragId });
+  const style = transform
+    ? { transform: CSS.Translate.toString(transform), zIndex: 50, position: "relative" as const }
+    : undefined;
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      <SessionCard {...cardProps} isDragSource={isDragActive} />
+    </div>
+  );
 }
 
-/** Droppable area inside the pinned section (just the content, not the header) */
-function PinnedDropArea({ isOver, children }: { isOver: boolean; children: React.ReactNode }) {
-  const { ref } = useDroppable({ id: "pinned-drop-zone" });
+/** Sortable pinned session card with reorder animation */
+function SortablePinnedCard(props: React.ComponentProps<typeof SessionCard> & { sortableId: string }) {
+  const { sortableId, ...cardProps } = props;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({ id: sortableId });
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+    position: "relative" as const,
+  };
   return (
-    <div ref={ref} className="pb-2 pl-4">
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative">
+      {isOver && !isDragging && (
+        <div className="absolute top-0 left-0 right-0 h-[2px] -translate-y-[1px] bg-primary rounded-full" />
+      )}
+      <SessionCard {...cardProps} isDragSource={isDragging} />
+    </div>
+  );
+}
+
+/** Droppable area inside the pinned section */
+function PinnedDropArea({ children }: { children: React.ReactNode }) {
+  const { setNodeRef } = useDroppable({ id: "pinned-drop-zone" });
+  return (
+    <div ref={setNodeRef} className="pb-2 pl-4">
       {children}
     </div>
   );
@@ -378,32 +422,59 @@ export function SessionSidebar({
     setDeletingSelected(false);
   }, [onDeleteSession, onDeleteSessionsBatch, selectedHistoryIds, state.sessions]);
 
-  return (
-    <DragDropProvider
-      onDragStart={(event) => {
-        setDragActiveId(String(event.operation.source?.id ?? null));
-      }}
-      onDragOver={(event) => {
-        setDragOverPinned(event.operation.target?.id === "pinned-drop-zone");
-      }}
-      onDragEnd={(event) => {
-        if (!event.canceled) {
-          const sourceId = String(event.operation.source?.id ?? "");
-          const droppedOnPin = event.operation.target?.id === "pinned-drop-zone";
-          const isPinnedSource = sourceId.startsWith("pinned-");
-          const sessionId = isPinnedSource ? sourceId.replace("pinned-", "") : sourceId;
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
 
-          if (droppedOnPin && sessionId && !pinnedIds.includes(sessionId)) {
-            // Dragged unpinned session onto pin zone → pin it
-            persistPinnedIds([...pinnedIds, sessionId]);
-          } else if (isPinnedSource && !droppedOnPin && sessionId) {
-            // Dragged pinned session outside pin zone → unpin it
-            persistPinnedIds(pinnedIds.filter((id) => id !== sessionId));
-          }
-        }
-        setDragActiveId(null);
-        setDragOverPinned(false);
-      }}
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setDragActiveId(String(event.active.id));
+  }, []);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    setDragOverPinned(event.over?.id === "pinned-drop-zone");
+  }, []);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const sourceId = String(event.active.id);
+    const targetId = event.over ? String(event.over.id) : "";
+    const droppedOnPin = targetId === "pinned-drop-zone";
+    const isPinnedSource = sourceId.startsWith("pinned-");
+    const isPinnedTarget = targetId.startsWith("pinned-");
+    const sessionId = isPinnedSource ? sourceId.replace("pinned-", "") : sourceId;
+
+    if (isPinnedSource && isPinnedTarget) {
+      const fromId = sourceId.replace("pinned-", "");
+      const toId = targetId.replace("pinned-", "");
+      const fromIdx = pinnedIds.indexOf(fromId);
+      const toIdx = pinnedIds.indexOf(toId);
+      if (fromIdx !== -1 && toIdx !== -1 && fromIdx !== toIdx) {
+        const next = [...pinnedIds];
+        next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, fromId);
+        persistPinnedIds(next);
+      }
+    } else if (!isPinnedSource && isPinnedTarget && sessionId && !pinnedIds.includes(sessionId)) {
+      const toId = targetId.replace("pinned-", "");
+      const toIdx = pinnedIds.indexOf(toId);
+      const next = [...pinnedIds];
+      next.splice(toIdx === -1 ? next.length : toIdx, 0, sessionId);
+      persistPinnedIds(next);
+    } else if (droppedOnPin && sessionId && !pinnedIds.includes(sessionId)) {
+      persistPinnedIds([...pinnedIds, sessionId]);
+    } else if (isPinnedSource && !droppedOnPin && !isPinnedTarget && sessionId) {
+      persistPinnedIds(pinnedIds.filter((id) => id !== sessionId));
+    }
+
+    setDragActiveId(null);
+    setDragOverPinned(false);
+  }, [pinnedIds, persistPinnedIds]);
+
+  return (
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
     >
     <div className="flex h-full w-full flex-col overflow-hidden bg-card">
       {/* New session button */}
@@ -441,8 +512,12 @@ export function SessionSidebar({
                 />
               </div>
               {!pinnedCollapsed && (
-                <PinnedDropArea isOver={dragOverPinned}>
+                <PinnedDropArea>
                   {pinnedSessions.length > 0 ? (
+                    <SortableContext
+                      items={pinnedSessions.map((s) => `pinned-${s.id}`)}
+                      strategy={verticalListSortingStrategy}
+                    >
                     <div className="flex flex-col gap-px px-1">
                       {pinnedSessions.map((session) => {
                         const isHistorySession =
@@ -452,9 +527,8 @@ export function SessionSidebar({
                           (session.agent === "claude-code" || session.agent === "codex");
 
                         return (
-                          <DraggableSessionCard
-                            dragId={`pinned-${session.id}`}
-                            isDragActive={dragActiveId === `pinned-${session.id}`}
+                          <SortablePinnedCard
+                            sortableId={`pinned-${session.id}`}
                             key={session.id}
                             session={session}
                             isActive={effectiveSelectedSessionId === session.id}
@@ -491,6 +565,7 @@ export function SessionSidebar({
                         );
                       })}
                     </div>
+                    </SortableContext>
                   ) : dragOverPinned ? (
                     <div className="mx-1 rounded-md border border-dashed border-foreground/30 bg-accent/30 px-3 py-2.5 text-center text-[11px] text-muted-foreground">
                       Drop here to pin
@@ -893,6 +968,6 @@ export function SessionSidebar({
         </DialogContent>
       </Dialog>
     </div>
-    </DragDropProvider>
+    </DndContext>
   );
 }

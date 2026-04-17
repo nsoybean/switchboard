@@ -53,7 +53,7 @@ export function SessionCard({
     return (
       <div
         ref={dragRef}
-        className="inline-flex min-w-0 items-center rounded bg-card px-1.5 shadow-sm ring-1 ring-border"
+        className="inline-flex max-w-[240px] items-center rounded bg-card px-1.5 py-0.5 shadow-sm ring-1 ring-border"
       >
         <span className="truncate text-[12px] font-medium">
           {session.label || "New session"}
