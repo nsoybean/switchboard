@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown, History, MoreHorizontal, Pin, Plus, Trash2 } from "lucide-react";
 import {
   DndContext,
+  DragOverlay,
   useDraggable,
   useDroppable,
   PointerSensor,
@@ -118,8 +119,7 @@ function SortablePinnedCard(props: React.ComponentProps<typeof SessionCard> & { 
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0 : 1,
     position: "relative" as const,
   };
   const indicatorBelow = isOver && !isDragging && activeIndex !== -1 && activeIndex < overIndex;
@@ -132,7 +132,7 @@ function SortablePinnedCard(props: React.ComponentProps<typeof SessionCard> & { 
       {indicatorBelow && (
         <div className="absolute bottom-0 left-0 right-0 h-[2px] translate-y-[1px] bg-primary rounded-full" />
       )}
-      <SessionCard {...cardProps} isDragSource={isDragging} />
+      <SessionCard {...cardProps} />
     </div>
   );
 }
@@ -982,6 +982,19 @@ export function SessionSidebar({
           </div>
         </DialogContent>
       </Dialog>
+      <DragOverlay dropAnimation={null}>
+        {dragActiveId?.startsWith("pinned-") ? (() => {
+          const sid = dragActiveId.replace("pinned-", "");
+          const session = pinnedSessions.find((s) => s.id === sid);
+          return session ? (
+            <div className="inline-flex max-w-[240px] items-center rounded bg-card px-1.5 py-0.5 shadow-sm ring-1 ring-border">
+              <span className="truncate text-[12px] font-medium">
+                {session.label || "New session"}
+              </span>
+            </div>
+          ) : null;
+        })() : null}
+      </DragOverlay>
     </div>
     </DndContext>
   );
