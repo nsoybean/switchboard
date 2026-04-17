@@ -5,7 +5,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { GitBranch, PencilLine, Play, Square, Trash2 } from "lucide-react";
+import { GitBranch, PencilLine, Pin, PinOff, Play, Square, Trash2 } from "lucide-react";
 import type { Session } from "../../state/types";
 
 interface SessionCardProps {
@@ -16,7 +16,12 @@ interface SessionCardProps {
   timestampLabel?: string;
   timestampTitle?: string;
   diffStats?: { additions: number; deletions: number } | null;
+  isPinned?: boolean;
+  /** Ref from useDraggable — attach to the root element to make it draggable */
+  dragRef?: React.Ref<HTMLDivElement>;
+  isDragSource?: boolean;
   onClick: () => void;
+  onPin?: () => void;
   onResume?: () => void;
   onStop?: () => void;
   onRename?: () => void;
@@ -26,21 +31,40 @@ interface SessionCardProps {
 export function SessionCard({
   session,
   isActive,
+  isPinned,
+  dragRef,
+  isDragSource,
   index,
   timestampLabel,
   timestampTitle,
   diffStats,
   onClick,
+  onPin,
   onResume,
   onStop,
   onRename,
   onDelete,
 }: SessionCardProps) {
   const isRunning = session.status === "running";
-  const canManage = Boolean(onResume || onStop || onRename || onDelete);
+  const canManage = Boolean(onPin || onResume || onStop || onRename || onDelete);
+
+  // When this card is the drag source, show a compact solid card
+  if (isDragSource) {
+    return (
+      <div
+        ref={dragRef}
+        className="inline-flex max-w-[240px] items-center rounded bg-card px-1.5 py-0.5 shadow-sm ring-1 ring-border"
+      >
+        <span className="truncate text-[12px] font-medium">
+          {session.label || "New session"}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div
+      ref={dragRef}
       className={cn(
         "group/session flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors overflow-hidden cursor-pointer",
         isActive
@@ -115,6 +139,25 @@ export function SessionCard({
         )}
         {canManage && (
           <div className="hidden items-center gap-0.5 group-hover/session:flex group-focus-within/session:flex">
+            {onPin && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-5 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPin();
+                    }}
+                  >
+                    {isPinned ? <PinOff className="size-3" /> : <Pin className="size-3" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{isPinned ? "Unpin" : "Pin"}</TooltipContent>
+              </Tooltip>
+            )}
             {onResume && (
               <Tooltip>
                 <TooltipTrigger asChild>

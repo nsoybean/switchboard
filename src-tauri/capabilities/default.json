@@ -29,6 +29,8 @@
     "notification:allow-register-action-types",
     "notification:allow-cancel",
     "notification:allow-get-active",
-    "notification:allow-remove-active"
+    "notification:allow-remove-active",
+    "core:webview:allow-set-webview-zoom",
+    "core:window:allow-set-cursor-icon"
   ]
 }

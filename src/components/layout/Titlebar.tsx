@@ -117,6 +117,7 @@ export function Titlebar({
     >
       {/* Left section — width matches sidebar so branch selector aligns with middle pane */}
       <div
+        data-tauri-drag-region
         className="flex shrink-0 items-center"
         style={{ width: sidebarOpen ? sidebarWidth : undefined }}
       >
@@ -163,7 +164,7 @@ export function Titlebar({
 
       {/* Branch + Create PR — aligned to left edge of middle pane */}
       {hasActiveSession && git?.branch && (
-        <div className="flex items-center gap-2 text-[11px]">
+        <div data-tauri-drag-region className="flex items-center gap-2 text-[11px]">
           <BranchPicker
             branches={git.branches}
             loading={git.branchesLoading && git.branches.length === 0}
@@ -207,7 +208,7 @@ export function Titlebar({
       <div data-tauri-drag-region className="flex-1" />
 
       {/* Right controls */}
-      <div className="flex items-center gap-1 px-2">
+      <div data-tauri-drag-region className="flex items-center gap-1 px-2">
         {/* Pane / Canvas toggle */}
         {projectPathLabel ? (
           <>

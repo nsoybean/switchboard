@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { GitFork } from "lucide-react";
 import { toast } from "sonner";
 import { BranchPicker } from "@/components/git/BranchPicker";
 import { CreateBranchDialog } from "@/components/git/CreateBranchDialog";
@@ -56,7 +57,7 @@ export function NewSessionDialog({
   const defaultBranchPrefix = getBranchPrefix(agent);
 
   useEffect(() => {
-    if (!open || !projectPath || !useWorktree) {
+    if (!open || !projectPath) {
       return;
     }
 
@@ -100,7 +101,7 @@ export function NewSessionDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, projectPath, useWorktree]);
+  }, [open, projectPath]);
 
   const disableSubmit = useWorktree && (branchesLoading || !baseBranch);
 
@@ -157,7 +158,7 @@ export function NewSessionDialog({
       isAutoLabel: !trimmedLabel,
       task: task.trim(),
       useWorktree,
-      baseBranch: useWorktree ? baseBranch : null,
+      baseBranch: baseBranch || null,
     });
     setLabel("");
     setTask("");
@@ -227,51 +228,36 @@ export function NewSessionDialog({
             </div>
           )}
 
-          {/* Worktree toggle */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="worktree"
-                checked={useWorktree}
-                onCheckedChange={(checked) =>
-                  setUseWorktree(checked === true)
-                }
-              />
-              <label
-                htmlFor="worktree"
-                className="text-sm text-muted-foreground cursor-pointer"
-              >
-                New worktree
-              </label>
-            </div>
-            {useWorktree && (
-              <div className="pl-6 pt-0.5 space-y-3">
-                <p className="text-[11px] text-muted-foreground/70">
-                  Create isolated working directory.
-                </p>
+          {/* Branch selector */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Branch
+            </label>
+            <BranchPicker
+              branches={branches}
+              loading={branchesLoading}
+              value={baseBranch}
+              onSelect={setBaseBranch}
+              onCreateBranch={branchesLoading ? undefined : () => setCreateBranchOpen(true)}
+            />
+          </div>
 
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    From Branch
-                  </label>
-                  {branchesLoading ? (
-                    <BranchPicker
-                      branches={branches}
-                      loading
-                      value={baseBranch}
-                      onSelect={setBaseBranch}
-                    />
-                  ) : (
-                    <BranchPicker
-                      branches={branches}
-                      value={baseBranch}
-                      onSelect={setBaseBranch}
-                      onCreateBranch={() => setCreateBranchOpen(true)}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
+          {/* Worktree toggle */}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="worktree"
+              checked={useWorktree}
+              onCheckedChange={(checked) =>
+                setUseWorktree(checked === true)
+              }
+            />
+            <label
+              htmlFor="worktree"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer"
+            >
+              <GitFork className="size-3.5" />
+              New worktree
+            </label>
           </div>
 
           {/* Actions */}
