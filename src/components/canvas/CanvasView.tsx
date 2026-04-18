@@ -16,6 +16,7 @@ import { XTermContainer } from "../terminal/XTermContainer";
 import type { Session } from "../../state/types";
 import {
   type CanvasState,
+  type CanvasViewport,
   type CanvasTile,
   DEFAULT_SIZES,
   defaultCanvasState,
@@ -31,6 +32,14 @@ const DOT_GRID_SIZE = 24;
 const DOT_GRID_INSET = 1.7;
 const DOT_GRID_MAX_OVERSHOOT = 0.14;
 const TILE_INTERACTION_SELECTOR = ".sb-canvas-tile-shell";
+
+export function getCanvasBackgroundStyle(viewport: CanvasViewport) {
+  return {
+    backgroundImage: `radial-gradient(circle at ${Math.max(1, DOT_GRID_INSET * viewport.zoom)}px ${Math.max(1, DOT_GRID_INSET * viewport.zoom)}px, rgba(91, 101, 112, 0.18) ${Math.max(0.9, 1.15 * viewport.zoom)}px, transparent ${Math.max(1.15, 1.45 * viewport.zoom)}px)`,
+    backgroundSize: `${DOT_GRID_SIZE * viewport.zoom}px ${DOT_GRID_SIZE * viewport.zoom}px`,
+    backgroundPosition: `${viewport.panX}px ${viewport.panY}px`,
+  };
+}
 
 interface CanvasAnchor {
   pointerX: number;
@@ -545,11 +554,7 @@ export const CanvasView = forwardRef<CanvasViewHandle, CanvasViewProps>(function
   );
 
   const backgroundStyle = useMemo(
-    () => ({
-      backgroundImage: `radial-gradient(circle at ${Math.max(1, DOT_GRID_INSET * canvasState.viewport.zoom)}px ${Math.max(1, DOT_GRID_INSET * canvasState.viewport.zoom)}px, rgba(91, 101, 112, 0.18) ${Math.max(0.9, 1.15 * canvasState.viewport.zoom)}px, transparent ${Math.max(1.15, 1.45 * canvasState.viewport.zoom)}px)`,
-      backgroundSize: `${DOT_GRID_SIZE * canvasState.viewport.zoom}px ${DOT_GRID_SIZE * canvasState.viewport.zoom}px`,
-      backgroundPosition: `${canvasState.viewport.panX}px ${canvasState.viewport.panY}px`,
-    }),
+    () => getCanvasBackgroundStyle(canvasState.viewport),
     [canvasState.viewport.panX, canvasState.viewport.panY, canvasState.viewport.zoom],
   );
 
