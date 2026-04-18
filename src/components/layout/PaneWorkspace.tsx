@@ -885,13 +885,13 @@ export function PaneWorkspace({
       {/* Drag preview ghost */}
       <DragOverlay dropAnimation={null}>
         {dragSurface ? (
-          <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs shadow-lg">
+          <div className="flex max-w-[360px] min-w-0 items-center gap-2 overflow-hidden rounded-md border border-border bg-background px-3 py-1.5 text-xs shadow-lg">
             {dragSurface.kind === "file" ? (
               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
             ) : (
               <AgentIcon agent={dragSurface.session.agent} className="size-3.5 shrink-0" />
             )}
-            <span className="font-medium">{dragSurface.title}</span>
+            <span className="min-w-0 truncate font-medium">{dragSurface.title}</span>
           </div>
         ) : null}
       </DragOverlay>
