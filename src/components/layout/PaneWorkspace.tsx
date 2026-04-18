@@ -144,15 +144,7 @@ function parseDragId(id: string): { tabId: string; fromLeafId: string } | null {
 }
 
 function PaneSurfaceBadge({ surface }: { surface: PaneSurface }) {
-  if (surface.kind === "live-session") {
-    return (
-      <Badge variant="secondary" className="h-4 px-1 text-[10px] font-normal">
-        Live
-      </Badge>
-    );
-  }
-
-  if (surface.kind === "file") {
+  if (surface.kind !== "transcript") {
     return null;
   }
 
@@ -174,43 +166,43 @@ function PaneDropOverlay({ leafId }: { leafId: string }) {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
-      {/* Edge zones — 25% strips, pointer-events-auto */}
+      {/* Drop hit zones — keep these generous, but render a larger preview */}
       <div
         ref={topRef}
-        className={cn(
-          "pointer-events-auto absolute inset-x-0 top-0 h-1/4 transition-colors",
-          topOver && "bg-primary/15",
-        )}
+        className="pointer-events-auto absolute inset-x-0 top-0 h-1/4"
       />
       <div
         ref={rightRef}
-        className={cn(
-          "pointer-events-auto absolute inset-y-0 right-0 w-1/4 transition-colors",
-          rightOver && "bg-primary/15",
-        )}
+        className="pointer-events-auto absolute inset-y-0 right-0 w-1/4"
       />
       <div
         ref={bottomRef}
-        className={cn(
-          "pointer-events-auto absolute inset-x-0 bottom-0 h-1/4 transition-colors",
-          bottomOver && "bg-primary/15",
-        )}
+        className="pointer-events-auto absolute inset-x-0 bottom-0 h-1/4"
       />
       <div
         ref={leftRef}
-        className={cn(
-          "pointer-events-auto absolute inset-y-0 left-0 w-1/4 transition-colors",
-          leftOver && "bg-primary/15",
-        )}
+        className="pointer-events-auto absolute inset-y-0 left-0 w-1/4"
       />
-      {/* Center zone — remaining 50% middle */}
       <div
         ref={centerRef}
-        className={cn(
-          "pointer-events-auto absolute inset-x-1/4 inset-y-1/4 transition-colors",
-          centerOver && "bg-primary/15",
-        )}
+        className="pointer-events-auto absolute inset-x-1/4 inset-y-1/4"
       />
+      {/* Visual previews */}
+      {topOver && (
+        <div className="absolute inset-x-0 top-0 h-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+      )}
+      {rightOver && (
+        <div className="absolute inset-y-0 right-0 w-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+      )}
+      {bottomOver && (
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+      )}
+      {leftOver && (
+        <div className="absolute inset-y-0 left-0 w-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+      )}
+      {centerOver && (
+        <div className="absolute inset-x-1/4 inset-y-1/4 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+      )}
       {/* Direction arrows when hovering an edge */}
       {topOver && (
         <div className="pointer-events-none absolute inset-x-0 top-[12.5%] flex -translate-y-1/2 justify-center">
@@ -243,7 +235,7 @@ function PaneDropOverlay({ leafId }: { leafId: string }) {
   );
 }
 
-/** Draggable tab button — drag handle only, never the terminal surface */
+/** Draggable tab button — the whole tab header acts as the drag target */
 function DraggableTab({
   tabId,
   leafId,
@@ -275,6 +267,8 @@ function DraggableTab({
       ref={setNodeRef}
       key={tabId}
       type="button"
+      {...attributes}
+      {...listeners}
       onClick={() => {
         onSelectTab();
         if (surface.kind === "live-session") {
@@ -282,20 +276,16 @@ function DraggableTab({
         }
       }}
       className={cn(
-        "group/pane-tab relative flex max-w-[260px] shrink-0 items-center gap-1.5 pl-1.5 pr-3 py-2 text-left text-xs transition-colors",
+        "group/pane-tab relative flex max-w-[260px] shrink-0 cursor-pointer items-center gap-1.5 pl-1.5 pr-3 py-2 text-left text-xs transition-colors active:cursor-grabbing",
         isActive
           ? "text-foreground"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
         isDragging && "opacity-40",
       )}
     >
-      {/* Drag handle — only this area activates the drag sensor */}
       <span
-        {...attributes}
-        {...listeners}
         className="inline-flex size-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity group-hover/pane-tab:opacity-60 active:cursor-grabbing"
         aria-label="Drag tab"
-        onClick={(e) => e.stopPropagation()}
       >
         <GripVertical className="size-3" />
       </span>
@@ -312,6 +302,9 @@ function DraggableTab({
       {surface.closable ? (
         <span
           className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/pane-tab:opacity-100"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
           onClick={(event) => {
             event.stopPropagation();
             if (surface.kind === "live-session") {

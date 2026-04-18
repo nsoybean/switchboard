@@ -97,7 +97,13 @@ function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & 
     ? { transform: CSS.Translate.toString(transform), zIndex: 50, position: "relative" as const }
     : undefined;
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className="min-w-0 max-w-full overflow-hidden touch-pan-y"
+    >
       <SessionCard {...cardProps} isDragSource={isDragActive} />
     </div>
   );
@@ -126,7 +132,13 @@ function SortablePinnedCard(props: React.ComponentProps<typeof SessionCard> & { 
   const indicatorBelow = isOver && !isDragging && activeIndex !== -1 && activeIndex < overIndex;
   const indicatorAbove = isOver && !isDragging && !indicatorBelow;
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative">
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="relative min-w-0 max-w-full overflow-hidden touch-pan-y"
+    >
       {indicatorAbove && (
         <div className="absolute top-0 left-0 right-0 h-[2px] -translate-y-[1px] bg-primary rounded-full" />
       )}
@@ -142,7 +154,7 @@ function SortablePinnedCard(props: React.ComponentProps<typeof SessionCard> & { 
 function PinnedDropArea({ children }: { children: React.ReactNode }) {
   const { setNodeRef } = useDroppable({ id: "pinned-drop-zone" });
   return (
-    <div ref={setNodeRef} className="pb-2 pl-4">
+    <div ref={setNodeRef} className="min-w-0 overflow-x-hidden pb-2 pl-4">
       {children}
     </div>
   );
@@ -494,7 +506,7 @@ export function SessionSidebar({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-    <div className="flex h-full w-full flex-col overflow-hidden bg-card">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-card overscroll-x-none">
       {/* New session button */}
       <div className="shrink-0 px-3 pt-2">
         <Button
@@ -509,8 +521,8 @@ export function SessionSidebar({
       </div>
 
       {/* Session list */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-        <div className="flex flex-col py-2">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-x-none [touch-action:pan-y]">
+        <div className="flex min-w-0 flex-col py-2">
           {/* Pinned section */}
           <div className="mb-1">
               <div
@@ -536,7 +548,7 @@ export function SessionSidebar({
                       items={pinnedSessions.map((s) => `pinned-${s.id}`)}
                       strategy={verticalListSortingStrategy}
                     >
-                    <div className="flex flex-col gap-px px-1">
+                    <div className="flex min-w-0 flex-col gap-px px-1 overflow-hidden">
                       {pinnedSessions.map((session) => {
                         const isHistorySession =
                           getSessionRailBucket(session.status) === "history";
@@ -687,7 +699,7 @@ export function SessionSidebar({
                 {!isCollapsed && (
                   <div className="pb-2 pl-4">
                     {visibleSessions.length > 0 ? (
-                      <div className="flex flex-col gap-px px-1">
+                      <div className="flex min-w-0 flex-col gap-px px-1 overflow-hidden">
                         {visibleSessions.map((session) => {
                           const isHistorySession =
                             getSessionRailBucket(session.status) === "history";
