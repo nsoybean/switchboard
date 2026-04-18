@@ -58,6 +58,7 @@ interface SessionSidebarProps {
   selectedSessionId?: string | null;
   historyOpen?: boolean;
   onHistoryOpenChange?: (open: boolean) => void;
+  openTabSessionIds?: string[];
 }
 
 interface ProjectSessionGroup {
@@ -163,7 +164,9 @@ export function SessionSidebar({
   selectedSessionId,
   historyOpen,
   onHistoryOpenChange,
+  openTabSessionIds,
 }: SessionSidebarProps) {
+  const openTabSet = useMemo(() => new Set(openTabSessionIds ?? []), [openTabSessionIds]);
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [renameTarget, setRenameTarget] = useState<Session | null>(null);
@@ -547,6 +550,7 @@ export function SessionSidebar({
                             key={session.id}
                             session={session}
                             isActive={effectiveSelectedSessionId === session.id}
+                            isOpenInTab={openTabSet.has(session.id)}
                             isPinned
                             timestampLabel={formatCompactRelativeTime(session.createdAt, now)}
                             timestampTitle={formatTimestampTitle(session.createdAt)}
@@ -699,6 +703,7 @@ export function SessionSidebar({
                               key={session.id}
                               session={session}
                               isActive={effectiveSelectedSessionId === session.id}
+                              isOpenInTab={openTabSet.has(session.id)}
                               isPinned={pinnedIds.includes(session.id)}
                               timestampLabel={formatCompactRelativeTime(
                                 session.createdAt,

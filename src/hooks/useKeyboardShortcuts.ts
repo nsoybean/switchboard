@@ -44,6 +44,7 @@ interface ShortcutHandlers {
   onOpenHistory?: () => void;
   /** Called on Escape. Return true if handled (suppresses default onFocusTerminal). */
   onEscape?: () => boolean;
+  onCommandPalette?: () => void;
 }
 
 /**
@@ -124,6 +125,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "h") {
         e.preventDefault();
         handlers.onOpenHistory?.();
+        return;
+      }
+
+      // Cmd+P / Cmd+Shift+P — command palette
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        handlers.onCommandPalette?.();
         return;
       }
 

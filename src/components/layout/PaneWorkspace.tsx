@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Eye,
   FileText,
@@ -39,6 +39,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { workspaceLayoutCommands } from "@/lib/tauri-commands";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/state/types";
 import {
@@ -58,6 +59,7 @@ import {
   splitLeafWithExternalTab,
   syncPaneLayout,
 } from "@/lib/pane-tree";
+import { StatusDot } from "../ui/status-dot";
 import { InlineNewSession, type InlineNewSessionConfig } from "../session/InlineNewSession";
 import { FilePreview } from "../files/FilePreview";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
@@ -77,6 +79,7 @@ interface PaneWorkspaceProps {
   onResumeTranscript?: () => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
+  onOpenTabIdsChange?: (sessionIds: string[]) => void;
 }
 
 interface LiveSurface {
@@ -302,6 +305,9 @@ function DraggableTab({
         <AgentIcon agent={surface.session.agent} className="size-3.5 shrink-0" />
       )}
       <span className="truncate font-medium">{surface.title}</span>
+      {surface.kind !== "file" && (
+        <StatusDot status={surface.session.status} />
+      )}
       <PaneSurfaceBadge surface={surface} />
       {surface.closable ? (
         <span
@@ -529,6 +535,7 @@ function PaneTreeView({
   paneCount,
   surfacesById,
   activePaneId,
+  sizesByGroupId,
   onFocusPane,
   onSelectTab,
   onSplit,
@@ -540,11 +547,13 @@ function PaneTreeView({
   onSelectLiveSession,
   onSessionStart,
   onSessionExit,
+  onSizeChange,
 }: {
   node: PaneNode;
   paneCount: number;
   surfacesById: Map<string, PaneSurface>;
   activePaneId: string | null;
+  sizesByGroupId: Record<string, Record<string, number>>;
   onFocusPane: (paneId: string) => void;
   onSelectTab: (paneId: string, tabId: string) => void;
   onSplit: (paneId: string, direction: SplitDirection) => void;
@@ -556,6 +565,7 @@ function PaneTreeView({
   onSelectLiveSession: (sessionId: string) => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
+  onSizeChange: (groupId: string, sizes: Record<string, number>) => void;
 }) {
   if (node.kind === "leaf") {
     return (
@@ -578,18 +588,21 @@ function PaneTreeView({
     );
   }
 
-  const defaultSize = 100 / node.children.length;
+  const storedSizes = sizesByGroupId[node.id];
+  const defaultEqualSize = 100 / node.children.length;
 
   return (
-    <ResizablePanelGroup orientation={node.axis}>
+    <ResizablePanelGroup orientation={node.axis} onLayoutChange={(sizes) => onSizeChange(node.id, sizes)}>
       {node.children.flatMap((child, index) => {
+        const defaultSize = storedSizes?.[child.id] ?? defaultEqualSize;
         const panel = (
-          <ResizablePanel key={child.id} defaultSize={defaultSize} minSize={10}>
+          <ResizablePanel key={child.id} id={child.id} defaultSize={defaultSize} minSize={10}>
             <PaneTreeView
               node={child}
               paneCount={paneCount}
               surfacesById={surfacesById}
               activePaneId={activePaneId}
+              sizesByGroupId={sizesByGroupId}
               onFocusPane={onFocusPane}
               onSelectTab={onSelectTab}
               onSplit={onSplit}
@@ -601,6 +614,7 @@ function PaneTreeView({
               onSelectLiveSession={onSelectLiveSession}
               onSessionStart={onSessionStart}
               onSessionExit={onSessionExit}
+              onSizeChange={onSizeChange}
             />
           </ResizablePanel>
         );
@@ -626,6 +640,7 @@ export function PaneWorkspace({
   onResumeTranscript,
   onSessionStart,
   onSessionExit,
+  onOpenTabIdsChange,
 }: PaneWorkspaceProps) {
   const surfaces = useMemo<PaneSurface[]>(() => {
     const nextSurfaces: PaneSurface[] = liveSessions.map((session) => ({
@@ -672,14 +687,91 @@ export function PaneWorkspace({
         ? `live:${activeSession.id}`
         : null;
   const [layout, setLayout] = useState<PaneLayoutState>({ root: null, activePaneId: null });
+  const [sizesByGroupId, setSizesByGroupId] = useState<Record<string, Record<string, number>>>({});
+  const [hydrated, setHydrated] = useState(false);
   const [dragSurface, setDragSurface] = useState<PaneSurface | null>(null);
 
+  const pendingSaveRef = useRef<{ layout: PaneLayoutState; sizesByGroupId: Record<string, Record<string, number>> } | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushSave = useCallback(() => {
+    if (!pendingSaveRef.current) return;
+    const { layout: l, sizesByGroupId: s } = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    workspaceLayoutCommands.save(JSON.stringify({ root: l.root, activePaneId: l.activePaneId, sizesByGroupId: s }));
+  }, []);
+
+  const scheduleSave = useCallback((l: PaneLayoutState, s: Record<string, Record<string, number>>) => {
+    pendingSaveRef.current = { layout: l, sizesByGroupId: s };
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      flushSave();
+    }, 500);
+  }, [flushSave]);
+
+  // Load persisted layout on mount
   useEffect(() => {
+    workspaceLayoutCommands.load().then((raw) => {
+      if (raw) {
+        try {
+          const persisted = JSON.parse(raw);
+          if (persisted.root) {
+            setLayout({ root: persisted.root, activePaneId: persisted.activePaneId ?? null });
+          }
+          if (persisted.sizesByGroupId) {
+            setSizesByGroupId(persisted.sizesByGroupId);
+          }
+        } catch { /* corrupt — start fresh */ }
+      }
+    }).catch(() => { /* ignore */ }).finally(() => setHydrated(true));
+  }, []);
+
+  // Flush save on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      flushSave();
+    };
+  }, [flushSave]);
+
+  // Sync layout against live surfaces (runs after hydration to preserve persisted tree)
+  useEffect(() => {
+    if (!hydrated) return;
     setLayout((current) => {
       const next = syncPaneLayout(current, surfaces, preferredTabId);
       return paneLayoutEqual(current, next) ? current : next;
     });
-  }, [preferredTabId, surfaces]);
+  }, [hydrated, preferredTabId, surfaces]);
+
+  // Persist layout + sizes whenever they change (after hydration)
+  useEffect(() => {
+    if (!hydrated) return;
+    scheduleSave(layout, sizesByGroupId);
+  }, [hydrated, layout, sizesByGroupId, scheduleSave]);
+
+  // Report open tab session IDs to parent whenever layout changes
+  useEffect(() => {
+    if (!onOpenTabIdsChange) return;
+    const allTabIds = layout.root
+      ? (() => {
+          const ids: string[] = [];
+          const visit = (node: typeof layout.root): void => {
+            if (!node) return;
+            if (node.kind === "leaf") {
+              for (const tabId of node.tabIds) {
+                if (tabId.startsWith("live:")) ids.push(tabId.slice(5));
+              }
+            } else {
+              for (const child of node.children) visit(child);
+            }
+          };
+          visit(layout.root);
+          return ids;
+        })()
+      : [];
+    onOpenTabIdsChange(allTabIds);
+  }, [layout, onOpenTabIdsChange]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -748,6 +840,8 @@ export function PaneWorkspace({
           paneCount={paneCount}
           surfacesById={surfacesById}
           activePaneId={layout.activePaneId}
+          sizesByGroupId={sizesByGroupId}
+          onSizeChange={(groupId, sizes) => setSizesByGroupId((prev) => ({ ...prev, [groupId]: sizes }))}
           onFocusPane={(paneId) => {
             setLayout((current) =>
               current.activePaneId === paneId ? current : { ...current, activePaneId: paneId },
