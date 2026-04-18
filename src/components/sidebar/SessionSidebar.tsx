@@ -352,14 +352,11 @@ export function SessionSidebar({
   const handleSelectSession = useCallback(
     async (session: Session) => {
       const projectPath = getSessionProjectPath(session);
-      const switchedProject = projectPath !== state.projectPath;
-      if (switchedProject) {
+      if (projectPath !== state.projectPath) {
         await handleSelectProject(projectPath);
       }
 
-      if (!switchedProject) {
-        onSelectActiveSession?.(session.id);
-      }
+      onSelectActiveSession?.(session.id);
       dispatch({ type: "SET_ACTIVE", id: session.id });
       dispatch({ type: "SET_PREVIEW_FILE", path: null });
     },

@@ -74,12 +74,12 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/20 pt-[20vh] supports-backdrop-filter:bg-background/20 supports-backdrop-filter:backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-xl rounded-lg border border-border bg-popover shadow-xl">
+      <div className="w-full max-w-xl rounded-lg border border-border bg-popover/95 shadow-xl supports-backdrop-filter:backdrop-blur-sm">
         <Command shouldFilter loop>
           <div className="flex items-center gap-2 border-b border-border px-3">
             <Terminal className="size-4 shrink-0 text-muted-foreground" />
@@ -101,7 +101,7 @@ export function CommandPalette({
                 {liveSessions.map((session) => (
                   <Command.Item
                     key={`live-${session.id}`}
-                    value={`${session.label} ${session.branch ?? ""} ${session.agent}`}
+                    value={`live ${session.id} ${session.label} ${session.branch ?? ""} ${session.agent}`}
                     onSelect={() => {
                       onSelectSession(session);
                       onClose();
@@ -114,6 +114,9 @@ export function CommandPalette({
                     <AgentIcon agent={session.agent} className="size-4 shrink-0" />
                     <span className="min-w-0 flex-1 truncate font-medium">
                       {session.label || "New session"}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      Jump to tab
                     </span>
                     {session.branch && (
                       <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -131,7 +134,7 @@ export function CommandPalette({
                 {historySessions.map((session) => (
                   <Command.Item
                     key={`hist-${session.id}`}
-                    value={`history ${session.label} ${session.branch ?? ""}`}
+                    value={`history ${session.id} ${session.label} ${session.branch ?? ""} ${session.agent}`}
                     onSelect={() => {
                       onSelectSession(session);
                       onClose();
@@ -144,6 +147,9 @@ export function CommandPalette({
                     <AgentIcon agent={session.agent} className="size-4 shrink-0 opacity-60" />
                     <span className="min-w-0 flex-1 truncate">
                       {session.label || "New session"}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      Open transcript
                     </span>
                     <StatusDot status={session.status} />
                   </Command.Item>

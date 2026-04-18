@@ -335,6 +335,7 @@ export function syncPaneLayout(
   current: PaneLayoutState,
   surfaces: { id: string }[],
   preferredTabId: string | null,
+  options?: { forceFocusPreferred?: boolean },
 ): PaneLayoutState {
   if (surfaces.length === 0) return { root: null, activePaneId: null };
 
@@ -346,7 +347,10 @@ export function syncPaneLayout(
     root = createLeaf([orderedTabIds[0]], orderedTabIds[0]);
   }
 
-  const shouldFocusPreferred = Boolean(preferredTabId && !findLeafContainingTab(current.root, preferredTabId));
+  const shouldFocusPreferred = Boolean(
+    preferredTabId &&
+      (options?.forceFocusPreferred || !findLeafContainingTab(current.root, preferredTabId)),
+  );
   let activePaneId = findLeaf(root, current.activePaneId)?.id ?? null;
   const assignedTabIds = new Set(collectAssignedTabIds(root));
   const missingTabIds = orderedTabIds.filter((tabId) => !assignedTabIds.has(tabId));

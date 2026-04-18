@@ -41,7 +41,11 @@ import type {
   SessionWorkspaceIdentity,
   SessionWorkspaceKind,
 } from "../../state/types";
-import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
+import {
+  CanvasView,
+  getCanvasBackgroundStyle,
+  type CanvasViewHandle,
+} from "../canvas/CanvasView";
 import { CommandPalette } from "../palette/CommandPalette";
 import { QuitConfirmDialog } from "./QuitConfirmDialog";
 
@@ -162,6 +166,10 @@ export function AppLayout() {
   const [workspaceShellMode, setWorkspaceShellMode] = useState<"pane" | "canvas">("pane");
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [openTabSessionIds, setOpenTabSessionIds] = useState<string[]>([]);
+  const [paneRevealRequest, setPaneRevealRequest] = useState<{
+    tabId: string;
+    nonce: number;
+  } | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [quitDialogOpen, setQuitDialogOpen] = useState(false);
   const pendingQuitRef = useRef<(() => void) | null>(null);
@@ -751,6 +759,83 @@ export function AppLayout() {
     }
   }, []);
 
+  const requestPaneReveal = useCallback((tabId: string) => {
+    setPaneRevealRequest((current) => ({
+      tabId,
+      nonce: (current?.nonce ?? 0) + 1,
+    }));
+  }, []);
+
+  const handleViewSession = useCallback(
+    async (session: Session) => {
+      const projectPath = session.workspace.repoRoot ?? session.cwd;
+      if (projectPath !== state.projectPath) {
+        await handleSelectProject(projectPath);
+      }
+
+      dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      if (state.sessions[session.id]) {
+        dispatch({ type: "SET_ACTIVE", id: session.id });
+      }
+
+      if (session.agent === "codex" && !session.resumeTargetId) {
+        const resumeTargetId = await syncCodexResumeTarget(session);
+        setViewingSession(
+          resumeTargetId
+            ? {
+                ...session,
+                resumeTargetId,
+              }
+            : session,
+        );
+        return;
+      }
+
+      setViewingSession(session);
+    },
+    [dispatch, handleSelectProject, state.projectPath, state.sessions, syncCodexResumeTarget],
+  );
+
+  const handleRevealLiveSession = useCallback(
+    async (session: Session) => {
+      const projectPath = session.workspace.repoRoot ?? session.cwd;
+      if (projectPath !== state.projectPath) {
+        await handleSelectProject(projectPath);
+      }
+
+      dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      setViewingSession(null);
+      dispatch({ type: "SET_ACTIVE", id: session.id });
+
+      if (workspaceShellMode === "canvas") {
+        window.requestAnimationFrame(() => {
+          canvasViewRef.current?.panToSession(session.id);
+        });
+        return;
+      }
+
+      requestPaneReveal(`live:${session.id}`);
+    },
+    [dispatch, handleSelectProject, requestPaneReveal, state.projectPath, workspaceShellMode],
+  );
+
+  const handlePaletteSelectSession = useCallback(
+    async (session: Session) => {
+      const isLiveSession =
+        session.status === "running" ||
+        session.status === "idle" ||
+        session.status === "needs-input";
+
+      if (isLiveSession) {
+        await handleRevealLiveSession(session);
+        return;
+      }
+
+      await handleViewSession(session);
+    },
+    [handleRevealLiveSession, handleViewSession],
+  );
+
   const handleRemoveProject = useCallback(
     async (path: string) => {
       try {
@@ -1252,32 +1337,19 @@ export function AppLayout() {
       onSelectProject={handleSelectProject}
       onOpenProject={handleOpenProject}
       onRemoveProject={handleRemoveProject}
-      onViewSession={async (session) => {
-        dispatch({ type: "SET_PREVIEW_FILE", path: null });
-        if (state.sessions[session.id]) {
-          dispatch({ type: "SET_ACTIVE", id: session.id });
-        }
-
-        if (session.agent === "codex" && !session.resumeTargetId) {
-          const resumeTargetId = await syncCodexResumeTarget(session);
-          setViewingSession(
-            resumeTargetId
-              ? {
-                  ...session,
-                  resumeTargetId,
-                }
-              : session,
-          );
+      onViewSession={handleViewSession}
+      onSelectActiveSession={(sessionId) => {
+        setViewingSession(null);
+        if (!sessionId) {
           return;
         }
 
-        setViewingSession(session);
-      }}
-      onSelectActiveSession={(sessionId) => {
-        setViewingSession(null);
-        if (sessionId && workspaceShellMode === "canvas") {
+        if (workspaceShellMode === "canvas") {
           canvasViewRef.current?.panToSession(sessionId);
+          return;
         }
+
+        requestPaneReveal(`live:${sessionId}`);
       }}
       onResumeSession={handleResumeSession}
       onStopSession={handleStopSession}
@@ -1305,28 +1377,40 @@ export function AppLayout() {
   const welcomeShell = (
     <div
       className={cn(
-        "flex h-full items-center justify-center",
-        workspaceShellMode === "canvas" ? "bg-[var(--sb-canvas-bg)]" : "bg-background",
+        "h-full",
+        workspaceShellMode === "canvas" ? "sb-canvas" : "flex items-center justify-center bg-background",
       )}
+      style={
+        workspaceShellMode === "canvas"
+          ? getCanvasBackgroundStyle({ panX: 0, panY: 0, zoom: 1 })
+          : undefined
+      }
     >
-      <div className="max-w-sm text-center">
-        <h2 className="mb-3 text-lg font-semibold">Welcome to Switchboard</h2>
-        <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
-          {state.projectPath
-            ? workspaceShellMode === "canvas"
-              ? "Manage multiple AI coding agents on a smooth shared canvas."
-              : "Manage multiple AI coding agents in a structured pane workspace."
-            : "Manage multiple AI coding agents in parallel. Open a project to get started."}
-        </p>
-        <Button onClick={() => (state.projectPath ? setDialogOpen(true) : setProjectPickerOpen(true))}>
-          {state.projectPath ? null : <FolderOpen data-icon="inline-start" />}
-          {state.projectPath ? "Start First Session" : "Open Project"}
-          {state.projectPath ? (
-            <kbd className="ml-1 inline-flex items-center rounded border border-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] leading-none opacity-80">
-              ⌘ N
-            </kbd>
-          ) : null}
-        </Button>
+      <div
+        className={cn(
+          "flex h-full items-center justify-center",
+          workspaceShellMode === "canvas" ? "relative z-[1]" : "",
+        )}
+      >
+        <div className="max-w-sm text-center">
+          <h2 className="mb-3 text-lg font-semibold">Welcome to Switchboard</h2>
+          <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+            {state.projectPath
+              ? workspaceShellMode === "canvas"
+                ? "Manage multiple AI coding agents on a smooth shared canvas."
+                : "Manage multiple AI coding agents in a structured pane workspace."
+              : "Manage multiple AI coding agents in parallel. Open a project to get started."}
+          </p>
+          <Button onClick={() => (state.projectPath ? setDialogOpen(true) : setProjectPickerOpen(true))}>
+            {state.projectPath ? null : <FolderOpen data-icon="inline-start" />}
+            {state.projectPath ? "Start First Session" : "Open Project"}
+            {state.projectPath ? (
+              <kbd className="ml-1 inline-flex items-center rounded border border-primary-foreground/20 px-1.5 py-0.5 font-mono text-[10px] leading-none opacity-80">
+                ⌘ N
+              </kbd>
+            ) : null}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -1398,6 +1482,7 @@ export function AppLayout() {
                   liveSessions={liveSessions}
                   transcriptSession={resolvedViewingSession}
                   openFilePath={openFilePath}
+                  revealRequest={paneRevealRequest}
                   projectPath={state.projectPath}
                   onInlineNewSession={handleNewSession}
                   onSelectLiveSession={(sessionId) =>
@@ -1461,9 +1546,9 @@ export function AppLayout() {
             )}
 
             {sidebarOpen ? (
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 p-1.5 pr-0.5">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 flex max-w-[calc(100vw-2rem)]">
                 <div
-                  className="pointer-events-auto h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur"
+                  className="pointer-events-auto h-full shrink-0 overflow-hidden border-r bg-card"
                   style={{ width: sidebarWidth }}
                 >
                   {sidebarContent}
@@ -1472,34 +1557,23 @@ export function AppLayout() {
                   role="separator"
                   aria-orientation="vertical"
                   aria-label="Resize session sidebar"
-                  className="pointer-events-auto absolute top-1.5 right-0 bottom-1.5 w-3 cursor-col-resize"
+                  className="pointer-events-auto relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2"
                   onPointerDown={(event) => startPanelResize("sidebar", event)}
                 />
               </div>
             ) : null}
 
-            {state.projectPath && hasWorkspaceRoot ? (
-              <div
-                className={`pointer-events-none absolute inset-y-0 right-0 z-20 p-1.5 pl-0.5 transition-[opacity,transform] duration-150 ${
-                  inspectorOpen
-                    ? "translate-x-0 opacity-100"
-                    : "translate-x-3 opacity-0"
-                }`}
-                aria-hidden={!inspectorOpen}
-              >
+            {state.projectPath && inspectorOpen && selectedSession && hasWorkspaceRoot ? (
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex max-w-[calc(100vw-2rem)]">
                 <div
                   role="separator"
                   aria-orientation="vertical"
                   aria-label="Resize inspector panel"
-                  className={`pointer-events-auto absolute top-1.5 left-0 bottom-1.5 w-3 cursor-col-resize ${
-                    inspectorOpen ? "" : "pointer-events-none"
-                  }`}
+                  className="pointer-events-auto relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2"
                   onPointerDown={(event) => startPanelResize("inspector", event)}
                 />
                 <div
-                  className={`h-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card/95 shadow-2xl backdrop-blur transition-opacity duration-150 ${
-                    inspectorOpen ? "pointer-events-auto" : "pointer-events-none"
-                  }`}
+                  className="pointer-events-auto h-full shrink-0 overflow-hidden border-l bg-card"
                   style={{ width: inspectorWidth }}
                 >
                   {inspectorContent}
@@ -1576,8 +1650,7 @@ export function AppLayout() {
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         onSelectSession={(session) => {
-          dispatch({ type: "SET_ACTIVE", id: session.id });
-          setViewingSession(null);
+          void handlePaletteSelectSession(session);
         }}
         onNewSessionInProject={(projectPath) => {
           dispatch({ type: "SET_PROJECT_PATH", path: projectPath });
