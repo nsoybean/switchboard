@@ -166,6 +166,10 @@ export function AppLayout() {
   const [workspaceShellMode, setWorkspaceShellMode] = useState<"pane" | "canvas">("pane");
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [openTabSessionIds, setOpenTabSessionIds] = useState<string[]>([]);
+  const [paneRevealRequest, setPaneRevealRequest] = useState<{
+    tabId: string;
+    nonce: number;
+  } | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [quitDialogOpen, setQuitDialogOpen] = useState(false);
   const pendingQuitRef = useRef<(() => void) | null>(null);
@@ -755,6 +759,83 @@ export function AppLayout() {
     }
   }, []);
 
+  const requestPaneReveal = useCallback((tabId: string) => {
+    setPaneRevealRequest((current) => ({
+      tabId,
+      nonce: (current?.nonce ?? 0) + 1,
+    }));
+  }, []);
+
+  const handleViewSession = useCallback(
+    async (session: Session) => {
+      const projectPath = session.workspace.repoRoot ?? session.cwd;
+      if (projectPath !== state.projectPath) {
+        await handleSelectProject(projectPath);
+      }
+
+      dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      if (state.sessions[session.id]) {
+        dispatch({ type: "SET_ACTIVE", id: session.id });
+      }
+
+      if (session.agent === "codex" && !session.resumeTargetId) {
+        const resumeTargetId = await syncCodexResumeTarget(session);
+        setViewingSession(
+          resumeTargetId
+            ? {
+                ...session,
+                resumeTargetId,
+              }
+            : session,
+        );
+        return;
+      }
+
+      setViewingSession(session);
+    },
+    [dispatch, handleSelectProject, state.projectPath, state.sessions, syncCodexResumeTarget],
+  );
+
+  const handleRevealLiveSession = useCallback(
+    async (session: Session) => {
+      const projectPath = session.workspace.repoRoot ?? session.cwd;
+      if (projectPath !== state.projectPath) {
+        await handleSelectProject(projectPath);
+      }
+
+      dispatch({ type: "SET_PREVIEW_FILE", path: null });
+      setViewingSession(null);
+      dispatch({ type: "SET_ACTIVE", id: session.id });
+
+      if (workspaceShellMode === "canvas") {
+        window.requestAnimationFrame(() => {
+          canvasViewRef.current?.panToSession(session.id);
+        });
+        return;
+      }
+
+      requestPaneReveal(`live:${session.id}`);
+    },
+    [dispatch, handleSelectProject, requestPaneReveal, state.projectPath, workspaceShellMode],
+  );
+
+  const handlePaletteSelectSession = useCallback(
+    async (session: Session) => {
+      const isLiveSession =
+        session.status === "running" ||
+        session.status === "idle" ||
+        session.status === "needs-input";
+
+      if (isLiveSession) {
+        await handleRevealLiveSession(session);
+        return;
+      }
+
+      await handleViewSession(session);
+    },
+    [handleRevealLiveSession, handleViewSession],
+  );
+
   const handleRemoveProject = useCallback(
     async (path: string) => {
       try {
@@ -1256,32 +1337,19 @@ export function AppLayout() {
       onSelectProject={handleSelectProject}
       onOpenProject={handleOpenProject}
       onRemoveProject={handleRemoveProject}
-      onViewSession={async (session) => {
-        dispatch({ type: "SET_PREVIEW_FILE", path: null });
-        if (state.sessions[session.id]) {
-          dispatch({ type: "SET_ACTIVE", id: session.id });
-        }
-
-        if (session.agent === "codex" && !session.resumeTargetId) {
-          const resumeTargetId = await syncCodexResumeTarget(session);
-          setViewingSession(
-            resumeTargetId
-              ? {
-                  ...session,
-                  resumeTargetId,
-                }
-              : session,
-          );
+      onViewSession={handleViewSession}
+      onSelectActiveSession={(sessionId) => {
+        setViewingSession(null);
+        if (!sessionId) {
           return;
         }
 
-        setViewingSession(session);
-      }}
-      onSelectActiveSession={(sessionId) => {
-        setViewingSession(null);
-        if (sessionId && workspaceShellMode === "canvas") {
+        if (workspaceShellMode === "canvas") {
           canvasViewRef.current?.panToSession(sessionId);
+          return;
         }
+
+        requestPaneReveal(`live:${sessionId}`);
       }}
       onResumeSession={handleResumeSession}
       onStopSession={handleStopSession}
@@ -1414,6 +1482,7 @@ export function AppLayout() {
                   liveSessions={liveSessions}
                   transcriptSession={resolvedViewingSession}
                   openFilePath={openFilePath}
+                  revealRequest={paneRevealRequest}
                   projectPath={state.projectPath}
                   onInlineNewSession={handleNewSession}
                   onSelectLiveSession={(sessionId) =>
@@ -1581,8 +1650,7 @@ export function AppLayout() {
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         onSelectSession={(session) => {
-          dispatch({ type: "SET_ACTIVE", id: session.id });
-          setViewingSession(null);
+          void handlePaletteSelectSession(session);
         }}
         onNewSessionInProject={(projectPath) => {
           dispatch({ type: "SET_PROJECT_PATH", path: projectPath });

@@ -74,6 +74,7 @@ interface PaneWorkspaceProps {
   liveSessions: Session[];
   transcriptSession: Session | null;
   openFilePath: string | null;
+  revealRequest: { tabId: string; nonce: number } | null;
   projectPath: string | null;
   onInlineNewSession: (config: InlineNewSessionConfig) => void;
   onSelectLiveSession: (sessionId: string) => void;
@@ -746,6 +747,7 @@ export function PaneWorkspace({
   liveSessions,
   transcriptSession,
   openFilePath,
+  revealRequest,
   projectPath,
   onInlineNewSession,
   onSelectLiveSession,
@@ -809,6 +811,7 @@ export function PaneWorkspace({
 
   const pendingSaveRef = useRef<{ layout: PaneLayoutState; sizesByGroupId: Record<string, Record<string, number>> } | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handledRevealNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!openFilePath) return;
@@ -881,6 +884,19 @@ export function PaneWorkspace({
       return paneLayoutEqual(current, next) ? current : next;
     });
   }, [hydrated, preferredTabId, surfaces]);
+
+  useEffect(() => {
+    if (!hydrated || !revealRequest?.tabId) return;
+    if (handledRevealNonceRef.current === revealRequest.nonce) return;
+
+    handledRevealNonceRef.current = revealRequest.nonce;
+    setLayout((current) => {
+      const next = syncPaneLayout(current, surfaces, revealRequest.tabId, {
+        forceFocusPreferred: true,
+      });
+      return paneLayoutEqual(current, next) ? current : next;
+    });
+  }, [hydrated, revealRequest, surfaces]);
 
   // Persist layout + sizes whenever they change (after hydration)
   useEffect(() => {

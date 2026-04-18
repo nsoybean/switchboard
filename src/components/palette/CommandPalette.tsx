@@ -101,7 +101,7 @@ export function CommandPalette({
                 {liveSessions.map((session) => (
                   <Command.Item
                     key={`live-${session.id}`}
-                    value={`${session.label} ${session.branch ?? ""} ${session.agent}`}
+                    value={`live ${session.id} ${session.label} ${session.branch ?? ""} ${session.agent}`}
                     onSelect={() => {
                       onSelectSession(session);
                       onClose();
@@ -131,7 +131,7 @@ export function CommandPalette({
                 {historySessions.map((session) => (
                   <Command.Item
                     key={`hist-${session.id}`}
-                    value={`history ${session.label} ${session.branch ?? ""}`}
+                    value={`history ${session.id} ${session.label} ${session.branch ?? ""} ${session.agent}`}
                     onSelect={() => {
                       onSelectSession(session);
                       onClose();
