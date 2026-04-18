@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SWITCHBOARD_FILE_DRAG_TYPE } from "@/lib/file-dnd";
 import { fileCommands, type FileEntry } from "../../lib/tauri-commands";
 
 interface FileTreeNodeProps {
@@ -44,6 +45,17 @@ function FileTreeNode({ entry, depth, selectedPath, onFileSelect }: FileTreeNode
     <div>
       <button
         onClick={handleClick}
+        draggable={!entry.is_dir}
+        onDragStart={(event) => {
+          if (entry.is_dir) {
+            event.preventDefault();
+            return;
+          }
+
+          event.dataTransfer.effectAllowed = "copyMove";
+          event.dataTransfer.setData(SWITCHBOARD_FILE_DRAG_TYPE, entry.path);
+          event.dataTransfer.setData("text/plain", entry.path);
+        }}
         className={cn(
           "flex items-center gap-1.5 w-full text-left py-1 pr-2 text-xs hover:bg-accent/50 transition-colors cursor-pointer",
           !entry.is_dir && selectedPath === entry.path && "bg-accent text-accent-foreground",

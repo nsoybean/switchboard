@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from "react";
 import {
   Eye,
   FileText,
+  GripVertical,
+  Plus,
   Play,
   X,
 } from "lucide-react";
@@ -12,6 +14,18 @@ import {
   ArrowLineUp,
   SplitHorizontal,
 } from "@phosphor-icons/react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDndMonitor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,8 +40,30 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { workspaceLayoutCommands } from "@/lib/tauri-commands";
+import { getSwitchboardFileDragPath } from "@/lib/file-dnd";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/state/types";
+import {
+  appendTabsToLeaf,
+  type PaneLayoutState,
+  type PaneLeafNode,
+  type PaneNode,
+  type SplitDirection,
+  closeLeaf,
+  countLeaves,
+  ensureActiveTabs,
+  findLeaf,
+  findLeafContainingTab,
+  getFirstLeaf,
+  moveTabBetweenLeaves,
+  paneLayoutEqual,
+  setLeafActiveTab,
+  splitLeaf,
+  splitLeafWithExternalTab,
+  syncPaneLayout,
+} from "@/lib/pane-tree";
+import { StatusDot } from "../ui/status-dot";
 import { InlineNewSession, type InlineNewSessionConfig } from "../session/InlineNewSession";
 import { FilePreview } from "../files/FilePreview";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
@@ -43,14 +79,12 @@ interface PaneWorkspaceProps {
   onSelectLiveSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
-  onCloseFile: () => void;
+  onCloseFile: (filePath: string) => void;
   onResumeTranscript?: () => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
+  onOpenTabIdsChange?: (sessionIds: string[]) => void;
 }
-
-type SplitDirection = "left" | "right" | "up" | "down";
-type PaneAxis = "horizontal" | "vertical";
 
 interface LiveSurface {
   id: string;
@@ -78,511 +112,65 @@ interface FileSurface {
 
 type PaneSurface = LiveSurface | TranscriptSurface | FileSurface;
 
-interface PaneLeafNode {
-  kind: "leaf";
-  id: string;
-  tabIds: string[];
-  activeTabId: string | null;
+type DropZone = "center" | "top" | "right" | "bottom" | "left";
+
+interface TabDragData {
+  type: "tab";
+  tabId: string;
+  fromLeafId: string;
 }
 
-interface PaneSplitNode {
-  kind: "split";
-  id: string;
-  axis: PaneAxis;
-  children: PaneNode[];
+function tabIdForFilePath(filePath: string) {
+  return `file:${filePath}`;
 }
 
-type PaneNode = PaneLeafNode | PaneSplitNode;
-
-interface PaneLayoutState {
-  root: PaneNode | null;
-  activePaneId: string | null;
+function filePathFromTabId(tabId: string): string | null {
+  return tabId.startsWith("file:") ? tabId.slice(5) : null;
 }
 
-function makeNodeId(prefix: "pane" | "split"): string {
-  return `${prefix}-${crypto.randomUUID()}`;
+function resolveDropZoneFromPoint(
+  event: Pick<ReactDragEvent<HTMLElement>, "clientX" | "clientY" | "currentTarget">,
+): DropZone {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width;
+  const y = (event.clientY - rect.top) / rect.height;
+
+  if (y < 0.25) return "top";
+  if (y > 0.75) return "bottom";
+  if (x < 0.25) return "left";
+  if (x > 0.75) return "right";
+  return "center";
 }
 
-function createLeaf(tabIds: string[] = [], activeTabId?: string | null): PaneLeafNode {
-  return {
-    kind: "leaf",
-    id: makeNodeId("pane"),
-    tabIds,
-    activeTabId: activeTabId ?? tabIds[0] ?? null,
-  };
+function parseDropId(id: string): { leafId: string; zone: DropZone } | null {
+  const parts = id.split("--pane-drop--");
+  if (parts.length !== 2) return null;
+  const [leafId, zone] = parts;
+  if (!leafId || !zone) return null;
+  return { leafId, zone: zone as DropZone };
 }
 
-function arrayEqual(left: string[], right: string[]) {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+function makeDragId(tabId: string, leafId: string) {
+  return `tab--drag--${tabId}--${leafId}`;
 }
 
-function paneNodeEqual(left: PaneNode | null, right: PaneNode | null): boolean {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right || left.kind !== right.kind || left.id !== right.id) {
-    return false;
-  }
-
-  if (left.kind === "leaf" && right.kind === "leaf") {
-    return left.activeTabId === right.activeTabId && arrayEqual(left.tabIds, right.tabIds);
-  }
-
-  if (left.kind === "split" && right.kind === "split") {
-    return (
-      left.axis === right.axis &&
-      left.children.length === right.children.length &&
-      left.children.every((child, i) => paneNodeEqual(child, right.children[i]))
-    );
-  }
-
-  return false;
+function makeDropId(leafId: string, zone: DropZone) {
+  return `${leafId}--pane-drop--${zone}`;
 }
 
-function paneLayoutEqual(left: PaneLayoutState, right: PaneLayoutState) {
-  return left.activePaneId === right.activePaneId && paneNodeEqual(left.root, right.root);
+function parseDragId(id: string): { tabId: string; fromLeafId: string } | null {
+  const prefix = "tab--drag--";
+  if (!id.startsWith(prefix)) return null;
+  const rest = id.slice(prefix.length);
+  // fromLeafId is always "pane-<uuid>"; find the last "--pane-" occurrence
+  const sep = "--pane-";
+  const sepIdx = rest.lastIndexOf(sep);
+  if (sepIdx === -1) return null;
+  return { tabId: rest.slice(0, sepIdx), fromLeafId: `pane-${rest.slice(sepIdx + sep.length)}` };
 }
-
-function getFirstLeaf(node: PaneNode | null): PaneLeafNode | null {
-  if (!node) {
-    return null;
-  }
-
-  if (node.kind === "leaf") {
-    return node;
-  }
-
-  for (const child of node.children) {
-    const leaf = getFirstLeaf(child);
-    if (leaf) return leaf;
-  }
-  return null;
-}
-
-function countLeaves(node: PaneNode | null): number {
-  if (!node) {
-    return 0;
-  }
-
-  if (node.kind === "leaf") {
-    return 1;
-  }
-
-  return node.children.reduce((sum, child) => sum + countLeaves(child), 0);
-}
-
-function findLeaf(node: PaneNode | null, leafId: string | null): PaneLeafNode | null {
-  if (!node || !leafId) {
-    return null;
-  }
-
-  if (node.kind === "leaf") {
-    return node.id === leafId ? node : null;
-  }
-
-  for (const child of node.children) {
-    const found = findLeaf(child, leafId);
-    if (found) return found;
-  }
-  return null;
-}
-
-function findLeafContainingTab(node: PaneNode | null, tabId: string | null): PaneLeafNode | null {
-  if (!node || !tabId) {
-    return null;
-  }
-
-  if (node.kind === "leaf") {
-    return node.tabIds.includes(tabId) ? node : null;
-  }
-
-  for (const child of node.children) {
-    const found = findLeafContainingTab(child, tabId);
-    if (found) return found;
-  }
-  return null;
-}
-
-function collectAssignedTabIds(node: PaneNode | null): string[] {
-  if (!node) {
-    return [];
-  }
-
-  if (node.kind === "leaf") {
-    return node.tabIds;
-  }
-
-  return node.children.flatMap(collectAssignedTabIds);
-}
-
-function ensureActiveTabs(node: PaneNode): PaneNode {
-  if (node.kind === "leaf") {
-    const nextActiveTabId =
-      node.activeTabId && node.tabIds.includes(node.activeTabId)
-        ? node.activeTabId
-        : node.tabIds[0] ?? null;
-
-    if (nextActiveTabId === node.activeTabId) {
-      return node;
-    }
-
-    return { ...node, activeTabId: nextActiveTabId };
-  }
-
-  const nextChildren = node.children.map(ensureActiveTabs);
-  if (nextChildren.every((child, i) => child === node.children[i])) {
-    return node;
-  }
-
-  return { ...node, children: nextChildren };
-}
-
-function normalizeNode(node: PaneNode | null, availableTabIds: Set<string>): PaneNode | null {
-  if (!node) {
-    return null;
-  }
-
-  if (node.kind === "leaf") {
-    const nextTabIds = node.tabIds.filter((tabId) => availableTabIds.has(tabId));
-    if (nextTabIds.length === 0) {
-      return null;
-    }
-
-    const nextActiveTabId =
-      node.activeTabId && nextTabIds.includes(node.activeTabId)
-        ? node.activeTabId
-        : nextTabIds[0];
-
-    if (arrayEqual(nextTabIds, node.tabIds) && nextActiveTabId === node.activeTabId) {
-      return node;
-    }
-
-    return {
-      ...node,
-      tabIds: nextTabIds,
-      activeTabId: nextActiveTabId,
-    };
-  }
-
-  const nextChildren = node.children
-    .map((child) => normalizeNode(child, availableTabIds))
-    .filter((child): child is PaneNode => child !== null);
-
-  if (nextChildren.length === 0) {
-    return null;
-  }
-
-  if (nextChildren.length === 1) {
-    return nextChildren[0];
-  }
-
-  if (
-    nextChildren.length === node.children.length &&
-    nextChildren.every((child, i) => child === node.children[i])
-  ) {
-    return node;
-  }
-
-  return { ...node, children: nextChildren };
-}
-
-function appendTabsToLeaf(
-  node: PaneNode,
-  leafId: string,
-  tabIds: string[],
-  preferredActiveTabId: string | null,
-): PaneNode {
-  if (node.kind === "leaf") {
-    if (node.id !== leafId || tabIds.length === 0) {
-      return node;
-    }
-
-    const seen = new Set(node.tabIds);
-    const nextTabIds = [...node.tabIds];
-    for (const tabId of tabIds) {
-      if (!seen.has(tabId)) {
-        seen.add(tabId);
-        nextTabIds.push(tabId);
-      }
-    }
-
-    const nextActiveTabId =
-      preferredActiveTabId && nextTabIds.includes(preferredActiveTabId)
-        ? preferredActiveTabId
-        : node.activeTabId ?? nextTabIds[0] ?? null;
-
-    if (arrayEqual(nextTabIds, node.tabIds) && nextActiveTabId === node.activeTabId) {
-      return node;
-    }
-
-    return {
-      ...node,
-      tabIds: nextTabIds,
-      activeTabId: nextActiveTabId,
-    };
-  }
-
-  const nextChildren = node.children.map((child) =>
-    appendTabsToLeaf(child, leafId, tabIds, preferredActiveTabId),
-  );
-  if (nextChildren.every((child, i) => child === node.children[i])) {
-    return node;
-  }
-
-  return { ...node, children: nextChildren };
-}
-
-function appendTabsToFirstLeaf(
-  node: PaneNode,
-  tabIds: string[],
-  preferredActiveTabId: string | null,
-): PaneNode {
-  const firstLeaf = getFirstLeaf(node);
-  if (!firstLeaf) {
-    return node;
-  }
-
-  return appendTabsToLeaf(node, firstLeaf.id, tabIds, preferredActiveTabId);
-}
-
-function setLeafActiveTab(node: PaneNode, leafId: string, tabId: string): PaneNode {
-  if (node.kind === "leaf") {
-    if (node.id !== leafId || !node.tabIds.includes(tabId) || node.activeTabId === tabId) {
-      return node;
-    }
-
-    return { ...node, activeTabId: tabId };
-  }
-
-  const nextChildren = node.children.map((child) =>
-    setLeafActiveTab(child, leafId, tabId),
-  );
-  if (nextChildren.every((child, i) => child === node.children[i])) {
-    return node;
-  }
-
-  return { ...node, children: nextChildren };
-}
-
-function splitLeaf(
-  node: PaneNode,
-  leafId: string,
-  direction: SplitDirection,
-  tabId: string,
-): { root: PaneNode; activePaneId: string | null } {
-  let nextActivePaneId: string | null = null;
-  const splitAxis: PaneAxis = direction === "left" || direction === "right" ? "horizontal" : "vertical";
-  const insertBefore = direction === "left" || direction === "up";
-
-  const visit = (current: PaneNode, parentAxis?: PaneAxis): PaneNode => {
-    if (current.kind === "leaf") {
-      if (current.id !== leafId) {
-        return current;
-      }
-
-      const remainingTabIds = current.tabIds.filter((candidate) => candidate !== tabId);
-      if (!current.tabIds.includes(tabId) || remainingTabIds.length === 0) {
-        return current;
-      }
-
-      const movedLeaf = createLeaf([tabId], tabId);
-      const currentLeaf: PaneLeafNode = {
-        ...current,
-        tabIds: remainingTabIds,
-        activeTabId:
-          current.activeTabId && remainingTabIds.includes(current.activeTabId)
-            ? current.activeTabId
-            : remainingTabIds[0] ?? null,
-      };
-
-      nextActivePaneId = movedLeaf.id;
-
-      // If parent has the same axis, we'll insert as sibling (handled in split branch below)
-      // Otherwise, wrap in a new split
-      if (parentAxis === splitAxis) {
-        // Return a sentinel split that the parent will absorb
-        return {
-          kind: "split",
-          id: "__absorb__",
-          axis: splitAxis,
-          children: insertBefore
-            ? [movedLeaf, currentLeaf]
-            : [currentLeaf, movedLeaf],
-        };
-      }
-
-      return {
-        kind: "split",
-        id: makeNodeId("split"),
-        axis: splitAxis,
-        children: insertBefore
-          ? [movedLeaf, currentLeaf]
-          : [currentLeaf, movedLeaf],
-      };
-    }
-
-    const nextChildren = current.children.map((child) =>
-      visit(child, current.axis),
-    );
-    if (nextChildren.every((child, i) => child === current.children[i])) {
-      return current;
-    }
-
-    // Absorb sentinel children: if a child is a split with the same axis and id "__absorb__",
-    // splice its children into our children array
-    if (current.axis === splitAxis) {
-      const absorbed: PaneNode[] = [];
-      for (const child of nextChildren) {
-        if (child.kind === "split" && child.id === "__absorb__" && child.axis === current.axis) {
-          absorbed.push(...child.children);
-        } else {
-          absorbed.push(child);
-        }
-      }
-      return { ...current, children: absorbed };
-    }
-
-    return { ...current, children: nextChildren };
-  };
-
-  return {
-    root: visit(node),
-    activePaneId: nextActivePaneId,
-  };
-}
-
-interface RemoveLeafResult {
-  node: PaneNode | null;
-  removed: boolean;
-  focusLeafId: string | null;
-}
-
-function closeLeaf(node: PaneNode, leafId: string): RemoveLeafResult {
-  if (node.kind === "leaf") {
-    if (node.id !== leafId) {
-      return { node, removed: false, focusLeafId: null };
-    }
-    return { node: null, removed: true, focusLeafId: null };
-  }
-
-  // Try removing from each child
-  for (let i = 0; i < node.children.length; i++) {
-    const result = closeLeaf(node.children[i], leafId);
-    if (!result.removed) continue;
-
-    const removedChild = node.children[i];
-    const tabsToRedistribute = collectAssignedTabIds(removedChild);
-
-    if (result.node) {
-      // Child was pruned but not fully removed — replace in place
-      const nextChildren = [...node.children];
-      nextChildren[i] = result.node;
-      return {
-        node: { ...node, children: nextChildren },
-        removed: true,
-        focusLeafId: getFirstLeaf(result.node)?.id ?? null,
-      };
-    }
-
-    // Child fully removed — splice it out
-    const remaining = node.children.filter((_, idx) => idx !== i);
-
-    if (remaining.length === 0) {
-      return { node: null, removed: true, focusLeafId: null };
-    }
-
-    // Redistribute tabs from removed child into adjacent sibling
-    const adjacentIdx = Math.min(i, remaining.length - 1);
-    remaining[adjacentIdx] = appendTabsToFirstLeaf(
-      remaining[adjacentIdx],
-      tabsToRedistribute,
-      null,
-    );
-
-    if (remaining.length === 1) {
-      // Collapse single-child split
-      return {
-        node: remaining[0],
-        removed: true,
-        focusLeafId: getFirstLeaf(remaining[0])?.id ?? null,
-      };
-    }
-
-    return {
-      node: { ...node, children: remaining },
-      removed: true,
-      focusLeafId: getFirstLeaf(remaining[adjacentIdx])?.id ?? null,
-    };
-  }
-
-  return { node, removed: false, focusLeafId: null };
-}
-
-function syncPaneLayout(
-  current: PaneLayoutState,
-  surfaces: PaneSurface[],
-  preferredTabId: string | null,
-): PaneLayoutState {
-  if (surfaces.length === 0) {
-    return { root: null, activePaneId: null };
-  }
-
-  const orderedTabIds = surfaces.map((surface) => surface.id);
-  const availableTabIds = new Set(orderedTabIds);
-  let root = normalizeNode(current.root, availableTabIds);
-
-  if (!root) {
-    root = createLeaf([orderedTabIds[0]], orderedTabIds[0]);
-  }
-
-  const shouldFocusPreferred = Boolean(preferredTabId && !findLeafContainingTab(current.root, preferredTabId));
-  let activePaneId = findLeaf(root, current.activePaneId)?.id ?? null;
-  const assignedTabIds = new Set(collectAssignedTabIds(root));
-  const missingTabIds = orderedTabIds.filter((tabId) => !assignedTabIds.has(tabId));
-
-  if (missingTabIds.length > 0) {
-    const targetLeafId =
-      activePaneId ??
-      findLeafContainingTab(root, preferredTabId)?.id ??
-      getFirstLeaf(root)?.id;
-
-    if (targetLeafId) {
-      root = appendTabsToLeaf(root, targetLeafId, missingTabIds, preferredTabId);
-    }
-  }
-
-  root = ensureActiveTabs(root);
-
-  if (preferredTabId && shouldFocusPreferred) {
-    const preferredLeaf = findLeafContainingTab(root, preferredTabId);
-    if (preferredLeaf) {
-      root = setLeafActiveTab(root, preferredLeaf.id, preferredTabId);
-      activePaneId = preferredLeaf.id;
-    }
-  }
-
-  if (!findLeaf(root, activePaneId)?.id) {
-    activePaneId = getFirstLeaf(root)?.id ?? null;
-  }
-
-  return {
-    root,
-    activePaneId,
-  };
-}
-
 
 function PaneSurfaceBadge({ surface }: { surface: PaneSurface }) {
-  if (surface.kind === "live-session") {
-    return (
-      <Badge variant="secondary" className="h-4 px-1 text-[10px] font-normal">
-        Live
-      </Badge>
-    );
-  }
-
-  if (surface.kind === "file") {
+  if (surface.kind !== "transcript") {
     return null;
   }
 
@@ -591,6 +179,218 @@ function PaneSurfaceBadge({ surface }: { surface: PaneSurface }) {
       <Eye data-icon="inline-start" />
       Transcript
     </Badge>
+  );
+}
+
+function DropHint({
+  icon,
+  label,
+  className,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-lg shadow-black/10 backdrop-blur-sm",
+        className,
+      )}
+    >
+      <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/12 text-primary">
+        {icon}
+      </span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+/** Drop overlay shown during drag over a pane — 5 zones: center + 4 edges */
+function PaneDropOverlay({
+  leafId,
+  forcedZone = null,
+  interactive = true,
+}: {
+  leafId: string;
+  forcedZone?: DropZone | null;
+  interactive?: boolean;
+}) {
+  const { setNodeRef: centerRef, isOver: centerOver } = useDroppable({ id: makeDropId(leafId, "center") });
+  const { setNodeRef: topRef, isOver: topOver } = useDroppable({ id: makeDropId(leafId, "top") });
+  const { setNodeRef: rightRef, isOver: rightOver } = useDroppable({ id: makeDropId(leafId, "right") });
+  const { setNodeRef: bottomRef, isOver: bottomOver } = useDroppable({ id: makeDropId(leafId, "bottom") });
+  const { setNodeRef: leftRef, isOver: leftOver } = useDroppable({ id: makeDropId(leafId, "left") });
+
+  const topActive = topOver || forcedZone === "top";
+  const rightActive = rightOver || forcedZone === "right";
+  const bottomActive = bottomOver || forcedZone === "bottom";
+  const leftActive = leftOver || forcedZone === "left";
+  const centerActive = centerOver || forcedZone === "center";
+  const hitZoneClass = interactive ? "pointer-events-auto" : "pointer-events-none";
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20">
+      {/* Drop hit zones — keep these generous, but render a larger preview */}
+      <div
+        ref={topRef}
+        className={cn(hitZoneClass, "absolute inset-x-0 top-0 h-1/4")}
+      />
+      <div
+        ref={rightRef}
+        className={cn(hitZoneClass, "absolute inset-y-0 right-0 w-1/4")}
+      />
+      <div
+        ref={bottomRef}
+        className={cn(hitZoneClass, "absolute inset-x-0 bottom-0 h-1/4")}
+      />
+      <div
+        ref={leftRef}
+        className={cn(hitZoneClass, "absolute inset-y-0 left-0 w-1/4")}
+      />
+      <div
+        ref={centerRef}
+        className={cn(hitZoneClass, "absolute inset-x-1/4 inset-y-1/4")}
+      />
+      {/* Visual previews */}
+      {topActive && (
+        <div className="absolute inset-x-0 top-0 h-1/2 rounded-[14px] bg-primary/10 ring-1 ring-inset ring-primary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
+      )}
+      {rightActive && (
+        <div className="absolute inset-y-0 right-0 w-1/2 rounded-[14px] bg-primary/10 ring-1 ring-inset ring-primary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
+      )}
+      {bottomActive && (
+        <div className="absolute inset-x-0 bottom-0 h-1/2 rounded-[14px] bg-primary/10 ring-1 ring-inset ring-primary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
+      )}
+      {leftActive && (
+        <div className="absolute inset-y-0 left-0 w-1/2 rounded-[14px] bg-primary/10 ring-1 ring-inset ring-primary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
+      )}
+      {centerActive && (
+        <div className="absolute inset-x-1/4 inset-y-1/4 rounded-[14px] bg-primary/12 ring-1 ring-inset ring-primary/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
+      )}
+      {/* Direction hints centered within the resulting preview area */}
+      {topActive && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex h-1/2 items-center justify-center">
+          <DropHint icon={<ArrowLineUp className="size-3.5" weight="bold" />} label="Split up" />
+        </div>
+      )}
+      {rightActive && (
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex w-1/2 items-center justify-center">
+          <DropHint icon={<ArrowLineRight className="size-3.5" weight="bold" />} label="Split right" />
+        </div>
+      )}
+      {bottomActive && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-1/2 items-center justify-center">
+          <DropHint icon={<ArrowLineDown className="size-3.5" weight="bold" />} label="Split down" />
+        </div>
+      )}
+      {leftActive && (
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex w-1/2 items-center justify-center">
+          <DropHint icon={<ArrowLineLeft className="size-3.5" weight="bold" />} label="Split left" />
+        </div>
+      )}
+      {centerActive && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <DropHint
+            icon={<Plus className="size-3.5" strokeWidth={2.2} />}
+            label="Add as tab"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Draggable tab button — the whole tab header acts as the drag target */
+function DraggableTab({
+  tabId,
+  leafId,
+  isActive,
+  surface,
+  onSelectTab,
+  onCloseSession,
+  onCloseFile,
+  onCloseTranscript,
+  onSelectLiveSession,
+}: {
+  tabId: string;
+  leafId: string;
+  isActive: boolean;
+  surface: PaneSurface;
+  onSelectTab: () => void;
+  onCloseSession: (id: string) => void;
+  onCloseFile: (id: string) => void;
+  onCloseTranscript: () => void;
+  onSelectLiveSession: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: makeDragId(tabId, leafId),
+    data: { type: "tab", tabId, fromLeafId: leafId } satisfies TabDragData,
+  });
+
+  return (
+    <button
+      ref={setNodeRef}
+      key={tabId}
+      type="button"
+      {...attributes}
+      {...listeners}
+      onClick={() => {
+        onSelectTab();
+        if (surface.kind === "live-session") {
+          onSelectLiveSession(surface.session.id);
+        }
+      }}
+      className={cn(
+        "group/pane-tab relative flex max-w-[260px] shrink-0 cursor-pointer items-center gap-1.5 pl-1.5 pr-3 py-2 text-left text-xs transition-colors active:cursor-grabbing",
+        isActive
+          ? "text-foreground"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+        isDragging && "opacity-40",
+      )}
+    >
+      <span
+        className="inline-flex size-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity group-hover/pane-tab:opacity-60 active:cursor-grabbing"
+        aria-label="Drag tab"
+      >
+        <GripVertical className="size-3" />
+      </span>
+      {surface.kind === "file" ? (
+        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+      ) : (
+        <AgentIcon agent={surface.session.agent} className="size-3.5 shrink-0" />
+      )}
+      <span className="truncate font-medium">{surface.title}</span>
+      {surface.kind !== "file" && (
+        <StatusDot status={surface.session.status} />
+      )}
+      <PaneSurfaceBadge surface={surface} />
+      {surface.closable ? (
+        <span
+          className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/pane-tab:opacity-100"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (surface.kind === "live-session") {
+              onCloseSession(surface.session.id);
+            } else if (surface.kind === "file") {
+              onCloseFile(surface.id);
+            } else {
+              onCloseTranscript();
+            }
+          }}
+          role="button"
+          aria-label={`Close ${surface.title}`}
+        >
+          <X className="size-3" />
+        </span>
+      ) : null}
+      {isActive && (
+        <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-foreground" />
+      )}
+    </button>
   );
 }
 
@@ -605,6 +405,7 @@ function PaneLeafView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onExternalFileDrop,
   onResumeTranscript,
   onSelectLiveSession,
   onSessionStart,
@@ -620,84 +421,95 @@ function PaneLeafView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
 }) {
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [externalDropZone, setExternalDropZone] = useState<DropZone | null>(null);
+
+  useDndMonitor({
+    onDragStart: () => setIsDragActive(true),
+    onDragEnd: () => setIsDragActive(false),
+    onDragCancel: () => setIsDragActive(false),
+  });
+
   const activeSurface =
     (leaf.activeTabId ? surfacesById.get(leaf.activeTabId) : null) ??
     surfacesById.get(leaf.tabIds[0]) ??
     null;
-  const canSplit = leaf.tabIds.length > 1 && Boolean(activeSurface);
+  const canSplit = Boolean(activeSurface);
   const canResumeActiveTranscript =
     activeSurface?.kind === "transcript" &&
     activeSurface.session.agent !== "bash" &&
     Boolean(onResumeTranscript);
 
+  const handleBodyDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    if (!filePath) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    setExternalDropZone(resolveDropZoneFromPoint(event));
+  }, []);
+
+  const handleBodyDrop = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    if (!filePath) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const zone = resolveDropZoneFromPoint(event);
+    setExternalDropZone(null);
+    onExternalFileDrop(leaf.id, zone, filePath);
+  }, [leaf.id, onExternalFileDrop]);
+
+  const handleBodyDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    if (!filePath) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const outside =
+      event.clientX < rect.left ||
+      event.clientX > rect.right ||
+      event.clientY < rect.top ||
+      event.clientY > rect.bottom;
+
+    if (outside) {
+      setExternalDropZone(null);
+    }
+  }, []);
+
   return (
     <div
-      className="flex h-full min-h-0 min-w-0 flex-col"
+      className="relative flex h-full min-h-0 min-w-0 flex-col"
       onMouseDown={() => onFocusPane(leaf.id)}
     >
-      {/* Tab bar — sits on top of content, active tab connects seamlessly */}
+      {/* Tab bar */}
       <div className="relative shrink-0 bg-muted/50">
         <div className="flex items-center">
           <div className="flex min-w-0 flex-1 items-end gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {leaf.tabIds.map((tabId) => {
               const surface = surfacesById.get(tabId);
-              if (!surface) {
-                return null;
-              }
-
+              if (!surface) return null;
               const isActive = tabId === leaf.activeTabId;
               return (
-                <button
+                <DraggableTab
                   key={tabId}
-                  type="button"
-                  onClick={() => {
-                    onSelectTab(leaf.id, tabId);
-                    if (surface.kind === "live-session") {
-                      onSelectLiveSession(surface.session.id);
-                    }
-                  }}
-                  className={cn(
-                    "group/pane-tab relative flex max-w-[260px] shrink-0 items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
-                    isActive
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                  )}
-                >
-                  {surface.kind === "file" ? (
-                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <AgentIcon agent={surface.session.agent} className="size-3.5 shrink-0" />
-                  )}
-                  <span className="truncate font-medium">{surface.title}</span>
-                  <PaneSurfaceBadge surface={surface} />
-                  {surface.closable ? (
-                    <span
-                      className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/pane-tab:opacity-100"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (surface.kind === "live-session") {
-                          onCloseSession(surface.session.id);
-                        } else if (surface.kind === "file") {
-                          onCloseFile(surface.id);
-                        } else {
-                          onCloseTranscript();
-                        }
-                      }}
-                      role="button"
-                      aria-label={`Close ${surface.title}`}
-                    >
-                      <X className="size-3" />
-                    </span>
-                  ) : null}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-foreground" />
-                  )}
-                </button>
+                  tabId={tabId}
+                  leafId={leaf.id}
+                  isActive={isActive}
+                  surface={surface}
+                  onSelectTab={() => onSelectTab(leaf.id, tabId)}
+                  onCloseSession={onCloseSession}
+                  onCloseFile={onCloseFile}
+                  onCloseTranscript={onCloseTranscript}
+                  onSelectLiveSession={onSelectLiveSession}
+                />
               );
             })}
           </div>
@@ -727,7 +539,7 @@ function PaneLeafView({
                       ? "hover:bg-accent hover:text-foreground"
                       : "cursor-not-allowed opacity-30",
                   )}
-                  title={canSplit ? "Split pane" : "Open more than one tab in this pane to split it"}
+                  title="Split pane"
                   aria-label="Split pane"
                 >
                   <SplitHorizontal className="size-3.5" />
@@ -770,13 +582,23 @@ function PaneLeafView({
         <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-background">
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden bg-background"
+        onDragOver={handleBodyDragOver}
+        onDrop={handleBodyDrop}
+        onDragLeave={handleBodyDragLeave}
+      >
+        {/* Drop overlay — shown during drag only over the pane body, not the tab strip */}
+        {(isDragActive || externalDropZone !== null) && (
+          <PaneDropOverlay
+            leafId={leaf.id}
+            forcedZone={externalDropZone}
+            interactive={isDragActive}
+          />
+        )}
         {leaf.tabIds.map((tabId) => {
           const surface = surfacesById.get(tabId);
-          if (!surface) {
-            return null;
-          }
-
+          if (!surface) return null;
           const isActive = tabId === leaf.activeTabId;
 
           return (
@@ -792,6 +614,7 @@ function PaneLeafView({
                   args={surface.session.args}
                   cwd={surface.session.cwd}
                   env={surface.session.env}
+                  isVisible={isActive}
                   onStart={() => onSessionStart(surface.session.id)}
                   onExit={onSessionExit(surface.session.id)}
                   closeOnUnmount={false}
@@ -823,6 +646,7 @@ function PaneTreeView({
   paneCount,
   surfacesById,
   activePaneId,
+  sizesByGroupId,
   onFocusPane,
   onSelectTab,
   onSplit,
@@ -830,15 +654,18 @@ function PaneTreeView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onExternalFileDrop,
   onResumeTranscript,
   onSelectLiveSession,
   onSessionStart,
   onSessionExit,
+  onSizeChange,
 }: {
   node: PaneNode;
   paneCount: number;
   surfacesById: Map<string, PaneSurface>;
   activePaneId: string | null;
+  sizesByGroupId: Record<string, Record<string, number>>;
   onFocusPane: (paneId: string) => void;
   onSelectTab: (paneId: string, tabId: string) => void;
   onSplit: (paneId: string, direction: SplitDirection) => void;
@@ -846,10 +673,12 @@ function PaneTreeView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
+  onSizeChange: (groupId: string, sizes: Record<string, number>) => void;
 }) {
   if (node.kind === "leaf") {
     return (
@@ -864,6 +693,7 @@ function PaneTreeView({
         onCloseSession={onCloseSession}
         onCloseTranscript={onCloseTranscript}
         onCloseFile={onCloseFile}
+        onExternalFileDrop={onExternalFileDrop}
         onResumeTranscript={onResumeTranscript}
         onSelectLiveSession={onSelectLiveSession}
         onSessionStart={onSessionStart}
@@ -872,18 +702,21 @@ function PaneTreeView({
     );
   }
 
-  const defaultSize = 100 / node.children.length;
+  const storedSizes = sizesByGroupId[node.id];
+  const defaultEqualSize = 100 / node.children.length;
 
   return (
-    <ResizablePanelGroup orientation={node.axis}>
+    <ResizablePanelGroup orientation={node.axis} onLayoutChange={(sizes) => onSizeChange(node.id, sizes)}>
       {node.children.flatMap((child, index) => {
+        const defaultSize = storedSizes?.[child.id] ?? defaultEqualSize;
         const panel = (
-          <ResizablePanel key={child.id} defaultSize={defaultSize} minSize={10}>
+          <ResizablePanel key={child.id} id={child.id} defaultSize={defaultSize} minSize={10}>
             <PaneTreeView
               node={child}
               paneCount={paneCount}
               surfacesById={surfacesById}
               activePaneId={activePaneId}
+              sizesByGroupId={sizesByGroupId}
               onFocusPane={onFocusPane}
               onSelectTab={onSelectTab}
               onSplit={onSplit}
@@ -891,10 +724,12 @@ function PaneTreeView({
               onCloseSession={onCloseSession}
               onCloseTranscript={onCloseTranscript}
               onCloseFile={onCloseFile}
+              onExternalFileDrop={onExternalFileDrop}
               onResumeTranscript={onResumeTranscript}
               onSelectLiveSession={onSelectLiveSession}
               onSessionStart={onSessionStart}
               onSessionExit={onSessionExit}
+              onSizeChange={onSizeChange}
             />
           </ResizablePanel>
         );
@@ -920,7 +755,9 @@ export function PaneWorkspace({
   onResumeTranscript,
   onSessionStart,
   onSessionExit,
+  onOpenTabIdsChange,
 }: PaneWorkspaceProps) {
+  const [fileSurfacePaths, setFileSurfacePaths] = useState<string[]>([]);
   const surfaces = useMemo<PaneSurface[]>(() => {
     const nextSurfaces: PaneSurface[] = liveSessions.map((session) => ({
       id: `live:${session.id}`,
@@ -940,19 +777,19 @@ export function PaneWorkspace({
       });
     }
 
-    if (openFilePath) {
-      const fileName = openFilePath.split("/").pop() ?? openFilePath;
+    for (const filePath of fileSurfacePaths) {
+      const fileName = filePath.split("/").pop() ?? filePath;
       nextSurfaces.push({
-        id: `file:${openFilePath}`,
+        id: tabIdForFilePath(filePath),
         kind: "file",
-        filePath: openFilePath,
+        filePath,
         title: fileName,
         closable: true,
       });
     }
 
     return nextSurfaces;
-  }, [liveSessions, transcriptSession, openFilePath]);
+  }, [fileSurfacePaths, liveSessions, transcriptSession]);
 
   const surfacesById = useMemo(
     () => new Map(surfaces.map((surface) => [surface.id, surface])),
@@ -966,13 +803,231 @@ export function PaneWorkspace({
         ? `live:${activeSession.id}`
         : null;
   const [layout, setLayout] = useState<PaneLayoutState>({ root: null, activePaneId: null });
+  const [sizesByGroupId, setSizesByGroupId] = useState<Record<string, Record<string, number>>>({});
+  const [hydrated, setHydrated] = useState(false);
+  const [dragSurface, setDragSurface] = useState<PaneSurface | null>(null);
+
+  const pendingSaveRef = useRef<{ layout: PaneLayoutState; sizesByGroupId: Record<string, Record<string, number>> } | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!openFilePath) return;
+    setFileSurfacePaths((current) =>
+      current.includes(openFilePath) ? current : [...current, openFilePath],
+    );
+  }, [openFilePath]);
+
+  useEffect(() => {
+    if (!projectPath) {
+      setFileSurfacePaths([]);
+      return;
+    }
+
+    setFileSurfacePaths((current) =>
+      current.filter((path) => path === projectPath || path.startsWith(`${projectPath}/`)),
+    );
+
+    if (openFilePath && openFilePath !== projectPath && !openFilePath.startsWith(`${projectPath}/`)) {
+      onCloseFile(openFilePath);
+    }
+  }, [onCloseFile, openFilePath, projectPath]);
+
+  const flushSave = useCallback(() => {
+    if (!pendingSaveRef.current) return;
+    const { layout: l, sizesByGroupId: s } = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    workspaceLayoutCommands.save(JSON.stringify({ root: l.root, activePaneId: l.activePaneId, sizesByGroupId: s }));
+  }, []);
+
+  const scheduleSave = useCallback((l: PaneLayoutState, s: Record<string, Record<string, number>>) => {
+    pendingSaveRef.current = { layout: l, sizesByGroupId: s };
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      flushSave();
+    }, 500);
+  }, [flushSave]);
+
+  // Load persisted layout on mount
+  useEffect(() => {
+    workspaceLayoutCommands.load().then((raw) => {
+      if (raw) {
+        try {
+          const persisted = JSON.parse(raw);
+          if (persisted.root) {
+            setLayout({ root: persisted.root, activePaneId: persisted.activePaneId ?? null });
+          }
+          if (persisted.sizesByGroupId) {
+            setSizesByGroupId(persisted.sizesByGroupId);
+          }
+        } catch { /* corrupt — start fresh */ }
+      }
+    }).catch(() => { /* ignore */ }).finally(() => setHydrated(true));
+  }, []);
+
+  // Flush save on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      flushSave();
+    };
+  }, [flushSave]);
+
+  // Sync layout against live surfaces (runs after hydration to preserve persisted tree)
+  useEffect(() => {
+    if (!hydrated) return;
     setLayout((current) => {
       const next = syncPaneLayout(current, surfaces, preferredTabId);
       return paneLayoutEqual(current, next) ? current : next;
     });
-  }, [preferredTabId, surfaces]);
+  }, [hydrated, preferredTabId, surfaces]);
+
+  // Persist layout + sizes whenever they change (after hydration)
+  useEffect(() => {
+    if (!hydrated) return;
+    scheduleSave(layout, sizesByGroupId);
+  }, [hydrated, layout, sizesByGroupId, scheduleSave]);
+
+  // Report open tab session IDs to parent whenever layout changes
+  useEffect(() => {
+    if (!onOpenTabIdsChange) return;
+    const allTabIds = layout.root
+      ? (() => {
+          const ids: string[] = [];
+          const visit = (node: typeof layout.root): void => {
+            if (!node) return;
+            if (node.kind === "leaf") {
+              for (const tabId of node.tabIds) {
+                if (tabId.startsWith("live:")) ids.push(tabId.slice(5));
+              }
+            } else {
+              for (const child of node.children) visit(child);
+            }
+          };
+          visit(layout.root);
+          return ids;
+        })()
+      : [];
+    onOpenTabIdsChange(allTabIds);
+  }, [layout, onOpenTabIdsChange]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const parsed = parseDragId(String(event.active.id));
+    if (parsed) {
+      setDragSurface(surfacesById.get(parsed.tabId) ?? null);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setDragSurface(null);
+
+    const { active, over } = event;
+    if (!over) return;
+
+    const drag = parseDragId(String(active.id));
+    const drop = parseDropId(String(over.id));
+    if (!drag || !drop) return;
+
+    const { tabId, fromLeafId } = drag;
+    const { leafId: toLeafId, zone } = drop;
+
+    setLayout((current) => {
+      if (!current.root) return current;
+
+      let nextRoot = current.root;
+      let nextActivePaneId = current.activePaneId;
+
+      if (zone === "center") {
+        if (fromLeafId === toLeafId) return current;
+        nextRoot = moveTabBetweenLeaves(nextRoot, fromLeafId, tabId, toLeafId);
+        nextRoot = ensureActiveTabs(nextRoot);
+        nextActivePaneId = toLeafId;
+      } else {
+        const directionMap: Record<Exclude<DropZone, "center">, SplitDirection> = {
+          top: "up",
+          right: "right",
+          bottom: "down",
+          left: "left",
+        };
+        const direction = directionMap[zone];
+        const result = splitLeafWithExternalTab(nextRoot, toLeafId, direction, tabId, fromLeafId);
+        nextRoot = ensureActiveTabs(result.root);
+        nextActivePaneId = result.activePaneId ?? current.activePaneId;
+      }
+
+      const next = { root: nextRoot, activePaneId: nextActivePaneId };
+      return paneLayoutEqual(current, next) ? current : next;
+    });
+  };
+
+  const handleCloseFileSurface = useCallback((surfaceId: string) => {
+    const filePath = filePathFromTabId(surfaceId);
+    if (!filePath) return;
+
+    setFileSurfacePaths((current) => current.filter((path) => path !== filePath));
+
+    if (openFilePath === filePath) {
+      onCloseFile(filePath);
+    }
+  }, [onCloseFile, openFilePath]);
+
+  const handleExternalFileDrop = useCallback((leafId: string, zone: DropZone, filePath: string) => {
+    const tabId = tabIdForFilePath(filePath);
+
+    setFileSurfacePaths((current) =>
+      current.includes(filePath) ? current : [...current, filePath],
+    );
+
+    setLayout((current) => {
+      if (!current.root) return current;
+
+      let nextRoot = current.root;
+      let nextActivePaneId = current.activePaneId;
+      const sourceLeaf = findLeafContainingTab(nextRoot, tabId);
+      const directionMap: Record<Exclude<DropZone, "center">, SplitDirection> = {
+        top: "up",
+        right: "right",
+        bottom: "down",
+        left: "left",
+      };
+
+      if (zone === "center") {
+        if (sourceLeaf) {
+          nextRoot =
+            sourceLeaf.id === leafId
+              ? setLeafActiveTab(nextRoot, leafId, tabId)
+              : moveTabBetweenLeaves(nextRoot, sourceLeaf.id, tabId, leafId);
+        } else {
+          nextRoot = appendTabsToLeaf(nextRoot, leafId, [tabId], tabId);
+        }
+        nextRoot = ensureActiveTabs(nextRoot);
+        nextActivePaneId = leafId;
+      } else if (sourceLeaf?.id === leafId) {
+        const leaf = findLeaf(nextRoot, leafId);
+        if (!leaf || leaf.tabIds.length < 2) return current;
+        const result = splitLeaf(nextRoot, leafId, directionMap[zone], tabId);
+        nextRoot = ensureActiveTabs(result.root);
+        nextActivePaneId = result.activePaneId ?? current.activePaneId;
+      } else {
+        const result = splitLeafWithExternalTab(
+          nextRoot,
+          leafId,
+          directionMap[zone],
+          tabId,
+          sourceLeaf?.id ?? null,
+        );
+        nextRoot = ensureActiveTabs(result.root);
+        nextActivePaneId = result.activePaneId ?? current.activePaneId;
+      }
+
+      const next = { root: nextRoot, activePaneId: nextActivePaneId };
+      return paneLayoutEqual(current, next) ? current : next;
+    });
+  }, []);
 
   const paneCount = countLeaves(layout.root);
 
@@ -981,76 +1036,76 @@ export function PaneWorkspace({
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
-      <PaneTreeView
-        node={layout.root}
-        paneCount={paneCount}
-        surfacesById={surfacesById}
-        activePaneId={layout.activePaneId}
-        onFocusPane={(paneId) => {
-          setLayout((current) =>
-            current.activePaneId === paneId ? current : { ...current, activePaneId: paneId },
-          );
-        }}
-        onSelectTab={(paneId, tabId) => {
-          setLayout((current) => {
-            if (!current.root) {
-              return current;
-            }
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
+        <PaneTreeView
+          node={layout.root}
+          paneCount={paneCount}
+          surfacesById={surfacesById}
+          activePaneId={layout.activePaneId}
+          sizesByGroupId={sizesByGroupId}
+          onSizeChange={(groupId, sizes) => setSizesByGroupId((prev) => ({ ...prev, [groupId]: sizes }))}
+          onFocusPane={(paneId) => {
+            setLayout((current) =>
+              current.activePaneId === paneId ? current : { ...current, activePaneId: paneId },
+            );
+          }}
+          onSelectTab={(paneId, tabId) => {
+            setLayout((current) => {
+              if (!current.root) return current;
+              const nextRoot = setLeafActiveTab(current.root, paneId, tabId);
+              const nextState = { root: nextRoot, activePaneId: paneId };
+              return paneLayoutEqual(current, nextState) ? current : nextState;
+            });
+          }}
+          onSplit={(paneId, direction) => {
+            setLayout((current) => {
+              if (!current.root) return current;
+              const leaf = findLeaf(current.root, paneId);
+              const activeTabId = leaf?.activeTabId ?? null;
+              if (!leaf || !activeTabId || leaf.tabIds.length < 2) return current;
+              const next = splitLeaf(current.root, paneId, direction, activeTabId);
+              return {
+                root: ensureActiveTabs(next.root),
+                activePaneId: next.activePaneId ?? current.activePaneId,
+              };
+            });
+          }}
+          onClosePane={(paneId) => {
+            setLayout((current) => {
+              if (!current.root || countLeaves(current.root) <= 1) return current;
+              const next = closeLeaf(current.root, paneId);
+              if (!next.node) return current;
+              return {
+                root: ensureActiveTabs(next.node),
+                activePaneId: next.focusLeafId ?? getFirstLeaf(next.node)?.id ?? null,
+              };
+            });
+          }}
+          onCloseSession={onCloseSession}
+          onCloseTranscript={onCloseTranscript}
+          onCloseFile={handleCloseFileSurface}
+          onExternalFileDrop={handleExternalFileDrop}
+          onResumeTranscript={onResumeTranscript}
+          onSelectLiveSession={onSelectLiveSession}
+          onSessionStart={onSessionStart}
+          onSessionExit={onSessionExit}
+        />
+      </div>
 
-            const nextRoot = setLeafActiveTab(current.root, paneId, tabId);
-            const nextState = {
-              root: nextRoot,
-              activePaneId: paneId,
-            };
-
-            return paneLayoutEqual(current, nextState) ? current : nextState;
-          });
-        }}
-        onSplit={(paneId, direction) => {
-          setLayout((current) => {
-            if (!current.root) {
-              return current;
-            }
-
-            const leaf = findLeaf(current.root, paneId);
-            const activeTabId = leaf?.activeTabId ?? null;
-            if (!leaf || !activeTabId || leaf.tabIds.length < 2) {
-              return current;
-            }
-
-            const next = splitLeaf(current.root, paneId, direction, activeTabId);
-            return {
-              root: ensureActiveTabs(next.root),
-              activePaneId: next.activePaneId ?? current.activePaneId,
-            };
-          });
-        }}
-        onClosePane={(paneId) => {
-          setLayout((current) => {
-            if (!current.root || countLeaves(current.root) <= 1) {
-              return current;
-            }
-
-            const next = closeLeaf(current.root, paneId);
-            if (!next.node) {
-              return current;
-            }
-
-            return {
-              root: ensureActiveTabs(next.node),
-              activePaneId: next.focusLeafId ?? getFirstLeaf(next.node)?.id ?? null,
-            };
-          });
-        }}
-        onCloseSession={onCloseSession}
-        onCloseTranscript={onCloseTranscript}
-        onCloseFile={onCloseFile}
-        onResumeTranscript={onResumeTranscript}
-        onSelectLiveSession={onSelectLiveSession}
-        onSessionStart={onSessionStart}
-        onSessionExit={onSessionExit}
-      />
-    </div>
+      {/* Drag preview ghost */}
+      <DragOverlay dropAnimation={null}>
+        {dragSurface ? (
+          <div className="flex max-w-[360px] min-w-0 items-center gap-2 overflow-hidden rounded-md border border-border bg-background px-3 py-1.5 text-xs shadow-lg">
+            {dragSurface.kind === "file" ? (
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <AgentIcon agent={dragSurface.session.agent} className="size-3.5 shrink-0" />
+            )}
+            <span className="min-w-0 truncate font-medium">{dragSurface.title}</span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

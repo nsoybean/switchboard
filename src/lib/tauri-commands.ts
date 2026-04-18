@@ -167,3 +167,12 @@ export const worktreeCommands = {
   list: (repoPath: string) =>
     invoke<WorktreeInfo[]>("list_worktrees", { repoPath }),
 };
+
+export const workspaceLayoutCommands = {
+  save: (layout: string) => invoke<void>("save_workspace_layout", { layout }),
+  load: () => invoke<string | null>("load_workspace_layout"),
+};
+
+export const quitCommands = {
+  quitWithCleanup: (tileIds: string[]) => invoke<void>("quit_with_cleanup", { tileIds }),
+};

@@ -489,6 +489,19 @@ pub fn get_terminal_buffer(
     sessions.terminal_buffer(&tile_id)
 }
 
+#[tauri::command]
+pub fn quit_with_cleanup(
+    app: tauri::AppHandle,
+    sessions: State<'_, SessionRegistry>,
+    tile_ids: Vec<String>,
+) -> Result<(), String> {
+    for id in &tile_ids {
+        let _ = sessions.close_terminal(id);
+    }
+    app.exit(0);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{clamp_dimensions, default_args_for_command, utf8_complete_len, SessionRegistry};

@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/ui/status-dot";
 import {
   Tooltip,
   TooltipContent,
@@ -20,6 +21,7 @@ interface SessionCardProps {
   /** Ref from useDraggable — attach to the root element to make it draggable */
   dragRef?: React.Ref<HTMLDivElement>;
   isDragSource?: boolean;
+  isOpenInTab?: boolean;
   onClick: () => void;
   onPin?: () => void;
   onResume?: () => void;
@@ -34,6 +36,7 @@ export function SessionCard({
   isPinned,
   dragRef,
   isDragSource,
+  isOpenInTab,
   index,
   timestampLabel,
   timestampTitle,
@@ -69,7 +72,9 @@ export function SessionCard({
         "group/session flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors overflow-hidden cursor-pointer",
         isActive
           ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent/50 text-foreground",
+          : isOpenInTab
+            ? "bg-muted/60 hover:bg-accent/50 text-foreground"
+            : "hover:bg-accent/50 text-foreground",
       )}
       onClick={onClick}
     >
@@ -95,6 +100,7 @@ export function SessionCard({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
+          <StatusDot status={session.status} />
           <span className={cn(
             "truncate text-[13px] font-medium",
             !session.label && "italic text-muted-foreground",

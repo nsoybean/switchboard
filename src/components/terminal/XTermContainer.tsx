@@ -117,6 +117,12 @@ function dims(terminal: Terminal) {
   };
 }
 
+function canMeasureHost(host: HTMLDivElement) {
+  if (!host.isConnected) return false;
+  const rect = host.getBoundingClientRect();
+  return rect.width >= 2 && rect.height >= 2;
+}
+
 // ---------------------------------------------------------------------------
 // Props & memo helpers
 // ---------------------------------------------------------------------------
@@ -127,6 +133,7 @@ interface XTermContainerProps {
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
+  isVisible?: boolean;
   onStart?: () => void;
   onExit?: (code: number | null) => void;
   closeOnUnmount?: boolean;
@@ -156,6 +163,7 @@ function XTermContainerComponent({
   args = [],
   cwd,
   env,
+  isVisible = true,
   onStart,
   onExit,
   closeOnUnmount = true,
@@ -165,6 +173,7 @@ function XTermContainerComponent({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const sessionActiveRef = useRef(false);
+  const isVisibleRef = useRef(isVisible);
   const onStartRef = useRef(onStart);
   const onExitRef = useRef(onExit);
   const { theme } = useTheme();
@@ -204,6 +213,7 @@ function XTermContainerComponent({
 
   useEffect(() => { onStartRef.current = onStart; }, [onStart]);
   useEffect(() => { onExitRef.current = onExit; }, [onExit]);
+  useEffect(() => { isVisibleRef.current = isVisible; }, [isVisible]);
 
   // -----------------------------------------------------------------------
   // Core terminal lifecycle — single effect owns PTY + listeners
@@ -310,7 +320,13 @@ function XTermContainerComponent({
     fitAddonRef.current = fitAddon;
 
     const fit = () => {
-      try { fitAddon.fit(); } catch { /* container settling */ }
+      if (!isVisibleRef.current || !canMeasureHost(host)) return false;
+      try {
+        fitAddon.fit();
+        return true;
+      } catch {
+        return false;
+      }
     };
 
     // --- 4. Resize pipeline ---
@@ -332,7 +348,7 @@ function XTermContainerComponent({
     let initialResizeDone = false;
 
     const resizePty = () => {
-      if (!sessionActiveRef.current) return;
+      if (!sessionActiveRef.current || !isVisibleRef.current || !canMeasureHost(host)) return;
       const { cols, rows } = dims(terminal);
       if (cols !== lastCols || rows !== lastRows) {
         lastCols = cols;
@@ -343,7 +359,7 @@ function XTermContainerComponent({
     };
 
     const observer = new ResizeObserver(() => {
-      fit();
+      if (!fit()) return;
       if (!initialResizeDone) {
         cancelAnimationFrame(resizeRaf);
         resizePty();
@@ -457,6 +473,12 @@ function XTermContainerComponent({
       try { await document.fonts.ready; } catch { /* older browsers */ }
       if (cancelled) return;
 
+      const waitForVisibleLayout = async () => {
+        while (!cancelled && (!isVisibleRef.current || !canMeasureHost(host))) {
+          await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        }
+      };
+
       const waitForStableLayout = async () => {
         let prevW = host.clientWidth;
         let prevH = host.clientHeight;
@@ -479,6 +501,9 @@ function XTermContainerComponent({
           }
         }
       };
+
+      await waitForVisibleLayout();
+      if (cancelled) return;
 
       await waitForStableLayout();
       if (cancelled) return;
@@ -555,6 +580,34 @@ function XTermContainerComponent({
     }
   }, [isDark]);
 
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const host = containerRef.current;
+    const terminal = terminalRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!host || !terminal || !fitAddon) return;
+
+    const frame = requestAnimationFrame(() => {
+      if (!canMeasureHost(host)) return;
+      try {
+        fitAddon.fit();
+      } catch {
+        return;
+      }
+
+      if (sessionActiveRef.current) {
+        const { cols, rows } = dims(terminal);
+        void invoke("resize_terminal", { tileId, cols, rows });
+      }
+
+      terminal.refresh(0, Math.max(terminal.rows - 1, 0));
+      terminal.focus();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [isVisible, tileId]);
+
   return (
     <div className="relative h-full w-full min-h-0 min-w-0 overflow-hidden">
       {searchVisible && (
@@ -617,6 +670,7 @@ export const XTermContainer = memo(
     prev.command === next.command &&
     prev.closeOnUnmount === next.closeOnUnmount &&
     prev.cwd === next.cwd &&
+    prev.isVisible === next.isVisible &&
     arrayEq(prev.args, next.args) &&
     recordEq(prev.env, next.env),
 );

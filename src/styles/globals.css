@@ -209,6 +209,41 @@ html[data-platform="macos"] #root {
     0 1px 0 oklch(1 0 0 / 0.04) inset;
 }
 
+.sb-resizable-handle {
+  transition: background-color 120ms ease;
+}
+
+.sb-resizable-handle::before {
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+}
+
+.dark .sb-resizable-handle[aria-orientation="vertical"] {
+  background: oklch(1 0 0 / 0.03);
+}
+
+.dark .sb-resizable-handle[aria-orientation="horizontal"] {
+  background: oklch(1 0 0 / 0.025);
+}
+
+.dark .sb-resizable-handle::before {
+  background: oklch(0.88 0.003 48.717 / 0.32);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.02);
+}
+
+.dark .sb-resizable-handle:hover,
+.dark .sb-resizable-handle:focus-visible {
+  background: oklch(1 0 0 / 0.05);
+}
+
+.dark .sb-resizable-handle:hover::before,
+.dark .sb-resizable-handle:focus-visible::before {
+  background: oklch(0.92 0.003 48.717 / 0.52);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.06);
+}
+
 /* ── Fullscreen overrides ── */
 html[data-fullscreen="true"] .sb-window-shell {
   border-radius: 0;

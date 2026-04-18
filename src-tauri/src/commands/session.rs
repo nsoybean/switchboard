@@ -425,6 +425,30 @@ pub fn load_canvas_state(project_path: String) -> Result<Option<String>, String>
     }
 }
 
+/// Save workspace layout JSON to ~/.switchboard/workspace_layout.json
+#[tauri::command]
+pub fn save_workspace_layout(layout: String) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let dir = home.join(".switchboard");
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+    let path = dir.join("workspace_layout.json");
+    fs::write(&path, layout).map_err(|e| format!("Write failed: {}", e))
+}
+
+/// Load workspace layout JSON from ~/.switchboard/workspace_layout.json
+#[tauri::command]
+pub fn load_workspace_layout() -> Result<Option<String>, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let path = home.join(".switchboard").join("workspace_layout.json");
+    if path.exists() {
+        fs::read_to_string(&path)
+            .map(Some)
+            .map_err(|e| format!("Read failed: {}", e))
+    } else {
+        Ok(None)
+    }
+}
+
 // -- Notification preferences (commented out — re-enable with dock bounce feature) --
 
 // #[tauri::command]

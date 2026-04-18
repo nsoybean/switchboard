@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { Titlebar } from "./Titlebar";
 import { PaneWorkspace } from "./PaneWorkspace";
@@ -26,6 +27,7 @@ import {
   gitCommands,
   hookCommands,
   projectCommands,
+  quitCommands,
   worktreeCommands,
 } from "../../lib/tauri-commands";
 import { toast } from "sonner";
@@ -40,6 +42,8 @@ import type {
   SessionWorkspaceKind,
 } from "../../state/types";
 import { CanvasView, type CanvasViewHandle } from "../canvas/CanvasView";
+import { CommandPalette } from "../palette/CommandPalette";
+import { QuitConfirmDialog } from "./QuitConfirmDialog";
 
 const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 520;
@@ -157,6 +161,10 @@ export function AppLayout() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [workspaceShellMode, setWorkspaceShellMode] = useState<"pane" | "canvas">("pane");
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
+  const [openTabSessionIds, setOpenTabSessionIds] = useState<string[]>([]);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [quitDialogOpen, setQuitDialogOpen] = useState(false);
+  const pendingQuitRef = useRef<(() => void) | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [inspectorWidth, setInspectorWidth] = useState(320);
@@ -175,10 +183,7 @@ export function AppLayout() {
   } = useAppUpdater();
 
   const sessions = Object.values(state.sessions);
-  const projectSessions = sessions.filter((session) =>
-    sessionBelongsToProject(session, state.projectPath),
-  );
-  const liveSessions = projectSessions.filter(
+  const liveSessions = sessions.filter(
     (session) =>
       session.status === "running" ||
       session.status === "idle" ||
@@ -197,23 +202,12 @@ export function AppLayout() {
   const activeSessionCandidate = state.activeSessionId
     ? state.sessions[state.activeSessionId]
     : null;
-  const activeSession =
-    activeSessionCandidate &&
-    sessionBelongsToProject(activeSessionCandidate, state.projectPath)
-      ? activeSessionCandidate
-      : null;
-  const viewingSessionInProject =
-    viewingSession &&
-    sessionBelongsToProject(viewingSession, state.projectPath)
-      ? viewingSession
-      : null;
-  const resolvedViewingSession = viewingSessionInProject
-    ? (state.sessions[viewingSessionInProject.id] ?? viewingSessionInProject)
+  const activeSession = activeSessionCandidate ?? null;
+  const resolvedViewingSession = viewingSession
+    ? (state.sessions[viewingSession.id] ?? viewingSession)
     : null;
-  const selectedSession = viewingSessionInProject
-    ? resolvedViewingSession
-    : activeSession;
-  const selectedSessionId = viewingSessionInProject?.id ?? activeSession?.id ?? null;
+  const selectedSession = viewingSession ? resolvedViewingSession : activeSession;
+  const selectedSessionId = viewingSession?.id ?? activeSession?.id ?? null;
   const projectLabel = state.projectPath
     ? (state.projectPath.split("/").pop() ?? "Project")
     : "Project";
@@ -269,27 +263,6 @@ export function AppLayout() {
     workspaceCandidate,
   );
 
-  useEffect(() => {
-    if (viewingSession && !sessionBelongsToProject(viewingSession, state.projectPath)) {
-      setViewingSession(null);
-    }
-  }, [state.projectPath, viewingSession]);
-
-  useEffect(() => {
-    if (
-      state.activeSessionId &&
-      activeSessionCandidate &&
-      !sessionBelongsToProject(activeSessionCandidate, state.projectPath)
-    ) {
-      dispatch({ type: "SET_ACTIVE", id: liveSessions[0]?.id ?? null });
-    }
-  }, [
-    activeSessionCandidate,
-    dispatch,
-    liveSessions,
-    state.activeSessionId,
-    state.projectPath,
-  ]);
 
   // Clear active session when it is no longer live (stopped/done/error)
   // so the sidebar highlight and inspector panel disappear.
@@ -316,6 +289,31 @@ export function AppLayout() {
     },
     [],
   );
+
+  // Intercept window close to show quit confirmation if sessions are live
+  useEffect(() => {
+    const appWindow = getCurrentWebviewWindow();
+    let unlisten: (() => void) | null = null;
+    appWindow.onCloseRequested((event) => {
+      const liveIds = Object.values(sessionsRef.current).filter(
+        (s) => s.status === "running" || s.status === "idle" || s.status === "needs-input",
+      );
+      if (liveIds.length === 0) {
+        void quitCommands.quitWithCleanup([]);
+        return;
+      }
+      event.preventDefault();
+      pendingQuitRef.current = () => {
+        void quitCommands.quitWithCleanup(liveIds.map((s) => s.id));
+      };
+      setQuitDialogOpen(true);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   // Write hook config for the current project on startup / project change.
   // Sessions await hookConfigReady before spawning to avoid a race.
@@ -1172,7 +1170,7 @@ export function AppLayout() {
           return;
         }
 
-        if (viewingSessionInProject) {
+        if (viewingSession) {
           setViewingSession(null);
           return;
         }
@@ -1193,11 +1191,16 @@ export function AppLayout() {
         setWorkspaceTab("files");
       },
       onOpenHistory: () => setHistoryOpen(true),
+      onCommandPalette: () => setCommandPaletteOpen(true),
       onFocusTerminal: () => {
         const termEl = document.querySelector(".xterm-helper-textarea");
         if (termEl instanceof HTMLElement) termEl.focus();
       },
       onEscape: () => {
+        if (commandPaletteOpen) {
+          setCommandPaletteOpen(false);
+          return true;
+        }
         if (canvasViewRef.current) {
           canvasViewRef.current.unfocusTile();
           return true;
@@ -1207,11 +1210,12 @@ export function AppLayout() {
     }),
     [
       activeSession,
+      commandPaletteOpen,
       dispatch,
       handleStopSession,
       sortedSessionIds,
       state.activeSessionId,
-      viewingSessionInProject,
+      viewingSession,
     ],
   );
   useKeyboardShortcuts(shortcutHandlers);
@@ -1283,6 +1287,7 @@ export function AppLayout() {
       selectedSessionId={selectedSessionId}
       historyOpen={historyOpen}
       onHistoryOpenChange={setHistoryOpen}
+      openTabSessionIds={openTabSessionIds}
     />
   );
 
@@ -1400,7 +1405,9 @@ export function AppLayout() {
                   }
                   onCloseSession={(sessionId) => void handleStopSession(sessionId)}
                   onCloseTranscript={() => setViewingSession(null)}
-                  onCloseFile={() => setOpenFilePath(null)}
+                  onCloseFile={(filePath) =>
+                    setOpenFilePath((current) => (current === filePath ? null : current))
+                  }
                   onResumeTranscript={
                     resolvedViewingSession
                       ? () => {
@@ -1411,6 +1418,7 @@ export function AppLayout() {
                   }
                   onSessionStart={handleSessionStart}
                   onSessionExit={handleSessionExit}
+                  onOpenTabIdsChange={setOpenTabSessionIds}
                 />
               ) : (
                 welcomeShell
@@ -1547,6 +1555,35 @@ export function AppLayout() {
           githubToken={state.githubToken}
         />
       )}
+
+      {/* Quit confirmation dialog */}
+      <QuitConfirmDialog
+        open={quitDialogOpen}
+        liveSessions={liveSessions}
+        onConfirm={() => {
+          setQuitDialogOpen(false);
+          pendingQuitRef.current?.();
+          pendingQuitRef.current = null;
+        }}
+        onCancel={() => {
+          setQuitDialogOpen(false);
+          pendingQuitRef.current = null;
+        }}
+      />
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onSelectSession={(session) => {
+          dispatch({ type: "SET_ACTIVE", id: session.id });
+          setViewingSession(null);
+        }}
+        onNewSessionInProject={(projectPath) => {
+          dispatch({ type: "SET_PROJECT_PATH", path: projectPath });
+          setDialogOpen(true);
+        }}
+      />
 
       {/* Project Picker Dialog */}
       <ProjectPickerDialog
