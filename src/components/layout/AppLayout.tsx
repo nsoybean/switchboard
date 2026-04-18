@@ -1405,7 +1405,9 @@ export function AppLayout() {
                   }
                   onCloseSession={(sessionId) => void handleStopSession(sessionId)}
                   onCloseTranscript={() => setViewingSession(null)}
-                  onCloseFile={() => setOpenFilePath(null)}
+                  onCloseFile={(filePath) =>
+                    setOpenFilePath((current) => (current === filePath ? null : current))
+                  }
                   onResumeTranscript={
                     resolvedViewingSession
                       ? () => {

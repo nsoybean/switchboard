@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from "react";
 import {
   Eye,
   FileText,
@@ -40,9 +40,11 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { workspaceLayoutCommands } from "@/lib/tauri-commands";
+import { getSwitchboardFileDragPath } from "@/lib/file-dnd";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/state/types";
 import {
+  appendTabsToLeaf,
   type PaneLayoutState,
   type PaneLeafNode,
   type PaneNode,
@@ -51,6 +53,7 @@ import {
   countLeaves,
   ensureActiveTabs,
   findLeaf,
+  findLeafContainingTab,
   getFirstLeaf,
   moveTabBetweenLeaves,
   paneLayoutEqual,
@@ -75,7 +78,7 @@ interface PaneWorkspaceProps {
   onSelectLiveSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
-  onCloseFile: () => void;
+  onCloseFile: (filePath: string) => void;
   onResumeTranscript?: () => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
@@ -114,6 +117,28 @@ interface TabDragData {
   type: "tab";
   tabId: string;
   fromLeafId: string;
+}
+
+function tabIdForFilePath(filePath: string) {
+  return `file:${filePath}`;
+}
+
+function filePathFromTabId(tabId: string): string | null {
+  return tabId.startsWith("file:") ? tabId.slice(5) : null;
+}
+
+function resolveDropZoneFromPoint(
+  event: Pick<ReactDragEvent<HTMLElement>, "clientX" | "clientY" | "currentTarget">,
+): DropZone {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width;
+  const y = (event.clientY - rect.top) / rect.height;
+
+  if (y < 0.25) return "top";
+  if (y > 0.75) return "bottom";
+  if (x < 0.25) return "left";
+  if (x > 0.75) return "right";
+  return "center";
 }
 
 function parseDropId(id: string): { leafId: string; zone: DropZone } | null {
@@ -157,74 +182,89 @@ function PaneSurfaceBadge({ surface }: { surface: PaneSurface }) {
 }
 
 /** Drop overlay shown during drag over a pane — 5 zones: center + 4 edges */
-function PaneDropOverlay({ leafId }: { leafId: string }) {
+function PaneDropOverlay({
+  leafId,
+  forcedZone = null,
+  interactive = true,
+}: {
+  leafId: string;
+  forcedZone?: DropZone | null;
+  interactive?: boolean;
+}) {
   const { setNodeRef: centerRef, isOver: centerOver } = useDroppable({ id: makeDropId(leafId, "center") });
   const { setNodeRef: topRef, isOver: topOver } = useDroppable({ id: makeDropId(leafId, "top") });
   const { setNodeRef: rightRef, isOver: rightOver } = useDroppable({ id: makeDropId(leafId, "right") });
   const { setNodeRef: bottomRef, isOver: bottomOver } = useDroppable({ id: makeDropId(leafId, "bottom") });
   const { setNodeRef: leftRef, isOver: leftOver } = useDroppable({ id: makeDropId(leafId, "left") });
 
+  const topActive = topOver || forcedZone === "top";
+  const rightActive = rightOver || forcedZone === "right";
+  const bottomActive = bottomOver || forcedZone === "bottom";
+  const leftActive = leftOver || forcedZone === "left";
+  const centerActive = centerOver || forcedZone === "center";
+  const hitZoneClass = interactive ? "pointer-events-auto" : "pointer-events-none";
+
   return (
     <div className="pointer-events-none absolute inset-0 z-20">
       {/* Drop hit zones — keep these generous, but render a larger preview */}
       <div
         ref={topRef}
-        className="pointer-events-auto absolute inset-x-0 top-0 h-1/4"
+        className={cn(hitZoneClass, "absolute inset-x-0 top-0 h-1/4")}
       />
       <div
         ref={rightRef}
-        className="pointer-events-auto absolute inset-y-0 right-0 w-1/4"
+        className={cn(hitZoneClass, "absolute inset-y-0 right-0 w-1/4")}
       />
       <div
         ref={bottomRef}
-        className="pointer-events-auto absolute inset-x-0 bottom-0 h-1/4"
+        className={cn(hitZoneClass, "absolute inset-x-0 bottom-0 h-1/4")}
       />
       <div
         ref={leftRef}
-        className="pointer-events-auto absolute inset-y-0 left-0 w-1/4"
+        className={cn(hitZoneClass, "absolute inset-y-0 left-0 w-1/4")}
       />
       <div
         ref={centerRef}
-        className="pointer-events-auto absolute inset-x-1/4 inset-y-1/4"
+        className={cn(hitZoneClass, "absolute inset-x-1/4 inset-y-1/4")}
       />
       {/* Visual previews */}
-      {topOver && (
+      {topActive && (
         <div className="absolute inset-x-0 top-0 h-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
       )}
-      {rightOver && (
+      {rightActive && (
         <div className="absolute inset-y-0 right-0 w-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
       )}
-      {bottomOver && (
+      {bottomActive && (
         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
       )}
-      {leftOver && (
+      {leftActive && (
         <div className="absolute inset-y-0 left-0 w-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
       )}
-      {centerOver && (
+      {centerActive && (
         <div className="absolute inset-x-1/4 inset-y-1/4 bg-primary/15 ring-1 ring-inset ring-primary/30" />
       )}
       {/* Direction arrows when hovering an edge */}
-      {topOver && (
+      {topActive && (
         <div className="pointer-events-none absolute inset-x-0 top-[12.5%] flex -translate-y-1/2 justify-center">
           <ArrowLineUp className="size-5 text-primary drop-shadow" />
         </div>
       )}
-      {rightOver && (
+      {rightActive && (
         <div className="pointer-events-none absolute inset-y-0 right-[12.5%] flex translate-x-1/2 items-center">
           <ArrowLineRight className="size-5 text-primary drop-shadow" />
         </div>
       )}
-      {bottomOver && (
+      {bottomActive && (
         <div className="pointer-events-none absolute inset-x-0 bottom-[12.5%] flex translate-y-1/2 justify-center">
           <ArrowLineDown className="size-5 text-primary drop-shadow" />
         </div>
       )}
-      {leftOver && (
+      {leftActive && (
         <div className="pointer-events-none absolute inset-y-0 left-[12.5%] flex -translate-x-1/2 items-center">
           <ArrowLineLeft className="size-5 text-primary drop-shadow" />
         </div>
       )}
-      {centerOver && (
+      {centerActive && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="rounded-md bg-primary/80 px-2 py-1 text-[11px] font-medium text-primary-foreground">
             Add tab
@@ -339,6 +379,7 @@ function PaneLeafView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onExternalFileDrop,
   onResumeTranscript,
   onSelectLiveSession,
   onSessionStart,
@@ -354,12 +395,14 @@ function PaneLeafView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
 }) {
   const [isDragActive, setIsDragActive] = useState(false);
+  const [externalDropZone, setExternalDropZone] = useState<DropZone | null>(null);
 
   useDndMonitor({
     onDragStart: () => setIsDragActive(true),
@@ -376,6 +419,44 @@ function PaneLeafView({
     activeSurface?.kind === "transcript" &&
     activeSurface.session.agent !== "bash" &&
     Boolean(onResumeTranscript);
+
+  const handleBodyDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    if (!filePath) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    setExternalDropZone(resolveDropZoneFromPoint(event));
+  }, []);
+
+  const handleBodyDrop = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    if (!filePath) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const zone = resolveDropZoneFromPoint(event);
+    setExternalDropZone(null);
+    onExternalFileDrop(leaf.id, zone, filePath);
+  }, [leaf.id, onExternalFileDrop]);
+
+  const handleBodyDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    if (!filePath) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const outside =
+      event.clientX < rect.left ||
+      event.clientX > rect.right ||
+      event.clientY < rect.top ||
+      event.clientY > rect.bottom;
+
+    if (outside) {
+      setExternalDropZone(null);
+    }
+  }, []);
 
   return (
     <div
@@ -475,9 +556,20 @@ function PaneLeafView({
         <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden bg-background"
+        onDragOver={handleBodyDragOver}
+        onDrop={handleBodyDrop}
+        onDragLeave={handleBodyDragLeave}
+      >
         {/* Drop overlay — shown during drag only over the pane body, not the tab strip */}
-        {isDragActive && <PaneDropOverlay leafId={leaf.id} />}
+        {(isDragActive || externalDropZone !== null) && (
+          <PaneDropOverlay
+            leafId={leaf.id}
+            forcedZone={externalDropZone}
+            interactive={isDragActive}
+          />
+        )}
         {leaf.tabIds.map((tabId) => {
           const surface = surfacesById.get(tabId);
           if (!surface) return null;
@@ -536,6 +628,7 @@ function PaneTreeView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onExternalFileDrop,
   onResumeTranscript,
   onSelectLiveSession,
   onSessionStart,
@@ -554,6 +647,7 @@ function PaneTreeView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
   onSessionStart: (sessionId: string) => void;
@@ -573,6 +667,7 @@ function PaneTreeView({
         onCloseSession={onCloseSession}
         onCloseTranscript={onCloseTranscript}
         onCloseFile={onCloseFile}
+        onExternalFileDrop={onExternalFileDrop}
         onResumeTranscript={onResumeTranscript}
         onSelectLiveSession={onSelectLiveSession}
         onSessionStart={onSessionStart}
@@ -603,6 +698,7 @@ function PaneTreeView({
               onCloseSession={onCloseSession}
               onCloseTranscript={onCloseTranscript}
               onCloseFile={onCloseFile}
+              onExternalFileDrop={onExternalFileDrop}
               onResumeTranscript={onResumeTranscript}
               onSelectLiveSession={onSelectLiveSession}
               onSessionStart={onSessionStart}
@@ -635,6 +731,7 @@ export function PaneWorkspace({
   onSessionExit,
   onOpenTabIdsChange,
 }: PaneWorkspaceProps) {
+  const [fileSurfacePaths, setFileSurfacePaths] = useState<string[]>([]);
   const surfaces = useMemo<PaneSurface[]>(() => {
     const nextSurfaces: PaneSurface[] = liveSessions.map((session) => ({
       id: `live:${session.id}`,
@@ -654,19 +751,19 @@ export function PaneWorkspace({
       });
     }
 
-    if (openFilePath) {
-      const fileName = openFilePath.split("/").pop() ?? openFilePath;
+    for (const filePath of fileSurfacePaths) {
+      const fileName = filePath.split("/").pop() ?? filePath;
       nextSurfaces.push({
-        id: `file:${openFilePath}`,
+        id: tabIdForFilePath(filePath),
         kind: "file",
-        filePath: openFilePath,
+        filePath,
         title: fileName,
         closable: true,
       });
     }
 
     return nextSurfaces;
-  }, [liveSessions, transcriptSession, openFilePath]);
+  }, [fileSurfacePaths, liveSessions, transcriptSession]);
 
   const surfacesById = useMemo(
     () => new Map(surfaces.map((surface) => [surface.id, surface])),
@@ -686,6 +783,28 @@ export function PaneWorkspace({
 
   const pendingSaveRef = useRef<{ layout: PaneLayoutState; sizesByGroupId: Record<string, Record<string, number>> } | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!openFilePath) return;
+    setFileSurfacePaths((current) =>
+      current.includes(openFilePath) ? current : [...current, openFilePath],
+    );
+  }, [openFilePath]);
+
+  useEffect(() => {
+    if (!projectPath) {
+      setFileSurfacePaths([]);
+      return;
+    }
+
+    setFileSurfacePaths((current) =>
+      current.filter((path) => path === projectPath || path.startsWith(`${projectPath}/`)),
+    );
+
+    if (openFilePath && openFilePath !== projectPath && !openFilePath.startsWith(`${projectPath}/`)) {
+      onCloseFile(openFilePath);
+    }
+  }, [onCloseFile, openFilePath, projectPath]);
 
   const flushSave = useCallback(() => {
     if (!pendingSaveRef.current) return;
@@ -819,6 +938,71 @@ export function PaneWorkspace({
     });
   };
 
+  const handleCloseFileSurface = useCallback((surfaceId: string) => {
+    const filePath = filePathFromTabId(surfaceId);
+    if (!filePath) return;
+
+    setFileSurfacePaths((current) => current.filter((path) => path !== filePath));
+
+    if (openFilePath === filePath) {
+      onCloseFile(filePath);
+    }
+  }, [onCloseFile, openFilePath]);
+
+  const handleExternalFileDrop = useCallback((leafId: string, zone: DropZone, filePath: string) => {
+    const tabId = tabIdForFilePath(filePath);
+
+    setFileSurfacePaths((current) =>
+      current.includes(filePath) ? current : [...current, filePath],
+    );
+
+    setLayout((current) => {
+      if (!current.root) return current;
+
+      let nextRoot = current.root;
+      let nextActivePaneId = current.activePaneId;
+      const sourceLeaf = findLeafContainingTab(nextRoot, tabId);
+      const directionMap: Record<Exclude<DropZone, "center">, SplitDirection> = {
+        top: "up",
+        right: "right",
+        bottom: "down",
+        left: "left",
+      };
+
+      if (zone === "center") {
+        if (sourceLeaf) {
+          nextRoot =
+            sourceLeaf.id === leafId
+              ? setLeafActiveTab(nextRoot, leafId, tabId)
+              : moveTabBetweenLeaves(nextRoot, sourceLeaf.id, tabId, leafId);
+        } else {
+          nextRoot = appendTabsToLeaf(nextRoot, leafId, [tabId], tabId);
+        }
+        nextRoot = ensureActiveTabs(nextRoot);
+        nextActivePaneId = leafId;
+      } else if (sourceLeaf?.id === leafId) {
+        const leaf = findLeaf(nextRoot, leafId);
+        if (!leaf || leaf.tabIds.length < 2) return current;
+        const result = splitLeaf(nextRoot, leafId, directionMap[zone], tabId);
+        nextRoot = ensureActiveTabs(result.root);
+        nextActivePaneId = result.activePaneId ?? current.activePaneId;
+      } else {
+        const result = splitLeafWithExternalTab(
+          nextRoot,
+          leafId,
+          directionMap[zone],
+          tabId,
+          sourceLeaf?.id ?? null,
+        );
+        nextRoot = ensureActiveTabs(result.root);
+        nextActivePaneId = result.activePaneId ?? current.activePaneId;
+      }
+
+      const next = { root: nextRoot, activePaneId: nextActivePaneId };
+      return paneLayoutEqual(current, next) ? current : next;
+    });
+  }, []);
+
   const paneCount = countLeaves(layout.root);
 
   if (surfaces.length === 0 || !layout.root) {
@@ -874,7 +1058,8 @@ export function PaneWorkspace({
           }}
           onCloseSession={onCloseSession}
           onCloseTranscript={onCloseTranscript}
-          onCloseFile={onCloseFile}
+          onCloseFile={handleCloseFileSurface}
+          onExternalFileDrop={handleExternalFileDrop}
           onResumeTranscript={onResumeTranscript}
           onSelectLiveSession={onSelectLiveSession}
           onSessionStart={onSessionStart}
