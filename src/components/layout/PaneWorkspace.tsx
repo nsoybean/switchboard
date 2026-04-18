@@ -504,6 +504,7 @@ function PaneLeafView({
                   args={surface.session.args}
                   cwd={surface.session.cwd}
                   env={surface.session.env}
+                  isVisible={isActive}
                   onStart={() => onSessionStart(surface.session.id)}
                   onExit={onSessionExit(surface.session.id)}
                   closeOnUnmount={false}
