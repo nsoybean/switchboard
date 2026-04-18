@@ -382,9 +382,6 @@ function PaneLeafView({
       className="relative flex h-full min-h-0 min-w-0 flex-col"
       onMouseDown={() => onFocusPane(leaf.id)}
     >
-      {/* Drop overlay — shown during any drag */}
-      {isDragActive && <PaneDropOverlay leafId={leaf.id} />}
-
       {/* Tab bar */}
       <div className="relative shrink-0 bg-muted/50">
         <div className="flex items-center">
@@ -478,7 +475,9 @@ function PaneLeafView({
         <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-background">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
+        {/* Drop overlay — shown during drag only over the pane body, not the tab strip */}
+        {isDragActive && <PaneDropOverlay leafId={leaf.id} />}
         {leaf.tabIds.map((tabId) => {
           const surface = surfacesById.get(tabId);
           if (!surface) return null;
