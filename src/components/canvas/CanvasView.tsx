@@ -10,9 +10,10 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Rnd } from "react-rnd";
-import { Circle, Square } from "lucide-react";
+import { Square } from "lucide-react";
 import { AgentIcon } from "../agents/AgentIcon";
 import { XTermContainer } from "../terminal/XTermContainer";
+import { StatusDot } from "../ui/status-dot";
 import type { Session } from "../../state/types";
 import {
   type CanvasState,
@@ -111,21 +112,6 @@ function createTileForSession(
   };
 }
 
-function statusTone(status: Session["status"]) {
-  switch (status) {
-    case "running":
-      return "var(--sb-status-running)";
-    case "needs-input":
-      return "var(--sb-status-warning)";
-    case "done":
-      return "var(--sb-status-done)";
-    case "error":
-      return "var(--sb-status-error)";
-    default:
-      return "var(--muted-foreground)";
-  }
-}
-
 interface SessionTileProps {
   session: Session;
   tile: CanvasTile;
@@ -206,15 +192,9 @@ function SessionTileComponent({
             <span className="sb-canvas-tile__title" title={session.label}>
               {session.label}
             </span>
+            <StatusDot status={session.status} />
           </div>
           <div className="sb-canvas-tile__meta">
-            <span className="sb-canvas-tile__status">
-              <Circle
-                className="size-2 fill-current"
-                style={{ color: statusTone(session.status) }}
-              />
-              {session.status}
-            </span>
             <button
               type="button"
               className="sb-canvas-tile__stop"

@@ -48,10 +48,10 @@
   min-height: 38px;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   border-bottom: 1px solid rgba(71, 78, 86, 0.1);
   background: var(--card);
-  padding: 0 10px 0 12px;
+  padding: 0 10px 0 8px;
   cursor: grab;
   user-select: none;
 }
@@ -65,12 +65,11 @@
 }
 
 .sb-canvas-tile__identity,
-.sb-canvas-tile__meta,
-.sb-canvas-tile__status {
+.sb-canvas-tile__meta {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .sb-canvas-tile__title {
@@ -82,33 +81,27 @@
   color: var(--foreground);
 }
 
-.sb-canvas-tile__status {
-  color: var(--muted-foreground);
-  font-size: 11px;
-  text-transform: capitalize;
-}
-
 .sb-canvas-tile__stop {
   display: inline-flex;
-  height: 24px;
-  width: 24px;
+  height: 16px;
+  width: 16px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(71, 78, 86, 0.1);
-  border-radius: 8px;
+  border-radius: 2px;
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
+  opacity: 0.75;
   transition:
     background 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
+    color 140ms ease,
+    opacity 140ms ease;
 }
 
 .sb-canvas-tile__stop:hover {
-  border-color: rgba(71, 78, 86, 0.18);
-  background: rgba(71, 78, 86, 0.08);
+  background: var(--accent);
   color: var(--foreground);
+  opacity: 1;
 }
 
 .sb-canvas-tile__terminal {
