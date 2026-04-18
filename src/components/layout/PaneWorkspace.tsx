@@ -3,6 +3,7 @@ import {
   Eye,
   FileText,
   GripVertical,
+  Plus,
   Play,
   X,
 } from "lucide-react";
@@ -181,6 +182,30 @@ function PaneSurfaceBadge({ surface }: { surface: PaneSurface }) {
   );
 }
 
+function DropHint({
+  icon,
+  label,
+  className,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-lg shadow-black/10 backdrop-blur-sm",
+        className,
+      )}
+    >
+      <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/12 text-primary">
+        {icon}
+      </span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 /** Drop overlay shown during drag over a pane — 5 zones: center + 4 edges */
 function PaneDropOverlay({
   leafId,
@@ -229,46 +254,47 @@ function PaneDropOverlay({
       />
       {/* Visual previews */}
       {topActive && (
-        <div className="absolute inset-x-0 top-0 h-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+        <div className="absolute inset-x-0 top-0 h-1/2 rounded-[14px] bg-primary/10 ring-1 ring-inset ring-primary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
       )}
       {rightActive && (
-        <div className="absolute inset-y-0 right-0 w-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+        <div className="absolute inset-y-0 right-0 w-1/2 rounded-[14px] bg-primary/10 ring-1 ring-inset ring-primary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
       )}
       {bottomActive && (
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+        <div className="absolute inset-x-0 bottom-0 h-1/2 rounded-[14px] bg-primary/10 ring-1 ring-inset ring-primary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
       )}
       {leftActive && (
-        <div className="absolute inset-y-0 left-0 w-1/2 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+        <div className="absolute inset-y-0 left-0 w-1/2 rounded-[14px] bg-primary/10 ring-1 ring-inset ring-primary/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
       )}
       {centerActive && (
-        <div className="absolute inset-x-1/4 inset-y-1/4 bg-primary/15 ring-1 ring-inset ring-primary/30" />
+        <div className="absolute inset-x-1/4 inset-y-1/4 rounded-[14px] bg-primary/12 ring-1 ring-inset ring-primary/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
       )}
-      {/* Direction arrows when hovering an edge */}
+      {/* Direction hints centered within the resulting preview area */}
       {topActive && (
-        <div className="pointer-events-none absolute inset-x-0 top-[12.5%] flex -translate-y-1/2 justify-center">
-          <ArrowLineUp className="size-5 text-primary drop-shadow" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex h-1/2 items-center justify-center">
+          <DropHint icon={<ArrowLineUp className="size-3.5" weight="bold" />} label="Split up" />
         </div>
       )}
       {rightActive && (
-        <div className="pointer-events-none absolute inset-y-0 right-[12.5%] flex translate-x-1/2 items-center">
-          <ArrowLineRight className="size-5 text-primary drop-shadow" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex w-1/2 items-center justify-center">
+          <DropHint icon={<ArrowLineRight className="size-3.5" weight="bold" />} label="Split right" />
         </div>
       )}
       {bottomActive && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[12.5%] flex translate-y-1/2 justify-center">
-          <ArrowLineDown className="size-5 text-primary drop-shadow" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-1/2 items-center justify-center">
+          <DropHint icon={<ArrowLineDown className="size-3.5" weight="bold" />} label="Split down" />
         </div>
       )}
       {leftActive && (
-        <div className="pointer-events-none absolute inset-y-0 left-[12.5%] flex -translate-x-1/2 items-center">
-          <ArrowLineLeft className="size-5 text-primary drop-shadow" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex w-1/2 items-center justify-center">
+          <DropHint icon={<ArrowLineLeft className="size-3.5" weight="bold" />} label="Split left" />
         </div>
       )}
       {centerActive && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="rounded-md bg-primary/80 px-2 py-1 text-[11px] font-medium text-primary-foreground">
-            Add tab
-          </span>
+          <DropHint
+            icon={<Plus className="size-3.5" strokeWidth={2.2} />}
+            label="Add as tab"
+          />
         </div>
       )}
     </div>
