@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, Files, GitFork, X } from "lucide-react";
+import { ChevronDown, CornerDownLeft, GitFork, X } from "lucide-react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agents/AgentIcon";
+import { GitBranchSummary } from "@/components/git/GitBranchSummary";
 import { BranchPicker } from "@/components/git/BranchPicker";
 import { CreateBranchDialog } from "@/components/git/CreateBranchDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,7 +18,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getBranchPrefix } from "@/lib/branches";
-import { fileCommands, gitCommands, type GitBranchInfo } from "@/lib/tauri-commands";
+import { useGitState } from "@/hooks/useGitState";
+import { fileCommands, gitCommands } from "@/lib/tauri-commands";
 import type { AgentType } from "@/state/types";
 
 const AGENTS: { id: AgentType; name: string }[] = [
@@ -52,8 +54,6 @@ interface InlineBranchContext {
   ahead: number;
   behind: number;
   dirtyCount: number;
-  lastCommitSubject: string | null;
-  lastCommitDate: string | null;
 }
 
 function extensionFromMime(mime: string): string {
@@ -68,16 +68,15 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   const [agent, setAgent] = useState<AgentType>("claude-code");
   const [task, setTask] = useState("");
   const [useWorktree, setUseWorktree] = useState(false);
-  const [branches, setBranches] = useState<GitBranchInfo[]>([]);
-  const [branchesLoading, setBranchesLoading] = useState(false);
-  const [branchSwitchPending, setBranchSwitchPending] = useState(false);
   const [baseBranch, setBaseBranch] = useState("");
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
-  const [createBranchPending, setCreateBranchPending] = useState(false);
   const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const [branchContext, setBranchContext] = useState<InlineBranchContext | null>(null);
-  const [branchContextLoading, setBranchContextLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const git = useGitState({
+    cwd: projectPath ?? "",
+    visible: Boolean(projectPath),
+  });
 
 
   const defaultBranchPrefix = getBranchPrefix(agent);
@@ -92,67 +91,26 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load branches on mount
   useEffect(() => {
     if (!projectPath) return;
 
-    let cancelled = false;
-    setBranchesLoading(true);
-
-    gitCommands
-      .listBranches(projectPath)
-      .then((nextBranches) => {
-        if (cancelled) return;
-        setBranches(nextBranches);
-        setBaseBranch((current) => {
-          if (current && nextBranches.some((b) => b.name === current)) return current;
-          return nextBranches.find((b) => b.is_current)?.name ?? nextBranches[0]?.name ?? "";
-        });
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setBranches([]);
-        setBaseBranch("");
-        toast.error("Failed to load branches", { description: String(error) });
-      })
-      .finally(() => {
-        if (!cancelled) setBranchesLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectPath]);
-
-  const refreshBranches = useCallback(
-    async (nextSelected?: string) => {
-      if (!projectPath) return;
-      const nextBranches = await gitCommands.listBranches(projectPath);
-      setBranches(nextBranches);
-      setBaseBranch((current) => {
-        if (nextSelected && nextBranches.some((b) => b.name === nextSelected)) return nextSelected;
-        if (current && nextBranches.some((b) => b.name === current)) return current;
-        return nextBranches.find((b) => b.is_current)?.name ?? nextBranches[0]?.name ?? "";
-      });
-    },
-    [projectPath],
-  );
+    setBaseBranch((current) => {
+      if (current && git.branches.some((branch) => branch.name === current)) {
+        return current;
+      }
+      return git.branch || git.branches.find((branch) => branch.is_current)?.name || git.branches[0]?.name || "";
+    });
+  }, [git.branch, git.branches, projectPath]);
 
   const handleCreateBranch = useCallback(
     async (branchName: string) => {
-      if (!projectPath) return;
       try {
-        setCreateBranchPending(true);
-        await gitCommands.createBranch(projectPath, branchName);
-        await refreshBranches(branchName);
+        await git.createBranch(branchName);
+        setBaseBranch(branchName);
         setCreateBranchOpen(false);
-      } catch (error) {
-        toast.error("Failed to create branch", { description: String(error) });
-      } finally {
-        setCreateBranchPending(false);
-      }
+      } catch {}
     },
-    [projectPath, refreshBranches],
+    [git],
   );
 
   const removeImage = useCallback((index: number) => {
@@ -164,8 +122,8 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   }, []);
 
   const currentBranch = useMemo(
-    () => branches.find((b) => b.is_current)?.name ?? null,
-    [branches],
+    () => git.branch || git.branches.find((branch) => branch.is_current)?.name || null,
+    [git.branch, git.branches],
   );
 
   const handleSubmit = useCallback(() => {
@@ -244,81 +202,80 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   const selectedAgent = AGENTS.find((a) => a.id === agent) ?? AGENTS[0];
   const displayBranch = useWorktree ? baseBranch : (currentBranch ?? baseBranch);
   const disableSubmit =
-    branchSwitchPending || (useWorktree && (branchesLoading || !displayBranch));
-  const showBranchDirtyCount = (branchContext?.dirtyCount ?? 0) > 0;
-  const showBranchAhead = (branchContext?.ahead ?? 0) > 0;
-  const showBranchBehind = (branchContext?.behind ?? 0) > 0;
-  const showBranchMetrics = showBranchDirtyCount || showBranchAhead || showBranchBehind;
+    git.branchActionPending || (useWorktree && (git.branchesLoading || !displayBranch));
 
   const handleBranchSelect = useCallback(
     async (branchName: string) => {
-      if (!projectPath) return;
-
       if (useWorktree) {
         setBaseBranch(branchName);
         return;
       }
 
-      if (branchName === currentBranch || branchSwitchPending) {
+      if (branchName === currentBranch || git.branchActionPending) {
         return;
       }
 
       try {
-        setBranchSwitchPending(true);
-        await gitCommands.checkoutBranch(projectPath, branchName);
-        await refreshBranches(branchName);
-      } catch (error) {
-        toast.error("Failed to switch branch", { description: String(error) });
-      } finally {
-        setBranchSwitchPending(false);
-      }
+        await git.switchBranch(branchName);
+      } catch {}
     },
-    [branchSwitchPending, currentBranch, projectPath, refreshBranches, useWorktree],
+    [currentBranch, git, useWorktree],
   );
 
   useEffect(() => {
-    if (!projectPath || !displayBranch) {
+    if (!projectPath || !displayBranch || !useWorktree) {
       setBranchContext(null);
-      setBranchContextLoading(false);
       return;
     }
 
     let cancelled = false;
-    setBranchContextLoading(true);
-
-    Promise.all([
-      gitCommands.statusSummary(projectPath, displayBranch),
-      gitCommands.log(projectPath, 1, displayBranch).catch(() => []),
-    ])
-      .then(([summary, commits]) => {
+    const loadBranchContext = async () => {
+      try {
+        const summary = await gitCommands.statusSummary(projectPath, displayBranch);
         if (cancelled) return;
-        const lastCommit = commits[0];
         setBranchContext({
           branch: summary.branch,
           ahead: summary.ahead,
           behind: summary.behind,
           dirtyCount: summary.dirty_count,
-          lastCommitSubject: lastCommit?.subject ?? null,
-          lastCommitDate: lastCommit?.date ?? null,
         });
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setBranchContext(null);
-      })
-      .finally(() => {
-        if (!cancelled) setBranchContextLoading(false);
-      });
+      }
+    };
+
+    void loadBranchContext();
+    const intervalId = window.setInterval(() => {
+      void loadBranchContext();
+    }, 5000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, [displayBranch, projectPath]);
+  }, [displayBranch, projectPath, useWorktree]);
+
+  const liveBranchSummary = useMemo(() => ({
+    branch: currentBranch ?? displayBranch ?? "",
+    changedCount: git.files.length,
+    ahead: git.aheadBehind.ahead,
+    behind: git.aheadBehind.behind,
+  }), [currentBranch, displayBranch, git.aheadBehind.ahead, git.aheadBehind.behind, git.files.length]);
+
+  const worktreeBranchSummary = useMemo(() => ({
+    branch: branchContext?.branch ?? displayBranch ?? "",
+    changedCount: branchContext?.dirtyCount ?? 0,
+    ahead: branchContext?.ahead ?? 0,
+    behind: branchContext?.behind ?? 0,
+  }), [branchContext, displayBranch]);
+
+  const activeBranchSummary = useWorktree ? worktreeBranchSummary : liveBranchSummary;
 
   return (
     <div className="flex h-full items-center justify-center bg-background">
       <div className="w-full max-w-xl px-6">
         {/* Badge-style options bar */}
-        <div className="mb-3 flex items-center gap-1.5">
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
           {/* Agent badge */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -390,14 +347,14 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
             <TooltipTrigger asChild>
               <span>
                 <BranchPicker
-                  branches={branches}
-                  loading={branchesLoading}
+                  branches={git.branches}
+                  loading={git.branchesLoading}
                   value={displayBranch}
                   onSelect={(branchName) => {
                     void handleBranchSelect(branchName);
                   }}
                   onCreateBranch={() => setCreateBranchOpen(true)}
-                  disabled={branchSwitchPending}
+                  disabled={git.branchActionPending}
                   triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
                   showCurrentBadge={false}
                   showIcon
@@ -408,46 +365,19 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
               {useWorktree ? "Base branch for the new worktree" : "Current local branch"}
             </TooltipContent>
           </Tooltip>
-        </div>
 
-        {(branchContextLoading || branchContext) && (
-          <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-            <span className="font-mono text-foreground">
-              {branchContext?.branch ?? displayBranch}
-            </span>
-            {branchContextLoading ? (
-              <span>Loading branch context…</span>
-            ) : (
-              <>
-                {branchContext?.lastCommitSubject ? (
-                  <span className="truncate max-w-[320px]">
-                    last commit: &ldquo;{branchContext.lastCommitSubject}&rdquo;
-                    {branchContext.lastCommitDate ? ` (${branchContext.lastCommitDate})` : ""}
-                  </span>
-                ) : null}
-                {showBranchMetrics ? (
-                  <span className="inline-flex items-center gap-1.5 tabular-nums">
-                    {showBranchDirtyCount ? (
-                      <>
-                        <Files className="size-3 shrink-0" />
-                        <span>{branchContext?.dirtyCount ?? 0}</span>
-                      </>
-                    ) : null}
-                    {showBranchDirtyCount && (showBranchAhead || showBranchBehind) ? (
-                      <span aria-hidden="true">·</span>
-                    ) : null}
-                    {showBranchAhead ? (
-                      <span className="text-[var(--sb-diff-add-fg)]">+{branchContext?.ahead ?? 0}</span>
-                    ) : null}
-                    {showBranchBehind ? (
-                      <span className="text-[var(--sb-diff-del-fg)]">-{branchContext?.behind ?? 0}</span>
-                    ) : null}
-                  </span>
-                ) : null}
-              </>
-            )}
-          </div>
-        )}
+          {activeBranchSummary.branch ? (
+            <GitBranchSummary
+              branch={activeBranchSummary.branch}
+              changedCount={activeBranchSummary.changedCount}
+              ahead={activeBranchSummary.ahead}
+              behind={activeBranchSummary.behind}
+              showIcon={false}
+              showBranchLabel={false}
+              className="min-w-0 text-[11px]"
+            />
+          ) : null}
+        </div>
 
         {/* Chat input */}
         <div className="relative rounded-lg border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring">
@@ -513,7 +443,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
         open={createBranchOpen}
         onOpenChange={setCreateBranchOpen}
         defaultBranchPrefix={defaultBranchPrefix}
-        pending={createBranchPending}
+        pending={git.branchActionPending}
         onCreate={handleCreateBranch}
       />
     </div>
