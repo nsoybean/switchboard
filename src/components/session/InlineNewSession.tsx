@@ -296,22 +296,15 @@ export function InlineNewSession({ projectPath, projectPaths, onProjectSelect, o
       <div className="w-full max-w-xl px-6">
         {/* Badge-style options bar */}
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <ProjectPicker
-                  projects={projectPaths}
-                  value={selectedProjectPath}
-                  onSelect={(path) => {
-                    setSelectedProjectPath(path);
-                    void onProjectSelect?.(path);
-                  }}
-                  triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
-                />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Choose the project for this new session</TooltipContent>
-          </Tooltip>
+          <ProjectPicker
+            projects={projectPaths}
+            value={selectedProjectPath}
+            onSelect={(path) => {
+              setSelectedProjectPath(path);
+              void onProjectSelect?.(path);
+            }}
+            triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
+          />
 
           {/* Agent badge */}
           <DropdownMenu>
