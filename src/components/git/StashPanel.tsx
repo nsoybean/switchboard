@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Layers, Plus, Trash2, CornerDownLeft } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -63,47 +64,51 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
   const { stashes, stashesLoading } = git;
 
   return (
-    <div className="border-t">
+    <div className="group/stash border-t">
       {/* Header */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         {expanded ? (
           <ChevronDown className="size-3.5 shrink-0" />
         ) : (
           <ChevronRight className="size-3.5 shrink-0" />
         )}
-        <Layers className="size-3.5 shrink-0" />
+        <Layers className="size-3.5 shrink-0 text-muted-foreground" />
         <span>Stashes</span>
-        {stashes.length > 0 && (
-          <span className="ml-auto tabular-nums text-[11px]">{stashes.length}</span>
-        )}
-        {expanded && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowInput((v) => !v);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+        <span className="ml-auto flex items-center gap-1">
+          {expanded ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
                     e.stopPropagation();
                     setShowInput((v) => !v);
-                  }
-                }}
-                className="ml-1 rounded p-0.5 hover:bg-accent/60"
-              >
-                <Plus className="size-3.5" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Stash current changes</TooltipContent>
-          </Tooltip>
-        )}
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.stopPropagation();
+                      setShowInput((v) => !v);
+                    }
+                  }}
+                  className="flex items-center rounded p-0.5 opacity-0 transition-opacity hover:bg-accent/60 group-hover/stash:opacity-100 group-focus-within/stash:opacity-100"
+                >
+                  <Plus className="size-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Stash current changes</TooltipContent>
+            </Tooltip>
+          ) : null}
+          {stashes.length > 0 ? (
+            <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+              {stashes.length}
+            </Badge>
+          ) : null}
+        </span>
       </button>
 
       {expanded && (
