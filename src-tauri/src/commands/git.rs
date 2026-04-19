@@ -30,6 +30,7 @@ pub struct GitBranchInfo {
     pub name: String,
     pub is_current: bool,
     pub is_remote: bool,
+    pub upstream_status: String,
     pub ahead: Option<u32>,
     pub behind: Option<u32>,
     pub last_commit_subject: Option<String>,
@@ -85,6 +86,7 @@ fn push_branch(
         name: name.to_string(),
         is_current,
         is_remote,
+        upstream_status: "none".to_string(),
         ahead: None,
         behind: None,
         last_commit_subject: None,
@@ -155,24 +157,26 @@ pub fn git_list_branches(cwd: String) -> Result<Vec<GitBranchInfo>, String> {
         &cwd,
         &[
             "for-each-ref",
-            "--format=%(refname:short)\x1f%(HEAD)\x1f%(upstream:track)\x1f%(contents:subject)\x1f%(committerdate:relative)",
+            "--format=%(refname:short)\x1f%(HEAD)\x1f%(upstream)\x1f%(upstream:track)\x1f%(contents:subject)\x1f%(committerdate:relative)",
             "refs/heads",
         ],
     )?;
     for line in local_output.lines() {
-        let parts: Vec<&str> = line.splitn(5, '\x1f').collect();
-        if parts.len() < 5 {
+        let parts: Vec<&str> = line.splitn(6, '\x1f').collect();
+        if parts.len() < 6 {
             continue;
         }
-        let (ahead, behind) = parse_upstream_track(parts[2].trim());
+        let upstream_status = parse_upstream_status(parts[2].trim(), parts[3].trim());
+        let (ahead, behind) = parse_upstream_track(parts[3].trim());
         branches.push(GitBranchInfo {
             name: parts[0].trim().to_string(),
             is_current: parts[1].trim() == "*",
             is_remote: false,
+            upstream_status,
             ahead,
             behind,
-            last_commit_subject: non_empty_string(parts[3]),
-            last_commit_date: non_empty_string(parts[4]),
+            last_commit_subject: non_empty_string(parts[4]),
+            last_commit_date: non_empty_string(parts[5]),
         });
     }
 
@@ -276,6 +280,18 @@ fn parse_upstream_track(track: &str) -> (Option<u32>, Option<u32>) {
     (ahead, behind)
 }
 
+fn parse_upstream_status(upstream: &str, track: &str) -> String {
+    if upstream.trim().is_empty() {
+        return "none".to_string();
+    }
+
+    if track.trim() == "[gone]" {
+        return "gone".to_string();
+    }
+
+    "tracking".to_string()
+}
+
 /// Get unified diff for a directory or specific file
 #[tauri::command]
 pub fn git_diff(cwd: String, file: Option<String>, staged: bool) -> Result<String, String> {
@@ -313,10 +329,36 @@ pub fn git_unstage(cwd: String, files: Vec<String>) -> Result<(), String> {
 /// Revert files (discard changes)
 #[tauri::command]
 pub fn git_revert_files(cwd: String, files: Vec<String>) -> Result<(), String> {
-    let mut args: Vec<&str> = vec!["checkout", "--"];
-    let file_refs: Vec<&str> = files.iter().map(|s| s.as_str()).collect();
-    args.extend(file_refs);
-    run_git(&cwd, &args)?;
+    let mut tracked_files: Vec<&str> = Vec::new();
+    let mut untracked_files: Vec<&str> = Vec::new();
+
+    for file in &files {
+        let path = file.as_str();
+        let tracked = Command::new("git")
+            .args(["ls-files", "--error-unmatch", "--", path])
+            .current_dir(validate_directory(&cwd)?)
+            .output()
+            .map_err(|e| format!("Failed to inspect git path '{}': {}", path, e))?;
+
+        if tracked.status.success() {
+            tracked_files.push(path);
+        } else {
+            untracked_files.push(path);
+        }
+    }
+
+    if !tracked_files.is_empty() {
+        let mut args: Vec<&str> = vec!["restore", "--worktree", "--"];
+        args.extend(tracked_files.iter().copied());
+        run_git(&cwd, &args)?;
+    }
+
+    if !untracked_files.is_empty() {
+        let mut args: Vec<&str> = vec!["clean", "-fd", "--"];
+        args.extend(untracked_files.iter().copied());
+        run_git(&cwd, &args)?;
+    }
+
     Ok(())
 }
 

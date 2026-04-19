@@ -14,6 +14,7 @@ import { toast } from "sonner";
 export interface GitState {
   branch: string;
   branches: GitBranchInfo[];
+  currentBranchUpstreamStatus: "none" | "tracking" | "gone";
   branchesLoading: boolean;
   branchActionPending: boolean;
   files: ChangedFile[];
@@ -69,6 +70,7 @@ export function useGitState({
 }: UseGitStateOptions): GitState & GitActions {
   const [branch, setBranch] = useState("");
   const [branches, setBranches] = useState<GitBranchInfo[]>([]);
+  const [currentBranchUpstreamStatus, setCurrentBranchUpstreamStatus] = useState<"none" | "tracking" | "gone">("none");
   const [files, setFiles] = useState<ChangedFile[]>([]);
   const [stats, setStats] = useState<DiffStats>(emptyStats);
   const [loading, setLoading] = useState(true);
@@ -87,6 +89,7 @@ export function useGitState({
   useEffect(() => {
     setBranch("");
     setBranches([]);
+    setCurrentBranchUpstreamStatus("none");
     setFiles([]);
     setStats(emptyStats);
     setError(null);
@@ -114,12 +117,17 @@ export function useGitState({
       ]);
       setBranch(status.branch);
       setBranches(nextBranches);
+      const currentBranchInfo =
+        nextBranches.find((candidate) => candidate.is_current) ??
+        nextBranches.find((candidate) => candidate.name === status.branch);
+      setCurrentBranchUpstreamStatus(currentBranchInfo?.upstream_status ?? "none");
       branchesLoadedRef.current = nextBranches.length > 0;
       setFiles(status.files);
       setStats(status.stats);
       setAheadBehind(ab);
     } catch (err) {
       setBranches([]);
+      setCurrentBranchUpstreamStatus("none");
       branchesLoadedRef.current = false;
       setError(String(err));
     } finally {
@@ -200,6 +208,10 @@ export function useGitState({
           ]);
           setBranch(status.branch);
           setBranches(nextBranches);
+          const currentBranchInfo =
+            nextBranches.find((candidate) => candidate.is_current) ??
+            nextBranches.find((candidate) => candidate.name === status.branch);
+          setCurrentBranchUpstreamStatus(currentBranchInfo?.upstream_status ?? "none");
           setFiles(status.files);
           setStats(status.stats);
           if (sessionId) {
@@ -240,7 +252,7 @@ export function useGitState({
   }, [cwd, files, refresh]);
 
   const revertAll = useCallback(async () => {
-    const unstaged = files.filter((f) => !f.staged && f.status !== "??").map((f) => f.path);
+    const unstaged = files.filter((f) => !f.staged).map((f) => f.path);
     if (unstaged.length === 0) return;
     await gitCommands.revert(cwd, unstaged);
     void refresh();
@@ -402,6 +414,7 @@ export function useGitState({
   return {
     branch,
     branches,
+    currentBranchUpstreamStatus,
     branchesLoading,
     branchActionPending,
     files,

@@ -1,4 +1,4 @@
-import { Files, FolderTree, GitBranch, RefreshCw } from "lucide-react";
+import { Files, FolderTree, GitBranch, RefreshCw, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FilePanel } from "../files/FilePanel";
@@ -130,6 +130,7 @@ export function WorkspacePanel({
   const showAhead = git.aheadBehind.ahead > 0;
   const showBehind = git.aheadBehind.behind > 0;
   const showStatusMetrics = showDirtyCount || showAhead || showBehind;
+  const showPublishAction = git.currentBranchUpstreamStatus !== "tracking";
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
@@ -166,11 +167,21 @@ export function WorkspacePanel({
               variant="ghost"
               size="sm"
               className="h-6 gap-1.5 px-2 text-[11px]"
-              onClick={() => void git.fetch()}
+              onClick={() => {
+                if (showPublishAction) {
+                  void git.push();
+                  return;
+                }
+                void git.fetch();
+              }}
               disabled={git.branchActionPending}
             >
-              <RefreshCw className="size-3" />
-              Fetch
+              {showPublishAction ? (
+                <Upload className="size-3" />
+              ) : (
+                <RefreshCw className="size-3" />
+              )}
+              {showPublishAction ? "Publish" : "Fetch"}
             </Button>
           </div>
         )}
