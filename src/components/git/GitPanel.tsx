@@ -2,6 +2,9 @@ import { memo, useEffect, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  Files,
+  GitBranch,
+  History,
   Minus,
   Plus,
   Undo2,
@@ -34,39 +37,56 @@ interface GitPanelProps {
 }
 
 interface GitSectionProps {
+  icon: ReactNode;
   title: string;
   count?: number;
   defaultOpen?: boolean;
+  headerActions?: ReactNode;
   children: ReactNode;
 }
 
 function GitSection({
+  icon,
   title,
   count,
   defaultOpen = false,
+  headerActions,
   children,
 }: GitSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="border-b">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
-      >
-        {open ? (
-          <ChevronDown className="size-3.5 shrink-0" />
-        ) : (
-          <ChevronRight className="size-3.5 shrink-0" />
-        )}
-        <span>{title}</span>
-        {typeof count === "number" && count > 0 ? (
-          <Badge variant="secondary" className="ml-auto h-4 px-1 text-[10px]">
-            {count}
-          </Badge>
-        ) : null}
-      </button>
+    <section className="group/section border-b">
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
+        >
+          {open ? (
+            <ChevronDown className="size-3.5 shrink-0" />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0" />
+          )}
+          <span className="shrink-0 text-muted-foreground">{icon}</span>
+          <span>{title}</span>
+          <span className="ml-auto flex items-center gap-1">
+            {headerActions ? (
+              <span
+                className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/section:opacity-100 group-focus-within/section:opacity-100"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {headerActions}
+              </span>
+            ) : null}
+            {typeof count === "number" && count > 0 ? (
+              <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                {count}
+              </Badge>
+            ) : null}
+          </span>
+        </button>
+      </div>
       {open ? <div>{children}</div> : null}
     </section>
   );
@@ -161,6 +181,9 @@ export const GitPanel = memo(function GitPanel({
     : git.files.filter((file) => !file.staged);
   const unstagedCount = git.files.filter((file) => !file.staged).length;
   const stagedCount = git.files.filter((file) => file.staged).length;
+  const revertableCount = git.files.filter(
+    (file) => !file.staged && file.status !== "??",
+  ).length;
   const localBranchCount = git.branches.filter((branch) => !branch.is_remote).length;
   const isNotGitRepo =
     git.error !== null &&
@@ -182,7 +205,52 @@ export const GitPanel = memo(function GitPanel({
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <GitSection title="Changes" count={git.files.length} defaultOpen>
+        <GitSection
+          icon={<Files className="size-3.5" />}
+          title="Changes"
+          count={git.files.length}
+          defaultOpen
+          headerActions={
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 text-muted-foreground hover:text-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void git.revertAll();
+                    }}
+                    disabled={revertableCount === 0}
+                  >
+                    <Undo2 className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Revert all</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 text-muted-foreground hover:text-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void git.stageAll();
+                    }}
+                    disabled={unstagedCount === 0}
+                  >
+                    <Plus className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Stage all</TooltipContent>
+              </Tooltip>
+            </>
+          }
+        >
           <div className="flex border-t">
             <button
               type="button"
@@ -350,33 +418,21 @@ export const GitPanel = memo(function GitPanel({
                 </div>
               );
             })}
-
-          <div className="flex gap-2 border-t p-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 text-xs"
-              onClick={git.revertAll}
-            >
-              <Undo2 data-icon="inline-start" />
-              Revert all
-            </Button>
-            <Button
-              size="sm"
-              className="flex-1 text-xs"
-              onClick={git.stageAll}
-            >
-              <Plus data-icon="inline-start" />
-              Stage all
-            </Button>
-          </div>
         </GitSection>
 
-        <GitSection title="Branches" count={localBranchCount}>
+        <GitSection
+          icon={<GitBranch className="size-3.5" />}
+          title="Branches"
+          count={localBranchCount}
+        >
           <BranchManagerPanel cwd={cwd} git={git} sessions={sessions} />
         </GitSection>
 
-        <GitSection title="History" count={git.log.length}>
+        <GitSection
+          icon={<History className="size-3.5" />}
+          title="Commits"
+          count={git.log.length}
+        >
           <GitHistory cwd={cwd} git={git} />
         </GitSection>
 

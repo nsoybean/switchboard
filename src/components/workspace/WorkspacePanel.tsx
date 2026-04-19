@@ -126,6 +126,10 @@ export function WorkspacePanel({
       git.error.includes("needed a single revision"));
   const showGitStatusBar = Boolean(context.rootPath) && !isNotGitRepo;
   const branchLabel = git.branch || context.branch || "HEAD";
+  const showDirtyCount = changedFileCount > 0;
+  const showAhead = git.aheadBehind.ahead > 0;
+  const showBehind = git.aheadBehind.behind > 0;
+  const showStatusMetrics = showDirtyCount || showAhead || showBehind;
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
@@ -137,13 +141,25 @@ export function WorkspacePanel({
                 <GitBranch className="size-3.5 shrink-0" />
                 <span className="font-mono text-foreground">{branchLabel}</span>
               </span>
-              <span className="inline-flex items-center gap-1.5 tabular-nums">
-                <Files className="size-3.5 shrink-0" />
-                <span>{changedFileCount}</span>
-                <span aria-hidden="true">·</span>
-                <span className="text-[var(--sb-diff-add-fg)]">+{git.aheadBehind.ahead}</span>
-                <span className="text-[var(--sb-diff-del-fg)]">-{git.aheadBehind.behind}</span>
-              </span>
+              {showStatusMetrics ? (
+                <span className="inline-flex items-center gap-1.5 tabular-nums">
+                  {showDirtyCount ? (
+                    <>
+                      <Files className="size-3.5 shrink-0" />
+                      <span>{changedFileCount}</span>
+                    </>
+                  ) : null}
+                  {showDirtyCount && (showAhead || showBehind) ? (
+                    <span aria-hidden="true">·</span>
+                  ) : null}
+                  {showAhead ? (
+                    <span className="text-[var(--sb-diff-add-fg)]">+{git.aheadBehind.ahead}</span>
+                  ) : null}
+                  {showBehind ? (
+                    <span className="text-[var(--sb-diff-del-fg)]">-{git.aheadBehind.behind}</span>
+                  ) : null}
+                </span>
+              ) : null}
             </div>
             <Button
               type="button"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, Files, GitFork, Info, X } from "lucide-react";
+import { ChevronDown, CornerDownLeft, Files, GitFork, X } from "lucide-react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { BranchPicker } from "@/components/git/BranchPicker";
@@ -70,6 +70,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   const [useWorktree, setUseWorktree] = useState(false);
   const [branches, setBranches] = useState<GitBranchInfo[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchSwitchPending, setBranchSwitchPending] = useState(false);
   const [baseBranch, setBaseBranch] = useState("");
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [createBranchPending, setCreateBranchPending] = useState(false);
@@ -162,6 +163,11 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     });
   }, []);
 
+  const currentBranch = useMemo(
+    () => branches.find((b) => b.is_current)?.name ?? null,
+    [branches],
+  );
+
   const handleSubmit = useCallback(() => {
     // Build the task text, appending image paths if any
     let fullTask = task.trim();
@@ -176,7 +182,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
       isAutoLabel: true,
       task: fullTask,
       useWorktree,
-      baseBranch: baseBranch || null,
+      baseBranch: useWorktree ? (baseBranch || currentBranch || null) : null,
     });
 
     // Clean up
@@ -186,7 +192,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     setTask("");
     setPastedImages([]);
     setUseWorktree(false);
-  }, [agent, task, pastedImages, useWorktree, baseBranch, onSubmit]);
+  }, [agent, task, pastedImages, useWorktree, baseBranch, currentBranch, onSubmit]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -236,16 +242,42 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   }, []);
 
   const selectedAgent = AGENTS.find((a) => a.id === agent) ?? AGENTS[0];
-  const disableSubmit = useWorktree && (branchesLoading || !baseBranch);
+  const displayBranch = useWorktree ? baseBranch : (currentBranch ?? baseBranch);
+  const disableSubmit =
+    branchSwitchPending || (useWorktree && (branchesLoading || !displayBranch));
+  const showBranchDirtyCount = (branchContext?.dirtyCount ?? 0) > 0;
+  const showBranchAhead = (branchContext?.ahead ?? 0) > 0;
+  const showBranchBehind = (branchContext?.behind ?? 0) > 0;
+  const showBranchMetrics = showBranchDirtyCount || showBranchAhead || showBranchBehind;
 
-  const currentBranch = useMemo(
-    () => branches.find((b) => b.is_current)?.name ?? null,
-    [branches],
+  const handleBranchSelect = useCallback(
+    async (branchName: string) => {
+      if (!projectPath) return;
+
+      if (useWorktree) {
+        setBaseBranch(branchName);
+        return;
+      }
+
+      if (branchName === currentBranch || branchSwitchPending) {
+        return;
+      }
+
+      try {
+        setBranchSwitchPending(true);
+        await gitCommands.checkoutBranch(projectPath, branchName);
+        await refreshBranches(branchName);
+      } catch (error) {
+        toast.error("Failed to switch branch", { description: String(error) });
+      } finally {
+        setBranchSwitchPending(false);
+      }
+    },
+    [branchSwitchPending, currentBranch, projectPath, refreshBranches, useWorktree],
   );
-  const isSwitchingBranch = !useWorktree && !!baseBranch && !!currentBranch && baseBranch !== currentBranch;
 
   useEffect(() => {
-    if (!projectPath || !baseBranch) {
+    if (!projectPath || !displayBranch) {
       setBranchContext(null);
       setBranchContextLoading(false);
       return;
@@ -255,8 +287,8 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     setBranchContextLoading(true);
 
     Promise.all([
-      gitCommands.statusSummary(projectPath, baseBranch),
-      gitCommands.log(projectPath, 1, baseBranch).catch(() => []),
+      gitCommands.statusSummary(projectPath, displayBranch),
+      gitCommands.log(projectPath, 1, displayBranch).catch(() => []),
     ])
       .then(([summary, commits]) => {
         if (cancelled) return;
@@ -280,7 +312,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     return () => {
       cancelled = true;
     };
-  }, [baseBranch, projectPath]);
+  }, [displayBranch, projectPath]);
 
   return (
     <div className="flex h-full items-center justify-center bg-background">
@@ -337,25 +369,6 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
             </Tooltip>
           )} */}
 
-          {/* Branch badge */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <BranchPicker
-                  branches={branches}
-                  loading={branchesLoading}
-                  value={baseBranch}
-                  onSelect={setBaseBranch}
-                  onCreateBranch={() => setCreateBranchOpen(true)}
-                  triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
-                  showCurrentBadge={false}
-                  showIcon
-                />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Branch to start from</TooltipContent>
-          </Tooltip>
-
           {/* Worktree badge */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -371,30 +384,36 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
             </TooltipTrigger>
             <TooltipContent>Work in an isolated copy of the repo</TooltipContent>
           </Tooltip>
-        </div>
 
-        {/* Branch switch hint */}
-        {isSwitchingBranch && (
-          <div className="mb-2 flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-muted-foreground">
-            <Info className="mt-0.5 size-3 shrink-0 text-amber-500" />
-            <span>
-              This will checkout <span className="font-medium text-foreground">{baseBranch}</span> in the main repo, affecting all local sessions.{" "}
-              <button
-                type="button"
-                onClick={() => setUseWorktree(true)}
-                className="font-medium text-amber-600 underline underline-offset-2 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300"
-              >
-                Enable worktree
-              </button>
-              {" "}to work on this branch in isolation.
-            </span>
-          </div>
-        )}
+          {/* Branch badge */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <BranchPicker
+                  branches={branches}
+                  loading={branchesLoading}
+                  value={displayBranch}
+                  onSelect={(branchName) => {
+                    void handleBranchSelect(branchName);
+                  }}
+                  onCreateBranch={() => setCreateBranchOpen(true)}
+                  disabled={branchSwitchPending}
+                  triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
+                  showCurrentBadge={false}
+                  showIcon
+                />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {useWorktree ? "Base branch for the new worktree" : "Current local branch"}
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
         {(branchContextLoading || branchContext) && (
           <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
             <span className="font-mono text-foreground">
-              {branchContext?.branch ?? baseBranch}
+              {branchContext?.branch ?? displayBranch}
             </span>
             {branchContextLoading ? (
               <span>Loading branch context…</span>
@@ -406,13 +425,25 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
                     {branchContext.lastCommitDate ? ` (${branchContext.lastCommitDate})` : ""}
                   </span>
                 ) : null}
-                <span className="inline-flex items-center gap-1.5 tabular-nums">
-                  <Files className="size-3 shrink-0" />
-                  <span>{branchContext?.dirtyCount ?? 0}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="text-[var(--sb-diff-add-fg)]">+{branchContext?.ahead ?? 0}</span>
-                  <span className="text-[var(--sb-diff-del-fg)]">-{branchContext?.behind ?? 0}</span>
-                </span>
+                {showBranchMetrics ? (
+                  <span className="inline-flex items-center gap-1.5 tabular-nums">
+                    {showBranchDirtyCount ? (
+                      <>
+                        <Files className="size-3 shrink-0" />
+                        <span>{branchContext?.dirtyCount ?? 0}</span>
+                      </>
+                    ) : null}
+                    {showBranchDirtyCount && (showBranchAhead || showBranchBehind) ? (
+                      <span aria-hidden="true">·</span>
+                    ) : null}
+                    {showBranchAhead ? (
+                      <span className="text-[var(--sb-diff-add-fg)]">+{branchContext?.ahead ?? 0}</span>
+                    ) : null}
+                    {showBranchBehind ? (
+                      <span className="text-[var(--sb-diff-del-fg)]">-{branchContext?.behind ?? 0}</span>
+                    ) : null}
+                  </span>
+                ) : null}
               </>
             )}
           </div>
