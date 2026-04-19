@@ -1,14 +1,16 @@
-import { Files, FolderTree, GitBranch, RefreshCw, Upload } from "lucide-react";
+import { FolderTree, RefreshCw, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
+import { GitBranchSummary } from "../git/GitBranchSummary";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 import type { Session } from "@/state/types";
 
 export type WorkspaceTab = "files" | "changes";
 
 export interface WorkspaceContext {
+  sessionId?: string | null;
   kind: "project" | "session";
   rootPath: string | null;
   label: string;
@@ -97,6 +99,7 @@ export function WorkspacePanel({
   if (!context) {
     if (!projectPath) return null;
     const projectContext: WorkspaceContext = {
+      sessionId: null,
       kind: "project",
       rootPath: projectPath,
       label: projectPath.split("/").pop() ?? projectPath,
@@ -126,10 +129,6 @@ export function WorkspacePanel({
       git.error.includes("needed a single revision"));
   const showGitStatusBar = Boolean(context.rootPath) && !isNotGitRepo;
   const branchLabel = git.branch || context.branch || "HEAD";
-  const showDirtyCount = changedFileCount > 0;
-  const showAhead = git.aheadBehind.ahead > 0;
-  const showBehind = git.aheadBehind.behind > 0;
-  const showStatusMetrics = showDirtyCount || showAhead || showBehind;
   const showPublishAction = git.currentBranchUpstreamStatus !== "tracking";
 
   return (
@@ -137,31 +136,12 @@ export function WorkspacePanel({
       <div className="border-b">
         {showGitStatusBar && (
           <div className="flex items-center justify-between gap-2 border-b px-3 py-2 text-[11px] text-muted-foreground">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="inline-flex items-center gap-1.5">
-                <GitBranch className="size-3.5 shrink-0" />
-                <span className="font-mono text-foreground">{branchLabel}</span>
-              </span>
-              {showStatusMetrics ? (
-                <span className="inline-flex items-center gap-1.5 tabular-nums">
-                  {showDirtyCount ? (
-                    <>
-                      <Files className="size-3.5 shrink-0" />
-                      <span>{changedFileCount}</span>
-                    </>
-                  ) : null}
-                  {showDirtyCount && (showAhead || showBehind) ? (
-                    <span aria-hidden="true">·</span>
-                  ) : null}
-                  {showAhead ? (
-                    <span className="text-[var(--sb-diff-add-fg)]">+{git.aheadBehind.ahead}</span>
-                  ) : null}
-                  {showBehind ? (
-                    <span className="text-[var(--sb-diff-del-fg)]">-{git.aheadBehind.behind}</span>
-                  ) : null}
-                </span>
-              ) : null}
-            </div>
+            <GitBranchSummary
+              branch={branchLabel}
+              changedCount={changedFileCount}
+              ahead={git.aheadBehind.ahead}
+              behind={git.aheadBehind.behind}
+            />
             <Button
               type="button"
               variant="ghost"

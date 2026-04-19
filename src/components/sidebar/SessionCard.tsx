@@ -47,6 +47,7 @@ interface SessionCardProps {
   dragRef?: React.Ref<HTMLDivElement>;
   isDragSource?: boolean;
   isOpenInTab?: boolean;
+  suppressHover?: boolean;
   onClick: () => void;
   onPin?: () => void;
   onResume?: () => void;
@@ -66,6 +67,7 @@ export function SessionCard({
   dragRef,
   isDragSource,
   isOpenInTab,
+  suppressHover,
   index,
   timestampLabel,
   timestampTitle,
@@ -86,6 +88,7 @@ export function SessionCard({
   const canManage = Boolean(onPin || onResume || onStop || onRename || onDelete);
   const hasGitActions = Boolean(onMerge || onCreatePr || onRemoveWorktree || onDeleteBranch);
   const branchName = session.workspace.branchName;
+  const showHoverActions = !suppressHover && (canManage || hasGitActions);
 
   // When this card is the drag source, show a compact solid card
   if (isDragSource) {
@@ -108,6 +111,10 @@ export function SessionCard({
         "group/session flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors overflow-hidden cursor-pointer",
         isActive
           ? "bg-accent text-accent-foreground"
+          : suppressHover
+            ? isOpenInTab
+              ? "bg-muted/60 text-foreground"
+              : "text-foreground"
           : isOpenInTab
             ? "bg-muted/60 hover:bg-accent/50 text-foreground"
             : "hover:bg-accent/50 text-foreground",
@@ -177,7 +184,7 @@ export function SessionCard({
           <span
             className={cn(
               "flex items-center gap-1 text-[11px] font-medium tabular-nums transition-opacity",
-              (canManage || hasGitActions) &&
+              showHoverActions &&
                 "group-hover/session:opacity-0 group-hover/session:hidden group-focus-within/session:opacity-0 group-focus-within/session:hidden",
             )}
           >
@@ -193,12 +200,20 @@ export function SessionCard({
             <span
               className={cn(
                 "flex items-start justify-end text-[10px] text-muted-foreground transition-opacity",
-                "group-hover/session:opacity-0 group-hover/session:hidden group-focus-within/session:opacity-0 group-focus-within/session:hidden",
+                showHoverActions &&
+                  "group-hover/session:opacity-0 group-hover/session:hidden group-focus-within/session:opacity-0 group-focus-within/session:hidden",
               )}
             />
           )
         )}
-        <div className="hidden items-center gap-0.5 group-hover/session:flex group-focus-within/session:flex">
+        <div
+          className={cn(
+            "items-center gap-0.5",
+            showHoverActions
+              ? "hidden group-hover/session:flex group-focus-within/session:flex"
+              : "hidden",
+          )}
+        >
           {/* Git actions overflow menu */}
           {hasGitActions && (
             <DropdownMenu>

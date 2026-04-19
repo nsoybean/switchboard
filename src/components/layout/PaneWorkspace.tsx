@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from "react";
 import {
-  Eye,
   FileText,
   GripVertical,
   Plus,
@@ -27,7 +26,6 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { AgentIcon } from "@/components/agents/AgentIcon";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -76,7 +74,9 @@ interface PaneWorkspaceProps {
   openFilePath: string | null;
   revealRequest: { tabId: string; nonce: number } | null;
   projectPath: string | null;
+  projectPaths: string[];
   onInlineNewSession: (config: InlineNewSessionConfig) => void;
+  onInlineProjectSelect?: (projectPath: string) => Promise<void> | void;
   onSelectLiveSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
@@ -168,19 +168,6 @@ function parseDragId(id: string): { tabId: string; fromLeafId: string } | null {
   const sepIdx = rest.lastIndexOf(sep);
   if (sepIdx === -1) return null;
   return { tabId: rest.slice(0, sepIdx), fromLeafId: `pane-${rest.slice(sepIdx + sep.length)}` };
-}
-
-function PaneSurfaceBadge({ surface }: { surface: PaneSurface }) {
-  if (surface.kind !== "transcript") {
-    return null;
-  }
-
-  return (
-    <Badge variant="outline" className="h-4 px-1 text-[10px] font-normal">
-      <Eye data-icon="inline-start" />
-      Transcript
-    </Badge>
-  );
 }
 
 function DropHint({
@@ -358,14 +345,13 @@ function DraggableTab({
       </span>
       {surface.kind === "file" ? (
         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-      ) : (
+      ) : surface.kind === "live-session" ? (
         <AgentIcon agent={surface.session.agent} className="size-3.5 shrink-0" />
-      )}
+      ) : null}
       <span className="truncate font-medium">{surface.title}</span>
-      {surface.kind !== "file" && (
+      {surface.kind === "live-session" && (
         <StatusDot status={surface.session.status} />
       )}
-      <PaneSurfaceBadge surface={surface} />
       {surface.closable ? (
         <span
           className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/pane-tab:opacity-100"
@@ -749,7 +735,9 @@ export function PaneWorkspace({
   openFilePath,
   revealRequest,
   projectPath,
+  projectPaths,
   onInlineNewSession,
+  onInlineProjectSelect,
   onSelectLiveSession,
   onCloseSession,
   onCloseTranscript,
@@ -1048,7 +1036,14 @@ export function PaneWorkspace({
   const paneCount = countLeaves(layout.root);
 
   if (surfaces.length === 0 || !layout.root) {
-    return <InlineNewSession projectPath={projectPath} onSubmit={onInlineNewSession} />;
+    return (
+      <InlineNewSession
+        projectPath={projectPath}
+        projectPaths={projectPaths}
+        onProjectSelect={onInlineProjectSelect}
+        onSubmit={onInlineNewSession}
+      />
+    );
   }
 
   return (
