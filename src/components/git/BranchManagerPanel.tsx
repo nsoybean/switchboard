@@ -117,6 +117,8 @@ export function BranchManagerPanel({
           const branchBehind = isCurrent
             ? aheadBehind.behind
             : (branch.behind ?? 0);
+          const currentBranchNeedsPublish =
+            isCurrent && git.currentBranchUpstreamStatus !== "tracking";
           const attachedSessions = sessionsByBranch.get(branch.name) ?? [];
 
           return (
@@ -192,7 +194,7 @@ export function BranchManagerPanel({
                   ) : null}
                 </div>
 
-                {isCurrent && branchAhead > 0 ? (
+                {isCurrent && (branchAhead > 0 || currentBranchNeedsPublish) ? (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -239,7 +241,7 @@ export function BranchManagerPanel({
                         onSelect={() => void handlePushCurrent(branch.name)}
                       >
                         <ArrowUp className="size-3.5" />
-                        Push branch
+                        {currentBranchNeedsPublish ? "Publish branch" : "Push branch"}
                       </DropdownMenuItem>
                     ) : null}
                     {!isCurrent ? <DropdownMenuSeparator /> : null}

@@ -21,6 +21,7 @@ import {
 import { CreatePrDialog } from "./CreatePrDialog";
 interface GitToolbarProps {
   branchActionPending: boolean;
+  currentBranchUpstreamStatus?: "none" | "tracking" | "gone";
   cwd: string;
   githubToken: string | null;
   onCommit: (message: string) => Promise<void>;
@@ -33,6 +34,7 @@ interface GitToolbarProps {
 
 export function GitToolbar({
   branchActionPending,
+  currentBranchUpstreamStatus = "tracking",
   cwd,
   githubToken,
   onCommit,
@@ -50,6 +52,10 @@ export function GitToolbar({
   const [pullPending, setPullPending] = useState(false);
   const [pushPending, setPushPending] = useState(false);
   const [fetchPending, setFetchPending] = useState(false);
+  const pushLabel =
+    currentBranchUpstreamStatus === "tracking" ? "Push" : "Publish";
+  const pushingLabel =
+    currentBranchUpstreamStatus === "tracking" ? "Pushing..." : "Publishing...";
 
   const handleCommit = async () => {
     const message = commitMsg.trim();
@@ -138,7 +144,7 @@ export function GitToolbar({
               {commitPending || pullPending || pushPending || fetchPending ? (
                 <>
                   <Spinner className="size-3" />
-                  {commitPending ? "Committing..." : pullPending ? "Pulling..." : fetchPending ? "Fetching..." : "Pushing..."}
+                  {commitPending ? "Committing..." : pullPending ? "Pulling..." : fetchPending ? "Fetching..." : pushingLabel}
                 </>
               ) : (
                 "Commit"
@@ -160,7 +166,7 @@ export function GitToolbar({
                 disabled={pullPending || pushPending || commitPending || branchActionPending}
                 onSelect={handlePushSelect}
               >
-                Push
+                {pushLabel}
               </DropdownMenuItem>
               {onFetch && (
                 <DropdownMenuItem

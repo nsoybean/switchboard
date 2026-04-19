@@ -181,9 +181,7 @@ export const GitPanel = memo(function GitPanel({
     : git.files.filter((file) => !file.staged);
   const unstagedCount = git.files.filter((file) => !file.staged).length;
   const stagedCount = git.files.filter((file) => file.staged).length;
-  const revertableCount = git.files.filter(
-    (file) => !file.staged && file.status !== "??",
-  ).length;
+  const revertableCount = git.files.filter((file) => !file.staged).length;
   const localBranchCount = git.branches.filter((branch) => !branch.is_remote).length;
   const isNotGitRepo =
     git.error !== null &&
@@ -194,6 +192,7 @@ export const GitPanel = memo(function GitPanel({
     <div className="flex h-full flex-col overflow-hidden">
       <GitToolbar
         branchActionPending={git.branchActionPending}
+        currentBranchUpstreamStatus={git.currentBranchUpstreamStatus}
         cwd={cwd}
         githubToken={githubToken ?? null}
         onCommit={git.commit}
@@ -333,7 +332,7 @@ export const GitPanel = memo(function GitPanel({
                       toggleFile(file.path);
                     }}
                     className={cn(
-                      "grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 overflow-hidden border-t px-2 py-1.5 text-xs",
+                      "group/file grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 overflow-hidden border-t px-2 py-1.5 text-xs",
                       isExpanded || isSelectedDocument
                         ? "bg-accent/60"
                         : "hover:bg-accent/50",
@@ -365,7 +364,7 @@ export const GitPanel = memo(function GitPanel({
                         {file.path}
                       </span>
                     </div>
-                    <div className="flex shrink-0 items-center gap-0.5">
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/file:opacity-100 group-focus-within/file:opacity-100">
                       {showStaged ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -395,21 +394,19 @@ export const GitPanel = memo(function GitPanel({
                             </TooltipTrigger>
                             <TooltipContent>Stage</TooltipContent>
                           </Tooltip>
-                          {file.status !== "??" ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-5 shrink-0"
-                                  onClick={(e) => handleRevertFile(e, file.path)}
-                                >
-                                  <Undo2 />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Revert</TooltipContent>
-                            </Tooltip>
-                          ) : null}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-5 shrink-0"
+                                onClick={(e) => handleRevertFile(e, file.path)}
+                              >
+                                <Undo2 />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Revert</TooltipContent>
+                          </Tooltip>
                         </>
                       )}
                     </div>

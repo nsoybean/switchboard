@@ -64,7 +64,7 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
   const { stashes, stashesLoading } = git;
 
   return (
-    <div className="group/stash border-t">
+    <div className="group/stash">
       {/* Header */}
       <button
         type="button"

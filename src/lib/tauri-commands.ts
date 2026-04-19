@@ -22,6 +22,7 @@ export interface GitBranchInfo {
   name: string;
   is_current: boolean;
   is_remote: boolean;
+  upstream_status: "none" | "tracking" | "gone";
   ahead?: number | null;
   behind?: number | null;
   last_commit_subject?: string | null;
