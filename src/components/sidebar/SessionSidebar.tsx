@@ -93,10 +93,11 @@ function ProjectAvatar({ name, isActive }: { name: string; isActive: boolean }) 
 /** Wrapper that makes a SessionCard draggable via dnd-kit v6 */
 function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & { dragId: string; isDragActive?: boolean }) {
   const { dragId, isDragActive, ...cardProps } = props;
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: dragId });
-  const style = transform
-    ? { transform: CSS.Translate.toString(transform), zIndex: 50, position: "relative" as const }
-    : undefined;
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: dragId });
+  const style = {
+    transform: transform ? CSS.Translate.toString(transform) : undefined,
+    opacity: isDragging ? 0 : 1,
+  };
   return (
     <div
       ref={setNodeRef}
@@ -106,6 +107,16 @@ function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & 
       className="min-w-0 max-w-full overflow-hidden touch-pan-y"
     >
       <SessionCard {...cardProps} isDragSource={isDragActive} />
+    </div>
+  );
+}
+
+function DraggedSessionPreview({ session }: { session: Session }) {
+  return (
+    <div className="inline-flex max-w-[240px] items-center rounded bg-card px-1.5 py-0.5 shadow-lg ring-1 ring-border">
+      <span className="truncate text-[12px] font-medium">
+        {session.label || "New session"}
+      </span>
     </div>
   );
 }
@@ -499,6 +510,15 @@ export function SessionSidebar({
     setDragOverPinned(false);
   }, [pinnedIds, persistPinnedIds]);
 
+  const activeDragSession = useMemo(() => {
+    if (!dragActiveId) return null;
+    const sessionId = dragActiveId.startsWith("pinned-")
+      ? dragActiveId.replace("pinned-", "")
+      : dragActiveId;
+    return state.sessions[sessionId] ?? null;
+  }, [dragActiveId, state.sessions]);
+  const suppressSessionHover = dragActiveId !== null;
+
   return (
     <DndContext
       sensors={sensors}
@@ -563,6 +583,7 @@ export function SessionSidebar({
                             session={session}
                             isActive={effectiveSelectedSessionId === session.id}
                             isOpenInTab={openTabSet.has(session.id)}
+                            suppressHover={suppressSessionHover}
                             isPinned
                             gitSummary={sessionGitSummaries.get(session.id) ?? null}
                             timestampLabel={formatCompactRelativeTime(session.createdAt, now)}
@@ -717,6 +738,7 @@ export function SessionSidebar({
                               session={session}
                               isActive={effectiveSelectedSessionId === session.id}
                               isOpenInTab={openTabSet.has(session.id)}
+                              suppressHover={suppressSessionHover}
                               isPinned={pinnedIds.includes(session.id)}
                               gitSummary={sessionGitSummaries.get(session.id) ?? null}
                               timestampLabel={formatCompactRelativeTime(
@@ -1001,18 +1023,10 @@ export function SessionSidebar({
           </div>
         </DialogContent>
       </Dialog>
-      <DragOverlay dropAnimation={null}>
-        {dragActiveId?.startsWith("pinned-") ? (() => {
-          const sid = dragActiveId.replace("pinned-", "");
-          const session = pinnedSessions.find((s) => s.id === sid);
-          return session ? (
-            <div className="inline-flex max-w-[240px] items-center rounded bg-card px-1.5 py-0.5 shadow-sm ring-1 ring-border">
-              <span className="truncate text-[12px] font-medium">
-                {session.label || "New session"}
-              </span>
-            </div>
-          ) : null;
-        })() : null}
+      <DragOverlay dropAnimation={null} zIndex={1000}>
+        {activeDragSession ? (
+          <DraggedSessionPreview session={activeDragSession} />
+        ) : null}
       </DragOverlay>
     </div>
     </DndContext>
