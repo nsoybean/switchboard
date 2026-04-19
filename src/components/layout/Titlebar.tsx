@@ -162,8 +162,8 @@ export function Titlebar({
         </div>
       </div>
 
-      {/* Branch + Create PR — aligned to left edge of middle pane */}
-      {hasActiveSession && git?.branch && (
+      {/* Branch + Create PR — show when project is open OR active session has git state */}
+      {(projectPath || (hasActiveSession && git?.branch)) && git?.branch && (
         <div data-tauri-drag-region className="flex items-center gap-2 text-[11px]">
           <BranchPicker
             branches={git.branches}
@@ -176,31 +176,45 @@ export function Titlebar({
             onCreateBranch={onCreateBranch}
           />
 
-          {/* Target branch picker hidden for now. The PR dialog owns base-branch selection. */}
+          {/* Ahead/behind indicators */}
+          {git.aheadBehind && (git.aheadBehind.ahead > 0 || git.aheadBehind.behind > 0) && (
+            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              {git.aheadBehind.ahead > 0 && (
+                <span className="text-[var(--sb-diff-add-fg)]">+{git.aheadBehind.ahead}</span>
+              )}
+              {git.aheadBehind.behind > 0 && (
+                <span className="text-[var(--sb-diff-del-fg)]">-{git.aheadBehind.behind}</span>
+              )}
+            </span>
+          )}
 
-          <Separator orientation="vertical" className="h-4" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-6 gap-1.5 px-2 text-[11px]"
-                  disabled={!githubToken}
-                  onClick={onCreatePr}
-                >
-                  <GitPullRequest className="size-3" />
-                  Create PR
-                  <ExternalLink className="size-2.5" />
-                </Button>
-              </span>
-            </TooltipTrigger>
-            {!githubToken && (
-              <TooltipContent>
-                Add a GitHub token in Settings to create PRs
-              </TooltipContent>
-            )}
-          </Tooltip>
+          {hasActiveSession && (
+            <>
+              <Separator orientation="vertical" className="h-4" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1.5 px-2 text-[11px]"
+                      disabled={!githubToken}
+                      onClick={onCreatePr}
+                    >
+                      <GitPullRequest className="size-3" />
+                      Create PR
+                      <ExternalLink className="size-2.5" />
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!githubToken && (
+                  <TooltipContent>
+                    Add a GitHub token in Settings to create PRs
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </>
+          )}
         </div>
       )}
 

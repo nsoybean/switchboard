@@ -216,6 +216,21 @@ export function AppLayout() {
     : null;
   const selectedSession = viewingSession ? resolvedViewingSession : activeSession;
   const selectedSessionId = viewingSession?.id ?? activeSession?.id ?? null;
+  const branchRelevantSessions = useMemo(
+    () =>
+      sessions.filter((session) => {
+        if (!sessionBelongsToProject(session, state.projectPath)) {
+          return false;
+        }
+        return (
+          session.status === "running" ||
+          session.status === "idle" ||
+          session.status === "needs-input" ||
+          Boolean(session.worktreePath)
+        );
+      }),
+    [sessions, state.projectPath],
+  );
   const projectLabel = state.projectPath
     ? (state.projectPath.split("/").pop() ?? "Project")
     : "Project";
@@ -1368,6 +1383,7 @@ export function AppLayout() {
       activeTab={workspaceTab}
       context={workspaceContext}
       git={git}
+      branchSessions={branchRelevantSessions}
       githubToken={state.githubToken}
       onFileSelect={setOpenFilePath}
       onTabChange={setWorkspaceTab}
@@ -1510,7 +1526,7 @@ export function AppLayout() {
               )}
             </div>
 
-            {state.projectPath && inspectorOpen && selectedSession ? (
+            {state.projectPath && inspectorOpen ? (
               <>
                 <div
                   role="separator"
@@ -1563,7 +1579,7 @@ export function AppLayout() {
               </div>
             ) : null}
 
-            {state.projectPath && inspectorOpen && selectedSession && hasWorkspaceRoot ? (
+            {state.projectPath && inspectorOpen && hasWorkspaceRoot ? (
               <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex max-w-[calc(100vw-2rem)]">
                 <div
                   role="separator"

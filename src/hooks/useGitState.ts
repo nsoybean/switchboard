@@ -4,6 +4,10 @@ import {
   type ChangedFile,
   type DiffStats,
   type GitBranchInfo,
+  type GitCommit,
+  type GitAheadBehind,
+  type StashEntry,
+  type MergeStrategy,
 } from "../lib/tauri-commands";
 import { toast } from "sonner";
 
@@ -16,6 +20,11 @@ export interface GitState {
   stats: DiffStats;
   loading: boolean;
   error: string | null;
+  aheadBehind: GitAheadBehind;
+  log: GitCommit[];
+  logLoading: boolean;
+  stashes: StashEntry[];
+  stashesLoading: boolean;
 }
 
 export interface GitActions {
@@ -30,6 +39,16 @@ export interface GitActions {
   commit: (message: string) => Promise<void>;
   pull: () => Promise<void>;
   push: () => Promise<void>;
+  fetch: () => Promise<void>;
+  refreshLog: () => Promise<void>;
+  refreshStashes: () => Promise<void>;
+  mergeBranch: (branch: string, strategy: MergeStrategy) => Promise<void>;
+  deleteBranch: (branch: string, force: boolean) => Promise<void>;
+  pushDeleteRemote: (branch: string) => Promise<void>;
+  stash: (message?: string) => Promise<void>;
+  stashPop: (index?: number) => Promise<void>;
+  stashDrop: (index: number) => Promise<void>;
+  cleanupWorktree: (worktreePath: string, branch: string, deleteRemote: boolean) => Promise<void>;
 }
 
 interface UseGitStateOptions {
@@ -40,6 +59,7 @@ interface UseGitStateOptions {
 }
 
 const emptyStats: DiffStats = { additions: 0, deletions: 0, files_changed: 0 };
+const emptyAheadBehind: GitAheadBehind = { ahead: 0, behind: 0 };
 
 export function useGitState({
   cwd,
@@ -55,6 +75,11 @@ export function useGitState({
   const [error, setError] = useState<string | null>(null);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [branchActionPending, setBranchActionPending] = useState(false);
+  const [aheadBehind, setAheadBehind] = useState<GitAheadBehind>(emptyAheadBehind);
+  const [log, setLog] = useState<GitCommit[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [stashes, setStashes] = useState<StashEntry[]>([]);
+  const [stashesLoading, setStashesLoading] = useState(false);
 
   const branchesLoadedRef = useRef(false);
 
@@ -67,6 +92,9 @@ export function useGitState({
     setError(null);
     setBranchesLoading(true);
     setLoading(true);
+    setAheadBehind(emptyAheadBehind);
+    setLog([]);
+    setStashes([]);
     branchesLoadedRef.current = false;
   }, [cwd]);
 
@@ -79,13 +107,17 @@ export function useGitState({
         setBranchesLoading(true);
       }
       setError(null);
-      const status = await gitCommands.status(cwd);
-      const nextBranches = await gitCommands.listBranches(cwd).catch(() => []);
+      const [status, nextBranches, ab] = await Promise.all([
+        gitCommands.status(cwd),
+        gitCommands.listBranches(cwd).catch(() => [] as GitBranchInfo[]),
+        gitCommands.aheadBehind(cwd).catch(() => emptyAheadBehind),
+      ]);
       setBranch(status.branch);
       setBranches(nextBranches);
       branchesLoadedRef.current = nextBranches.length > 0;
       setFiles(status.files);
       setStats(status.stats);
+      setAheadBehind(ab);
     } catch (err) {
       setBranches([]);
       branchesLoadedRef.current = false;
@@ -95,6 +127,30 @@ export function useGitState({
         setBranchesLoading(false);
       }
       setLoading(false);
+    }
+  }, [cwd]);
+
+  const refreshLog = useCallback(async () => {
+    setLogLoading(true);
+    try {
+      const commits = await gitCommands.log(cwd, 50);
+      setLog(commits);
+    } catch {
+      setLog([]);
+    } finally {
+      setLogLoading(false);
+    }
+  }, [cwd]);
+
+  const refreshStashes = useCallback(async () => {
+    setStashesLoading(true);
+    try {
+      const entries = await gitCommands.stashList(cwd);
+      setStashes(entries);
+    } catch {
+      setStashes([]);
+    } finally {
+      setStashesLoading(false);
     }
   }, [cwd]);
 
@@ -232,6 +288,117 @@ export function useGitState({
     );
   }, [cwd, branch, refresh]);
 
+  const fetch = useCallback(async () => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.fetch(cwd);
+        await refresh();
+      })(),
+      {
+        loading: "Fetching from origin...",
+        success: "Fetched from origin",
+        error: (err) => `Failed to fetch: ${String(err)}`,
+      },
+    );
+  }, [cwd, refresh]);
+
+  const mergeBranch = useCallback(async (targetBranch: string, strategy: MergeStrategy) => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.merge(cwd, targetBranch, strategy);
+        await refresh();
+      })(),
+      {
+        loading: `Merging ${targetBranch}...`,
+        success: `Merged ${targetBranch}`,
+        error: (err) => `Merge failed: ${String(err)}`,
+      },
+    );
+  }, [cwd, refresh]);
+
+  const deleteBranch = useCallback(async (targetBranch: string, force: boolean) => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.deleteBranch(cwd, targetBranch, force);
+        await refresh();
+      })(),
+      {
+        loading: `Deleting branch ${targetBranch}...`,
+        success: `Deleted ${targetBranch}`,
+        error: (err) => `Failed to delete branch: ${String(err)}`,
+      },
+    );
+  }, [cwd, refresh]);
+
+  const pushDeleteRemote = useCallback(async (targetBranch: string) => {
+    await toast.promise(
+      gitCommands.pushDeleteRemote(cwd, targetBranch),
+      {
+        loading: `Deleting remote branch ${targetBranch}...`,
+        success: `Deleted remote ${targetBranch}`,
+        error: (err) => `Failed to delete remote branch: ${String(err)}`,
+      },
+    );
+  }, [cwd]);
+
+  const stash = useCallback(async (message?: string) => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.stash(cwd, message);
+        await Promise.all([refresh(), refreshStashes()]);
+      })(),
+      {
+        loading: "Stashing changes...",
+        success: "Changes stashed",
+        error: (err) => `Failed to stash: ${String(err)}`,
+      },
+    );
+  }, [cwd, refresh, refreshStashes]);
+
+  const stashPop = useCallback(async (index?: number) => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.stashPop(cwd, index);
+        await Promise.all([refresh(), refreshStashes()]);
+      })(),
+      {
+        loading: "Popping stash...",
+        success: "Stash applied",
+        error: (err) => `Failed to pop stash: ${String(err)}`,
+      },
+    );
+  }, [cwd, refresh, refreshStashes]);
+
+  const stashDrop = useCallback(async (index: number) => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.stashDrop(cwd, index);
+        await refreshStashes();
+      })(),
+      {
+        loading: "Dropping stash...",
+        success: "Stash dropped",
+        error: (err) => `Failed to drop stash: ${String(err)}`,
+      },
+    );
+  }, [cwd, refreshStashes]);
+
+  const cleanupWorktree = useCallback(async (
+    worktreePath: string,
+    targetBranch: string,
+    deleteRemote: boolean,
+  ) => {
+    await toast.promise(
+      gitCommands.cleanupWorktree(cwd, worktreePath, targetBranch, deleteRemote),
+      {
+        loading: "Cleaning up worktree...",
+        success: "Worktree removed and branch deleted",
+        error: (err) => `Cleanup failed: ${String(err)}`,
+      },
+    );
+    await refresh();
+  }, [cwd, refresh]);
+
   return {
     branch,
     branches,
@@ -241,7 +408,14 @@ export function useGitState({
     stats,
     loading,
     error,
+    aheadBehind,
+    log,
+    logLoading,
+    stashes,
+    stashesLoading,
     refresh,
+    refreshLog,
+    refreshStashes,
     switchBranch,
     createBranch,
     stageFiles,
@@ -252,5 +426,13 @@ export function useGitState({
     commit,
     pull,
     push,
+    fetch,
+    mergeBranch,
+    deleteBranch,
+    pushDeleteRemote,
+    stash,
+    stashPop,
+    stashDrop,
+    cleanupWorktree,
   };
 }

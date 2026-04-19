@@ -22,7 +22,41 @@ export interface GitBranchInfo {
   name: string;
   is_current: boolean;
   is_remote: boolean;
+  ahead?: number | null;
+  behind?: number | null;
+  last_commit_subject?: string | null;
+  last_commit_date?: string | null;
 }
+
+export interface GitCommit {
+  hash: string;
+  short_hash: string;
+  subject: string;
+  author: string;
+  date: string;
+  is_pushed: boolean;
+}
+
+export interface GitAheadBehind {
+  ahead: number;
+  behind: number;
+}
+
+export interface GitStatusSummary {
+  branch: string;
+  ahead: number;
+  behind: number;
+  dirty_count: number;
+}
+
+export interface StashEntry {
+  index: number;
+  ref_name: string;
+  message: string;
+  date: string;
+}
+
+export type MergeStrategy = "merge" | "squash" | "rebase";
 
 export interface WorktreeInfo {
   path: string;
@@ -78,6 +112,32 @@ export const gitCommands = {
     invoke<void>("git_checkout_branch", { cwd, name }),
   createPr: (cwd: string, title: string, body: string, base: string, token: string) =>
     invoke<string>("git_create_pr", { cwd, title, body, base, token }),
+  statusSummary: (cwd: string, branch?: string) =>
+    invoke<GitStatusSummary>("git_status_summary", { cwd, branch }),
+  aheadBehind: (cwd: string) =>
+    invoke<GitAheadBehind>("git_ahead_behind", { cwd }),
+  log: (cwd: string, limit: number, reference?: string) =>
+    invoke<GitCommit[]>("git_log", { cwd, limit, reference }),
+  fetch: (cwd: string) =>
+    invoke<void>("git_fetch", { cwd }),
+  merge: (cwd: string, branch: string, strategy: MergeStrategy) =>
+    invoke<string>("git_merge", { cwd, branch, strategy }),
+  deleteBranch: (cwd: string, branch: string, force: boolean) =>
+    invoke<void>("git_delete_branch", { cwd, branch, force }),
+  pushDeleteRemote: (cwd: string, branch: string) =>
+    invoke<void>("git_push_delete_remote", { cwd, branch }),
+  stash: (cwd: string, message?: string) =>
+    invoke<void>("git_stash", { cwd, message }),
+  stashList: (cwd: string) =>
+    invoke<StashEntry[]>("git_stash_list", { cwd }),
+  stashPop: (cwd: string, index?: number) =>
+    invoke<void>("git_stash_pop", { cwd, index }),
+  stashDrop: (cwd: string, index: number) =>
+    invoke<void>("git_stash_drop", { cwd, index }),
+  cleanupWorktree: (repoPath: string, worktreePath: string, branch: string, deleteRemote: boolean) =>
+    invoke<void>("cleanup_worktree", { repoPath, worktreePath, branch, deleteRemote }),
+  showCommit: (cwd: string, hash: string) =>
+    invoke<string>("git_show_commit", { cwd, hash }),
 };
 
 export interface FileEntry {
