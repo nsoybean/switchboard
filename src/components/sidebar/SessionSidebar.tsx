@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSessionGitSummaries } from "@/hooks/useSessionGitSummaries";
 import {
   Dialog,
   DialogContent,
@@ -181,6 +182,8 @@ export function SessionSidebar({
   const openTabSet = useMemo(() => new Set(openTabSessionIds ?? []), [openTabSessionIds]);
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const allSessions = useMemo(() => Object.values(state.sessions), [state.sessions]);
+  const sessionGitSummaries = useSessionGitSummaries(allSessions);
   const [renameTarget, setRenameTarget] = useState<Session | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
@@ -561,6 +564,7 @@ export function SessionSidebar({
                             isActive={effectiveSelectedSessionId === session.id}
                             isOpenInTab={openTabSet.has(session.id)}
                             isPinned
+                            gitSummary={sessionGitSummaries.get(session.id) ?? null}
                             timestampLabel={formatCompactRelativeTime(session.createdAt, now)}
                             timestampTitle={formatTimestampTitle(session.createdAt)}
                             onPin={() => togglePin(session.id)}
@@ -714,6 +718,7 @@ export function SessionSidebar({
                               isActive={effectiveSelectedSessionId === session.id}
                               isOpenInTab={openTabSet.has(session.id)}
                               isPinned={pinnedIds.includes(session.id)}
+                              gitSummary={sessionGitSummaries.get(session.id) ?? null}
                               timestampLabel={formatCompactRelativeTime(
                                 session.createdAt,
                                 now,

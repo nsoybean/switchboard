@@ -27,6 +27,7 @@ interface GitToolbarProps {
   onStageAll: () => Promise<void>;
   onPull: () => Promise<void>;
   onPush: () => Promise<void>;
+  onFetch?: () => Promise<void>;
   onRefresh: () => void;
 }
 
@@ -38,6 +39,7 @@ export function GitToolbar({
   onStageAll,
   onPull,
   onPush,
+  onFetch,
   onRefresh,
 }: GitToolbarProps) {
   const [commitOpen, setCommitOpen] = useState(false);
@@ -47,6 +49,7 @@ export function GitToolbar({
   const [commitPending, setCommitPending] = useState(false);
   const [pullPending, setPullPending] = useState(false);
   const [pushPending, setPushPending] = useState(false);
+  const [fetchPending, setFetchPending] = useState(false);
 
   const handleCommit = async () => {
     const message = commitMsg.trim();
@@ -111,6 +114,16 @@ export function GitToolbar({
     }, 0);
   };
 
+  const runFetch = async () => {
+    if (fetchPending || !onFetch) return;
+    setFetchPending(true);
+    try {
+      await onFetch();
+    } finally {
+      setFetchPending(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2 p-3 border-b overflow-hidden">
       {/* Action buttons */}
@@ -120,12 +133,12 @@ export function GitToolbar({
             <Button
               size="sm"
               className="flex-1 text-xs"
-              disabled={commitPending || pullPending || pushPending || branchActionPending}
+              disabled={commitPending || pullPending || pushPending || fetchPending || branchActionPending}
             >
-              {commitPending || pullPending || pushPending ? (
+              {commitPending || pullPending || pushPending || fetchPending ? (
                 <>
                   <Spinner className="size-3" />
-                  {commitPending ? "Committing..." : pullPending ? "Pulling..." : "Pushing..."}
+                  {commitPending ? "Committing..." : pullPending ? "Pulling..." : fetchPending ? "Fetching..." : "Pushing..."}
                 </>
               ) : (
                 "Commit"
@@ -149,6 +162,14 @@ export function GitToolbar({
               >
                 Push
               </DropdownMenuItem>
+              {onFetch && (
+                <DropdownMenuItem
+                  disabled={fetchPending || commitPending || branchActionPending}
+                  onSelect={() => window.setTimeout(() => void runFetch(), 0)}
+                >
+                  Fetch
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>

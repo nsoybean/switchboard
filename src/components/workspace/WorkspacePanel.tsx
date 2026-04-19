@@ -1,8 +1,10 @@
-import { FolderTree } from "lucide-react";
+import { Files, FolderTree, GitBranch, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
 import type { GitState, GitActions } from "@/hooks/useGitState";
+import type { Session } from "@/state/types";
 
 export type WorkspaceTab = "files" | "changes";
 
@@ -19,7 +21,10 @@ export interface WorkspaceContext {
 interface WorkspacePanelProps {
   activeTab: WorkspaceTab;
   context: WorkspaceContext | null;
+  /** Fallback path when no session is selected (project root) */
+  projectPath?: string | null;
   git: GitState & GitActions;
+  branchSessions?: Session[];
   githubToken?: string | null;
   onFileSelect?: (filePath: string) => void;
   onTabChange: (tab: WorkspaceTab) => void;
@@ -48,7 +53,9 @@ function EmptyWorkspaceState({
 export function WorkspacePanel({
   activeTab,
   context,
+  projectPath,
   git,
+  branchSessions = [],
   githubToken,
   onFileSelect,
   onTabChange,
@@ -86,41 +93,97 @@ export function WorkspacePanel({
     return null;
   };
 
+  // Fall back to project root when no session is selected
   if (!context) {
-    return null;
+    if (!projectPath) return null;
+    const projectContext: WorkspaceContext = {
+      kind: "project",
+      rootPath: projectPath,
+      label: projectPath.split("/").pop() ?? projectPath,
+      branch: null,
+      availability: "ready",
+      source: "project",
+      isWorktree: false,
+    };
+    return (
+      <WorkspacePanel
+        activeTab={activeTab}
+        context={projectContext}
+        git={git}
+        branchSessions={branchSessions}
+        githubToken={githubToken}
+        onFileSelect={onFileSelect}
+        onTabChange={onTabChange}
+      />
+    );
   }
 
   const unavailableState = renderUnavailableState(context, activeTab);
   const changedFileCount = git.files.length;
+  const isNotGitRepo =
+    git.error !== null &&
+    (git.error.includes("not a git repository") ||
+      git.error.includes("needed a single revision"));
+  const showGitStatusBar = Boolean(context.rootPath) && !isNotGitRepo;
+  const branchLabel = git.branch || context.branch || "HEAD";
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
-      {/* Header: tabs */}
-      <div className="flex items-center justify-between border-b px-2 py-2">
-        <div className="flex items-center gap-1">
-          {([
-            { key: "files" as const, label: "Files" },
-            { key: "changes" as const, label: "Changes" },
-          ]).map((tab) => (
-            <button
-              key={tab.key}
+      <div className="border-b">
+        {showGitStatusBar && (
+          <div className="flex items-center justify-between gap-2 border-b px-3 py-2 text-[11px] text-muted-foreground">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="inline-flex items-center gap-1.5">
+                <GitBranch className="size-3.5 shrink-0" />
+                <span className="font-mono text-foreground">{branchLabel}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 tabular-nums">
+                <Files className="size-3.5 shrink-0" />
+                <span>{changedFileCount}</span>
+                <span aria-hidden="true">·</span>
+                <span className="text-[var(--sb-diff-add-fg)]">+{git.aheadBehind.ahead}</span>
+                <span className="text-[var(--sb-diff-del-fg)]">-{git.aheadBehind.behind}</span>
+              </span>
+            </div>
+            <Button
               type="button"
-              onClick={() => onTabChange(tab.key)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-                activeTab === tab.key
-                  ? "border-border bg-background text-foreground shadow-sm"
-                  : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground",
-              )}
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1.5 px-2 text-[11px]"
+              onClick={() => void git.fetch()}
+              disabled={git.branchActionPending}
             >
-              {tab.label}
-              {tab.key === "changes" && changedFileCount > 0 && (
-                <span className="text-[10px] tabular-nums text-muted-foreground">
-                  {changedFileCount}
-                </span>
-              )}
-            </button>
-          ))}
+              <RefreshCw className="size-3" />
+              Fetch
+            </Button>
+          </div>
+        )}
+        <div className="flex items-center justify-between px-2 py-2">
+          <div className="flex items-center gap-1">
+            {([
+              { key: "files" as const, label: "Files" },
+              { key: "changes" as const, label: "Changes" },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => onTabChange(tab.key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                  activeTab === tab.key
+                    ? "border-border bg-background text-foreground shadow-sm"
+                    : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground",
+                )}
+              >
+                {tab.label}
+                {tab.key === "changes" && changedFileCount > 0 && (
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                    {changedFileCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -141,6 +204,7 @@ export function WorkspacePanel({
               <GitPanel
                 cwd={context.rootPath!}
                 git={git}
+                sessions={branchSessions}
                 githubToken={githubToken}
               />
             ) : null}

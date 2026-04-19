@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, GitFork, Info, X } from "lucide-react";
+import { ChevronDown, CornerDownLeft, Files, GitFork, Info, X } from "lucide-react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { BranchPicker } from "@/components/git/BranchPicker";
@@ -47,6 +47,15 @@ interface InlineNewSessionProps {
   onSubmit: (config: InlineNewSessionConfig) => void;
 }
 
+interface InlineBranchContext {
+  branch: string;
+  ahead: number;
+  behind: number;
+  dirtyCount: number;
+  lastCommitSubject: string | null;
+  lastCommitDate: string | null;
+}
+
 function extensionFromMime(mime: string): string {
   if (mime === "image/png") return "png";
   if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
@@ -65,6 +74,8 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [createBranchPending, setCreateBranchPending] = useState(false);
   const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
+  const [branchContext, setBranchContext] = useState<InlineBranchContext | null>(null);
+  const [branchContextLoading, setBranchContextLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
 
@@ -233,6 +244,44 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   );
   const isSwitchingBranch = !useWorktree && !!baseBranch && !!currentBranch && baseBranch !== currentBranch;
 
+  useEffect(() => {
+    if (!projectPath || !baseBranch) {
+      setBranchContext(null);
+      setBranchContextLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setBranchContextLoading(true);
+
+    Promise.all([
+      gitCommands.statusSummary(projectPath, baseBranch),
+      gitCommands.log(projectPath, 1, baseBranch).catch(() => []),
+    ])
+      .then(([summary, commits]) => {
+        if (cancelled) return;
+        const lastCommit = commits[0];
+        setBranchContext({
+          branch: summary.branch,
+          ahead: summary.ahead,
+          behind: summary.behind,
+          dirtyCount: summary.dirty_count,
+          lastCommitSubject: lastCommit?.subject ?? null,
+          lastCommitDate: lastCommit?.date ?? null,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setBranchContext(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBranchContextLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseBranch, projectPath]);
+
   return (
     <div className="flex h-full items-center justify-center bg-background">
       <div className="w-full max-w-xl px-6">
@@ -339,6 +388,33 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
               </button>
               {" "}to work on this branch in isolation.
             </span>
+          </div>
+        )}
+
+        {(branchContextLoading || branchContext) && (
+          <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+            <span className="font-mono text-foreground">
+              {branchContext?.branch ?? baseBranch}
+            </span>
+            {branchContextLoading ? (
+              <span>Loading branch context…</span>
+            ) : (
+              <>
+                {branchContext?.lastCommitSubject ? (
+                  <span className="truncate max-w-[320px]">
+                    last commit: &ldquo;{branchContext.lastCommitSubject}&rdquo;
+                    {branchContext.lastCommitDate ? ` (${branchContext.lastCommitDate})` : ""}
+                  </span>
+                ) : null}
+                <span className="inline-flex items-center gap-1.5 tabular-nums">
+                  <Files className="size-3 shrink-0" />
+                  <span>{branchContext?.dirtyCount ?? 0}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-[var(--sb-diff-add-fg)]">+{branchContext?.ahead ?? 0}</span>
+                  <span className="text-[var(--sb-diff-del-fg)]">-{branchContext?.behind ?? 0}</span>
+                </span>
+              </>
+            )}
           </div>
         )}
 
