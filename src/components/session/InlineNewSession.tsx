@@ -243,6 +243,10 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     [branches],
   );
   const isSwitchingBranch = !useWorktree && !!baseBranch && !!currentBranch && baseBranch !== currentBranch;
+  const showBranchDirtyCount = (branchContext?.dirtyCount ?? 0) > 0;
+  const showBranchAhead = (branchContext?.ahead ?? 0) > 0;
+  const showBranchBehind = (branchContext?.behind ?? 0) > 0;
+  const showBranchMetrics = showBranchDirtyCount || showBranchAhead || showBranchBehind;
 
   useEffect(() => {
     if (!projectPath || !baseBranch) {
@@ -406,13 +410,25 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
                     {branchContext.lastCommitDate ? ` (${branchContext.lastCommitDate})` : ""}
                   </span>
                 ) : null}
-                <span className="inline-flex items-center gap-1.5 tabular-nums">
-                  <Files className="size-3 shrink-0" />
-                  <span>{branchContext?.dirtyCount ?? 0}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="text-[var(--sb-diff-add-fg)]">+{branchContext?.ahead ?? 0}</span>
-                  <span className="text-[var(--sb-diff-del-fg)]">-{branchContext?.behind ?? 0}</span>
-                </span>
+                {showBranchMetrics ? (
+                  <span className="inline-flex items-center gap-1.5 tabular-nums">
+                    {showBranchDirtyCount ? (
+                      <>
+                        <Files className="size-3 shrink-0" />
+                        <span>{branchContext?.dirtyCount ?? 0}</span>
+                      </>
+                    ) : null}
+                    {showBranchDirtyCount && (showBranchAhead || showBranchBehind) ? (
+                      <span aria-hidden="true">·</span>
+                    ) : null}
+                    {showBranchAhead ? (
+                      <span className="text-[var(--sb-diff-add-fg)]">+{branchContext?.ahead ?? 0}</span>
+                    ) : null}
+                    {showBranchBehind ? (
+                      <span className="text-[var(--sb-diff-del-fg)]">-{branchContext?.behind ?? 0}</span>
+                    ) : null}
+                  </span>
+                ) : null}
               </>
             )}
           </div>
