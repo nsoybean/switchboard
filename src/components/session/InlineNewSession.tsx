@@ -5,6 +5,7 @@ import { AgentIcon } from "@/components/agents/AgentIcon";
 import { GitBranchSummary } from "@/components/git/GitBranchSummary";
 import { BranchPicker } from "@/components/git/BranchPicker";
 import { CreateBranchDialog } from "@/components/git/CreateBranchDialog";
+import { ProjectPicker } from "@/components/projects/ProjectPicker";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -36,6 +37,7 @@ interface PastedImage {
 }
 
 export interface InlineNewSessionConfig {
+  projectPath: string;
   agent: AgentType;
   label: string;
   isAutoLabel: boolean;
@@ -46,6 +48,8 @@ export interface InlineNewSessionConfig {
 
 interface InlineNewSessionProps {
   projectPath: string | null;
+  projectPaths: string[];
+  onProjectSelect?: (projectPath: string) => Promise<void> | void;
   onSubmit: (config: InlineNewSessionConfig) => void;
 }
 
@@ -64,18 +68,19 @@ function extensionFromMime(mime: string): string {
   return "png";
 }
 
-export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProps) {
+export function InlineNewSession({ projectPath, projectPaths, onProjectSelect, onSubmit }: InlineNewSessionProps) {
   const [agent, setAgent] = useState<AgentType>("claude-code");
   const [task, setTask] = useState("");
   const [useWorktree, setUseWorktree] = useState(false);
+  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(projectPath);
   const [baseBranch, setBaseBranch] = useState("");
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const [branchContext, setBranchContext] = useState<InlineBranchContext | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const git = useGitState({
-    cwd: projectPath ?? "",
-    visible: Boolean(projectPath),
+    cwd: selectedProjectPath ?? "",
+    visible: Boolean(selectedProjectPath),
   });
 
 
@@ -92,7 +97,19 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   }, []);
 
   useEffect(() => {
-    if (!projectPath) return;
+    setSelectedProjectPath((current) => {
+      if (current && projectPaths.includes(current)) {
+        return current;
+      }
+      if (projectPath && projectPaths.includes(projectPath)) {
+        return projectPath;
+      }
+      return projectPaths[0] ?? null;
+    });
+  }, [projectPath, projectPaths]);
+
+  useEffect(() => {
+    if (!selectedProjectPath) return;
 
     setBaseBranch((current) => {
       if (current && git.branches.some((branch) => branch.name === current)) {
@@ -100,7 +117,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
       }
       return git.branch || git.branches.find((branch) => branch.is_current)?.name || git.branches[0]?.name || "";
     });
-  }, [git.branch, git.branches, projectPath]);
+  }, [git.branch, git.branches, selectedProjectPath]);
 
   const handleCreateBranch = useCallback(
     async (branchName: string) => {
@@ -127,6 +144,8 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   );
 
   const handleSubmit = useCallback(() => {
+    if (!selectedProjectPath) return;
+
     // Build the task text, appending image paths if any
     let fullTask = task.trim();
     if (pastedImages.length > 0) {
@@ -135,6 +154,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     }
 
     onSubmit({
+      projectPath: selectedProjectPath,
       agent,
       label: "",
       isAutoLabel: true,
@@ -150,7 +170,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     setTask("");
     setPastedImages([]);
     setUseWorktree(false);
-  }, [agent, task, pastedImages, useWorktree, baseBranch, currentBranch, onSubmit]);
+  }, [agent, task, pastedImages, useWorktree, baseBranch, currentBranch, onSubmit, selectedProjectPath]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -202,7 +222,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   const selectedAgent = AGENTS.find((a) => a.id === agent) ?? AGENTS[0];
   const displayBranch = useWorktree ? baseBranch : (currentBranch ?? baseBranch);
   const disableSubmit =
-    git.branchActionPending || (useWorktree && (git.branchesLoading || !displayBranch));
+    !selectedProjectPath || git.branchActionPending || (useWorktree && (git.branchesLoading || !displayBranch));
 
   const handleBranchSelect = useCallback(
     async (branchName: string) => {
@@ -223,7 +243,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
   );
 
   useEffect(() => {
-    if (!projectPath || !displayBranch || !useWorktree) {
+    if (!selectedProjectPath || !displayBranch || !useWorktree) {
       setBranchContext(null);
       return;
     }
@@ -231,7 +251,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
     let cancelled = false;
     const loadBranchContext = async () => {
       try {
-        const summary = await gitCommands.statusSummary(projectPath, displayBranch);
+        const summary = await gitCommands.statusSummary(selectedProjectPath, displayBranch);
         if (cancelled) return;
         setBranchContext({
           branch: summary.branch,
@@ -253,7 +273,7 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [displayBranch, projectPath, useWorktree]);
+  }, [displayBranch, selectedProjectPath, useWorktree]);
 
   const liveBranchSummary = useMemo(() => ({
     branch: currentBranch ?? displayBranch ?? "",
@@ -276,6 +296,23 @@ export function InlineNewSession({ projectPath, onSubmit }: InlineNewSessionProp
       <div className="w-full max-w-xl px-6">
         {/* Badge-style options bar */}
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <ProjectPicker
+                  projects={projectPaths}
+                  value={selectedProjectPath}
+                  onSelect={(path) => {
+                    setSelectedProjectPath(path);
+                    void onProjectSelect?.(path);
+                  }}
+                  triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
+                />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Choose the project for this new session</TooltipContent>
+          </Tooltip>
+
           {/* Agent badge */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

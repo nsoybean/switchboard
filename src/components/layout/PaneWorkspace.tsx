@@ -76,7 +76,9 @@ interface PaneWorkspaceProps {
   openFilePath: string | null;
   revealRequest: { tabId: string; nonce: number } | null;
   projectPath: string | null;
+  projectPaths: string[];
   onInlineNewSession: (config: InlineNewSessionConfig) => void;
+  onInlineProjectSelect?: (projectPath: string) => Promise<void> | void;
   onSelectLiveSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
@@ -749,7 +751,9 @@ export function PaneWorkspace({
   openFilePath,
   revealRequest,
   projectPath,
+  projectPaths,
   onInlineNewSession,
+  onInlineProjectSelect,
   onSelectLiveSession,
   onCloseSession,
   onCloseTranscript,
@@ -1048,7 +1052,14 @@ export function PaneWorkspace({
   const paneCount = countLeaves(layout.root);
 
   if (surfaces.length === 0 || !layout.root) {
-    return <InlineNewSession projectPath={projectPath} onSubmit={onInlineNewSession} />;
+    return (
+      <InlineNewSession
+        projectPath={projectPath}
+        projectPaths={projectPaths}
+        onProjectSelect={onInlineProjectSelect}
+        onSubmit={onInlineNewSession}
+      />
+    );
   }
 
   return (

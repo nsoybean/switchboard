@@ -155,6 +155,7 @@ export function AppLayout() {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogProjectPath, setDialogProjectPath] = useState<string | null>(null);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
@@ -241,6 +242,7 @@ export function AppLayout() {
 
     if (!selectedSession) {
       return {
+        sessionId: null,
         kind: "project",
         rootPath: null,
         label: projectLabel,
@@ -259,6 +261,7 @@ export function AppLayout() {
         : "history";
 
     return {
+      sessionId: selectedSession.id,
       kind: "session",
       rootPath: null,
       label: selectedSession.label,
@@ -365,11 +368,13 @@ export function AppLayout() {
     // as the terminal fills the gap then shrinks back.
     setWorkspaceContext((prev) => {
       if (!prev || prev.availability !== "ready") return workspaceCandidate;
-      // Same session — keep the already-resolved context while re-resolving
-      const prevKey = prev.kind === "session" ? prev.label : "project";
+      // Same workspace target — keep the already-resolved context while re-resolving.
+      const prevKey = prev.kind === "session"
+        ? `session:${prev.sessionId ?? "unknown"}`
+        : `project:${state.projectPath ?? "none"}`;
       const nextKey = workspaceCandidate?.kind === "session"
-        ? workspaceCandidate.label
-        : "project";
+        ? `session:${workspaceCandidate.sessionId ?? "unknown"}`
+        : `project:${state.projectPath ?? "none"}`;
       if (prevKey === nextKey) return prev;
       return workspaceCandidate;
     });
@@ -390,6 +395,7 @@ export function AppLayout() {
           if (cancelled) return;
 
           setWorkspaceContext({
+            sessionId: null,
             kind: "project",
             rootPath:
               status.exists && status.is_dir
@@ -440,6 +446,7 @@ export function AppLayout() {
           }
 
           setWorkspaceContext({
+            sessionId: selectedSession.id,
             kind: "session",
             rootPath: status.canonical_path ?? candidate.path,
             label: selectedSession.label,
@@ -454,6 +461,7 @@ export function AppLayout() {
         if (cancelled) return;
 
         setWorkspaceContext({
+          sessionId: selectedSession.id,
           kind: "session",
           rootPath: null,
           label: selectedSession.label,
@@ -468,6 +476,7 @@ export function AppLayout() {
         console.error("Failed to resolve workspace context:", error);
         setWorkspaceContext({
           ...(workspaceCandidate ?? {
+            sessionId: null,
             kind: "project",
             rootPath: null,
             label: projectLabel,
@@ -539,6 +548,7 @@ export function AppLayout() {
 
   const handleNewSession = useCallback(
     async (config: {
+      projectPath: string;
       agent: AgentType;
       label: string;
       isAutoLabel: boolean;
@@ -546,9 +556,9 @@ export function AppLayout() {
       useWorktree: boolean;
       baseBranch: string | null;
     }) => {
-      if (!state.projectPath) return;
+      if (!config.projectPath) return;
       const id = crypto.randomUUID();
-      let cwd = state.projectPath;
+      let cwd = config.projectPath;
       let worktreePath: string | null = null;
       let branch: string | null = null;
       let baseBranchName: string | null = null;
@@ -558,7 +568,7 @@ export function AppLayout() {
           const slug = slugifyLabel(config.label || `session-${Date.now().toString(36)}`);
           const branchName = `${getBranchPrefix(config.agent)}${slug}`;
           const info = await worktreeCommands.create(
-            state.projectPath,
+            config.projectPath,
             branchName,
             config.label,
             config.baseBranch,
@@ -578,7 +588,7 @@ export function AppLayout() {
         // Branch is not persisted on the session — useGitState polls the
         // real HEAD and keeps all local sessions up to date.
         try {
-          await gitCommands.checkoutBranch(state.projectPath, config.baseBranch);
+          await gitCommands.checkoutBranch(config.projectPath, config.baseBranch);
         } catch (err) {
           toast.error("Failed to checkout branch", {
             description: String(err),
@@ -620,7 +630,7 @@ export function AppLayout() {
         worktreePath,
         branch,
         workspace: buildWorkspaceIdentity({
-          repoRoot: state.projectPath,
+          repoRoot: config.projectPath,
           launchRoot: cwd,
           worktreePath,
           branchName: branch,
@@ -633,11 +643,16 @@ export function AppLayout() {
         args,
         env,
       };
+      await projectCommands.setPath(config.projectPath).catch((err) => {
+        console.warn("Failed to persist current project path:", err);
+      });
       dispatch({ type: "ADD_SESSION", session });
+      dispatch({ type: "SET_PROJECT_PATH", path: config.projectPath });
       dispatch({ type: "SET_ACTIVE", id: session.id });
+      setDialogProjectPath(config.projectPath);
       persistSession(session);
     },
-    [dispatch, persistSession, state.projectPath],
+    [dispatch, persistSession],
   );
 
   const syncCodexResumeTarget = useCallback(
@@ -746,6 +761,11 @@ export function AppLayout() {
   );
 
   const openSettings = useCallback(() => setSettingsOpen(true), []);
+
+  const openNewSessionDialog = useCallback((projectPath?: string) => {
+    setDialogProjectPath(projectPath ?? state.projectPath ?? state.projects[0] ?? null);
+    setDialogOpen(true);
+  }, [state.projectPath, state.projects]);
 
   const handleSelectProject = useCallback(
     async (path: string) => {
@@ -1262,7 +1282,7 @@ export function AppLayout() {
           (currentIdx - 1 + sortedSessionIds.length) % sortedSessionIds.length;
         dispatch({ type: "SET_ACTIVE", id: sortedSessionIds[prevIdx] });
       },
-      onNewSession: () => setDialogOpen(true),
+      onNewSession: () => openNewSessionDialog(),
       onCloseSession: () => {
         // Close file tab first if one is open
         if (openFilePath) {
@@ -1347,7 +1367,7 @@ export function AppLayout() {
 
   const sidebarContent = (
     <SessionSidebar
-      onNewSession={() => setDialogOpen(true)}
+      onNewSession={(projectPath) => openNewSessionDialog(projectPath)}
       onAddProject={() => setProjectPickerOpen(true)}
       onSelectProject={handleSelectProject}
       onOpenProject={handleOpenProject}
@@ -1417,7 +1437,7 @@ export function AppLayout() {
                 : "Manage multiple AI coding agents in a structured pane workspace."
               : "Manage multiple AI coding agents in parallel. Open a project to get started."}
           </p>
-          <Button onClick={() => (state.projectPath ? setDialogOpen(true) : setProjectPickerOpen(true))}>
+          <Button onClick={() => (state.projectPath ? openNewSessionDialog() : setProjectPickerOpen(true))}>
             {state.projectPath ? null : <FolderOpen data-icon="inline-start" />}
             {state.projectPath ? "Start First Session" : "Open Project"}
             {state.projectPath ? (
@@ -1500,7 +1520,9 @@ export function AppLayout() {
                   openFilePath={openFilePath}
                   revealRequest={paneRevealRequest}
                   projectPath={state.projectPath}
+                  projectPaths={state.projects}
                   onInlineNewSession={handleNewSession}
+                  onInlineProjectSelect={handleSelectProject}
                   onSelectLiveSession={(sessionId) =>
                     dispatch({ type: "SET_ACTIVE", id: sessionId })
                   }
@@ -1617,8 +1639,12 @@ export function AppLayout() {
       {/* New Session Dialog */}
       <NewSessionDialog
         open={dialogOpen}
-        projectPath={state.projectPath}
-        onClose={() => setDialogOpen(false)}
+        projectPath={dialogProjectPath ?? state.projectPath}
+        projectPaths={state.projects}
+        onClose={() => {
+          setDialogOpen(false);
+          setDialogProjectPath(null);
+        }}
         onSubmit={handleNewSession}
       />
 
@@ -1669,8 +1695,7 @@ export function AppLayout() {
           void handlePaletteSelectSession(session);
         }}
         onNewSessionInProject={(projectPath) => {
-          dispatch({ type: "SET_PROJECT_PATH", path: projectPath });
-          setDialogOpen(true);
+          openNewSessionDialog(projectPath);
         }}
       />
 

@@ -15,6 +15,7 @@ import { GitFork } from "lucide-react";
 import { toast } from "sonner";
 import { BranchPicker } from "@/components/git/BranchPicker";
 import { CreateBranchDialog } from "@/components/git/CreateBranchDialog";
+import { ProjectPicker } from "@/components/projects/ProjectPicker";
 import { getBranchPrefix } from "@/lib/branches";
 import type { AgentType } from "../../state/types";
 import { gitCommands, type GitBranchInfo } from "../../lib/tauri-commands";
@@ -22,8 +23,10 @@ import { gitCommands, type GitBranchInfo } from "../../lib/tauri-commands";
 interface NewSessionDialogProps {
   open: boolean;
   projectPath: string | null;
+  projectPaths: string[];
   onClose: () => void;
   onSubmit: (config: {
+    projectPath: string;
     agent: AgentType;
     label: string;
     isAutoLabel: boolean;
@@ -42,6 +45,7 @@ const AGENTS: { id: AgentType; name: string }[] = [
 export function NewSessionDialog({
   open,
   projectPath,
+  projectPaths,
   onClose,
   onSubmit,
 }: NewSessionDialogProps) {
@@ -49,6 +53,7 @@ export function NewSessionDialog({
   const [label, setLabel] = useState("");
   const [task, setTask] = useState("");
   const [useWorktree, setUseWorktree] = useState(false);
+  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(projectPath);
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [branches, setBranches] = useState<GitBranchInfo[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -57,7 +62,21 @@ export function NewSessionDialog({
   const defaultBranchPrefix = getBranchPrefix(agent);
 
   useEffect(() => {
-    if (!open || !projectPath) {
+    if (!open) return;
+
+    setSelectedProjectPath((current) => {
+      if (current && projectPaths.includes(current)) {
+        return current;
+      }
+      if (projectPath && projectPaths.includes(projectPath)) {
+        return projectPath;
+      }
+      return projectPaths[0] ?? null;
+    });
+  }, [open, projectPath, projectPaths]);
+
+  useEffect(() => {
+    if (!open || !selectedProjectPath) {
       return;
     }
 
@@ -65,7 +84,7 @@ export function NewSessionDialog({
     setBranchesLoading(true);
 
     gitCommands
-      .listBranches(projectPath)
+      .listBranches(selectedProjectPath)
       .then((nextBranches) => {
         if (cancelled) return;
         setBranches(nextBranches);
@@ -101,14 +120,14 @@ export function NewSessionDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, projectPath]);
+  }, [open, selectedProjectPath]);
 
-  const disableSubmit = useWorktree && (branchesLoading || !baseBranch);
+  const disableSubmit = !selectedProjectPath || (useWorktree && (branchesLoading || !baseBranch));
 
   const refreshBranches = async (nextSelectedBranch?: string) => {
-    if (!projectPath) return;
+    if (!selectedProjectPath) return;
 
-    const nextBranches = await gitCommands.listBranches(projectPath);
+    const nextBranches = await gitCommands.listBranches(selectedProjectPath);
     setBranches(nextBranches);
     setBaseBranch((currentValue) => {
       if (
@@ -134,11 +153,11 @@ export function NewSessionDialog({
   };
 
   const handleCreateBranch = async (branchName: string) => {
-    if (!projectPath) return;
+    if (!selectedProjectPath) return;
 
     try {
       setCreateBranchPending(true);
-      await gitCommands.createBranch(projectPath, branchName);
+      await gitCommands.createBranch(selectedProjectPath, branchName);
       await refreshBranches(branchName);
       setCreateBranchOpen(false);
     } catch (error) {
@@ -151,8 +170,11 @@ export function NewSessionDialog({
   };
 
   const handleSubmit = () => {
+    if (!selectedProjectPath) return;
+
     const trimmedLabel = label.trim();
     onSubmit({
+      projectPath: selectedProjectPath,
       agent,
       label: trimmedLabel,
       isAutoLabel: !trimmedLabel,
@@ -178,6 +200,17 @@ export function NewSessionDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4 pt-2">
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Project
+            </label>
+            <ProjectPicker
+              projects={projectPaths}
+              value={selectedProjectPath}
+              onSelect={setSelectedProjectPath}
+            />
+          </div>
+
           {/* Agent picker */}
           <div className="flex flex-col gap-2">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">

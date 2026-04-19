@@ -44,7 +44,7 @@ import { formatCompactRelativeTime, formatTimestampTitle } from "@/lib/time";
 import type { Session } from "../../state/types";
 
 interface SessionSidebarProps {
-  onNewSession: () => void;
+  onNewSession: (projectPath?: string) => void;
   onAddProject?: () => void;
   onSelectProject?: (path: string) => Promise<void> | void;
   onOpenProject?: (path: string) => Promise<void> | void;
@@ -75,15 +75,11 @@ function getSessionProjectPath(session: Session): string {
 }
 
 /** Letter avatar for a project name */
-function ProjectAvatar({ name, isActive }: { name: string; isActive: boolean }) {
+function ProjectAvatar({ name }: { name: string }) {
   const letter = (name[0] ?? "?").toUpperCase();
   return (
     <span
-      className={`flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold ${
-        isActive
-          ? "bg-foreground text-background"
-          : "bg-muted text-muted-foreground"
-      }`}
+      className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-semibold text-muted-foreground"
     >
       {letter}
     </span>
@@ -317,12 +313,8 @@ export function SessionSidebar({
         }),
       }))
       .filter((group) => group.sessions.length > 0)
-      .sort((a, b) => {
-        if (a.path === state.projectPath) return -1;
-        if (b.path === state.projectPath) return 1;
-        return a.name.localeCompare(b.name);
-      });
-  }, [historyQuery, projectGroups, state.projectPath]);
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [historyQuery, projectGroups]);
 
   useEffect(() => {
     const currentProjectPath = state.projectPath;
@@ -533,7 +525,7 @@ export function SessionSidebar({
           variant="outline"
           size="sm"
           className="w-full justify-center gap-1.5 text-xs"
-          onClick={onNewSession}
+          onClick={() => onNewSession()}
         >
           <Plus className="size-3.5" />
           New Session
@@ -546,7 +538,7 @@ export function SessionSidebar({
           {/* Pinned section */}
           <div className="mb-1">
               <div
-                className="flex items-center gap-2 px-3 py-1.5 w-full text-left cursor-pointer"
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left"
                 onClick={() => setPinnedCollapsed((prev) => !prev)}
               >
                 <span className="flex size-6 shrink-0 items-center justify-center">
@@ -633,7 +625,6 @@ export function SessionSidebar({
           </div>
 
           {projectGroups.map((group) => {
-            const isActiveProject = group.path === state.projectPath;
             const isCollapsed = collapsedProjects[group.path] ?? false;
             const unpinnedSessions = group.sessions.filter((s) => !pinnedIds.includes(s.id));
             const visibleSessions = unpinnedSessions.slice(0, PROJECT_SESSION_PREVIEW_LIMIT);
@@ -642,13 +633,12 @@ export function SessionSidebar({
               <div key={group.path}>
                 {/* Project header */}
                 <div className="group/project flex items-center gap-2 px-3 py-1.5">
-                  <button
-                    type="button"
-                    onClick={() => void handleSelectProject(group.path)}
-                    className="flex min-w-0 flex-1 items-center gap-2"
+                  <div
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
                     title={group.path}
+                    onClick={() => toggleProject(group.path)}
                   >
-                    <ProjectAvatar name={group.name} isActive={isActiveProject} />
+                    <ProjectAvatar name={group.name} />
                     <span className="truncate text-sm font-semibold">
                       {group.name}
                     </span>
@@ -656,12 +646,8 @@ export function SessionSidebar({
                       className={`size-3 shrink-0 text-muted-foreground transition-transform ${
                         isCollapsed ? "-rotate-90" : ""
                       }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleProject(group.path);
-                      }}
                     />
-                  </button>
+                  </div>
 
                   <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/project:opacity-100 group-focus-within/project:opacity-100">
                     <Button
@@ -669,7 +655,7 @@ export function SessionSidebar({
                       variant="ghost"
                       size="icon-xs"
                       className="size-6 text-muted-foreground hover:text-foreground"
-                      onClick={onNewSession}
+                      onClick={() => onNewSession(group.path)}
                       title="New session"
                     >
                       <Plus className="size-3.5" />
@@ -961,7 +947,6 @@ export function SessionSidebar({
                       <div className="flex items-center justify-between px-1">
                         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                           {group.name}
-                          {group.path === state.projectPath ? " · Current Project" : ""}
                         </div>
                         <div className="text-[10px] text-muted-foreground">
                           {group.sessions.length}

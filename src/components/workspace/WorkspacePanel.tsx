@@ -10,6 +10,7 @@ import type { Session } from "@/state/types";
 export type WorkspaceTab = "files" | "changes";
 
 export interface WorkspaceContext {
+  sessionId?: string | null;
   kind: "project" | "session";
   rootPath: string | null;
   label: string;
@@ -98,6 +99,7 @@ export function WorkspacePanel({
   if (!context) {
     if (!projectPath) return null;
     const projectContext: WorkspaceContext = {
+      sessionId: null,
       kind: "project",
       rootPath: projectPath,
       label: projectPath.split("/").pop() ?? projectPath,
