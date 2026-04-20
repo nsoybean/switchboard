@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fileCommands, gitCommands } from "../../lib/tauri-commands";
-import { GitToolbar } from "./GitToolbar";
 import { DiffView } from "./DiffView";
 import { GitHistory } from "./GitHistory";
 import { StashPanel } from "./StashPanel";
@@ -30,7 +29,6 @@ interface GitPanelProps {
   cwd: string;
   git: GitState & GitActions;
   sessions?: Session[];
-  githubToken?: string | null;
   onOpenDiff?: (diff: { path: string; staged: boolean; status: string }) => void;
   activeDiffPath?: string | null;
   activeDiffStaged?: boolean | null;
@@ -96,7 +94,6 @@ export const GitPanel = memo(function GitPanel({
   cwd,
   git,
   sessions = [],
-  githubToken,
   onOpenDiff,
   activeDiffPath,
   activeDiffStaged,
@@ -190,19 +187,6 @@ export const GitPanel = memo(function GitPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <GitToolbar
-        branchActionPending={git.branchActionPending}
-        currentBranchUpstreamStatus={git.currentBranchUpstreamStatus}
-        cwd={cwd}
-        githubToken={githubToken ?? null}
-        onCommit={git.commit}
-        onStageAll={git.stageAll}
-        onPull={git.pull}
-        onPush={git.push}
-        onFetch={git.fetch}
-        onRefresh={git.refresh}
-      />
-
       <div className="min-h-0 flex-1 overflow-y-auto">
         <GitSection
           icon={<Files className="size-3.5" />}
