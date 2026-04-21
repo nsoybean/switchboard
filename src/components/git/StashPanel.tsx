@@ -153,15 +153,15 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
               key={entry.ref_name}
               className="group flex items-start gap-2 px-3 py-1.5 text-xs hover:bg-accent/40"
             >
-              <div className="min-w-0 flex-1">
-                <span className="font-mono text-[10px] text-muted-foreground">
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <span className="truncate font-mono text-[10px] text-muted-foreground" title={entry.ref_name}>
                   {entry.ref_name}
                 </span>
-                <span className="ml-2 truncate text-foreground">{entry.message}</span>
+                <span className="ml-2 truncate text-foreground" title={entry.message}>{entry.message}</span>
                 <div className="mt-0.5 text-[10px] text-muted-foreground">{entry.date}</div>
               </div>
               <div className={cn(
-                "flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
+                "hidden shrink-0 items-center gap-0.5 transition-opacity group-hover:flex",
               )}>
                 <Tooltip>
                   <TooltipTrigger asChild>
