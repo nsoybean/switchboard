@@ -19,7 +19,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        // .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             #[cfg(desktop)]
             app.handle()
@@ -115,8 +115,8 @@ pub fn run() {
             commands::files::inspect_directory,
             commands::files::read_file_contents,
             commands::files::save_temp_image,
-            // commands::session::get_notification_prefs,
-            // commands::session::set_notification_prefs,
+            commands::session::get_notification_prefs,
+            commands::session::set_notification_prefs,
             commands::hooks::write_claude_hook_config,
             commands::hooks::write_codex_hook_config,
             hook_server::get_hook_port,

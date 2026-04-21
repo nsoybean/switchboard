@@ -6,40 +6,12 @@ import { settingsCommands, type NotificationPrefs } from "@/lib/tauri-commands";
 import type { SessionStatus } from "@/state/types";
 
 const DEFAULT_PREFS: NotificationPrefs = {
-  native_enabled: true,
-  notch_enabled: true,
+  enabled: true,
   sound_enabled: false,
-  statuses: {
-    idle: true,
-    done: true,
-    error: true,
-    needs_input: true,
-    stopped: true,
-  },
 };
 
 /** Statuses that mean "user attention needed" */
 const ATTENTION_STATUSES: Set<SessionStatus> = new Set(["idle", "needs-input"]);
-
-function isStatusEnabled(
-  status: SessionStatus,
-  prefs: NotificationPrefs,
-): boolean {
-  switch (status) {
-    case "idle":
-      return prefs.statuses.idle;
-    case "done":
-      return prefs.statuses.done;
-    case "error":
-      return prefs.statuses.error;
-    case "stopped":
-      return prefs.statuses.stopped;
-    case "needs-input":
-      return prefs.statuses.needs_input;
-    default:
-      return false;
-  }
-}
 
 /**
  * Bounce the dock icon when any session needs attention and the window is not focused.
@@ -80,8 +52,7 @@ export function useDockAttention() {
     // Window is unfocused — check if any sessions need attention
     const prefs = prefsRef.current;
     const attentionCount = Object.values(state.sessions).filter(
-      (s) =>
-        ATTENTION_STATUSES.has(s.status) && isStatusEnabled(s.status, prefs),
+      (s) => ATTENTION_STATUSES.has(s.status) && prefs.enabled,
     ).length;
 
     if (attentionCount > 0) {

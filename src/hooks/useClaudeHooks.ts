@@ -1,7 +1,26 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+  onNotificationReceived,
+} from "@tauri-apps/plugin-notification";
 import { useEffect, useRef, type Dispatch } from "react";
 import type { AppAction, Session, SessionStatus } from "@/state/types";
+import { settingsCommands } from "@/lib/tauri-commands";
+
+async function ensureNotificationPermission(): Promise<boolean> {
+  let granted = await isPermissionGranted();
+  if (!granted) {
+    const permission = await requestPermission();
+    granted = permission === "granted";
+  }
+  return granted;
+}
+
+// Request permission eagerly on first load
+ensureNotificationPermission().catch(() => {});
 
 interface AgentHookEvent {
   session_id: string;
@@ -31,7 +50,6 @@ export function useAgentHooks(
   const sessionsRef = useRef(sessions);
   const onAutoLabelRef = useRef(onAutoLabel);
 
-  // Keep refs current to avoid stale closures in the event listener
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
@@ -39,6 +57,20 @@ export function useAgentHooks(
   useEffect(() => {
     onAutoLabelRef.current = onAutoLabel;
   }, [onAutoLabel]);
+
+  // Navigate to session when a notification is tapped
+  useEffect(() => {
+    const listenerPromise = onNotificationReceived((notification) => {
+      const sessionId = notification.extra?.sessionId as string | undefined;
+      if (sessionId) {
+        dispatch({ type: "SET_ACTIVE", id: sessionId });
+      }
+    });
+
+    return () => {
+      listenerPromise.then((listener) => listener.unregister());
+    };
+  }, [dispatch]);
 
   useEffect(() => {
     const unlisten = listen<AgentHookEvent>("agent-hook", (event) => {
@@ -75,7 +107,6 @@ export function useAgentHooks(
         (session.agent === "claude-code" || session.agent === "codex")
       ) {
         const nativeSessionId = session.resumeTargetId ?? session.id;
-        // Small delay to let history.jsonl be written
         setTimeout(async () => {
           try {
             const prompt = await invoke<string | null>(
@@ -88,13 +119,38 @@ export function useAgentHooks(
               onAutoLabelRef.current?.(session.id, label);
             }
           } catch {
-            // Auto-label is best-effort; don't disrupt the session
+            // best-effort
           }
         }, 500);
       }
 
-      // Skip if status hasn't changed
       if (session.status === status) return;
+
+      // Desktop notification on session completion — only when app is not focused
+      if (
+        (event_name === "Stop" || event_name === "StopFailure") &&
+        session.status === "running" &&
+        !document.hasFocus()
+      ) {
+        void ensureNotificationPermission().then(async (granted) => {
+          if (!granted) return;
+          try {
+            const prefs = await settingsCommands.getNotificationPrefs();
+            if (!prefs.enabled) return;
+            sendNotification({
+              title: session.label || "Session complete",
+              body:
+                event_name === "StopFailure"
+                  ? "Agent stopped with an error"
+                  : "Agent finished",
+              sound: prefs.sound_enabled ? "Ping" : undefined,
+              extra: { sessionId: session.id },
+            });
+          } catch {
+            // best-effort
+          }
+        });
+      }
 
       dispatch({ type: "UPDATE_STATUS", id: session.id, status });
     });
