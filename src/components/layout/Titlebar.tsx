@@ -1,14 +1,19 @@
 import { useState, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   ArrowDownToLine,
-  ExternalLink,
+  ArrowUp,
+  ArrowDown,
+  ChevronDown,
+  GitCommit,
   GitPullRequest,
   LayoutGrid,
   Loader2,
   PanelTop,
   PanelLeft,
   PanelRight,
+  RefreshCw,
   Settings,
   Sun,
   Moon,
@@ -20,9 +25,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Spinner } from "@/components/ui/spinner";
 import { BranchPicker } from "@/components/git/BranchPicker";
+import { CommitDialog } from "@/components/git/CommitDialog";
 import { useTheme } from "@/components/theme-provider";
-import type { GitState } from "@/hooks/useGitState";
+import type { GitState, GitActions } from "@/hooks/useGitState";
+
+type GitWithActions = GitState &
+  Pick<GitActions, "switchBranch" | "createBranch" | "commit" | "stageAll" | "pull" | "push" | "fetch" | "refresh">;
 
 interface TitlebarProps {
   sidebarOpen: boolean;
@@ -34,7 +52,7 @@ interface TitlebarProps {
   onWorkspaceShellModeChange?: (mode: "pane" | "canvas") => void;
   projectPath?: string | null;
   hasActiveSession?: boolean;
-  git?: GitState & { switchBranch: (name: string) => Promise<void> };
+  git?: GitWithActions;
   githubToken?: string | null;
   cwd?: string | null;
   onCreateBranch?: () => void;
@@ -67,13 +85,48 @@ export function Titlebar({
   installingUpdate = false,
   updateProgress = null,
   onInstallUpdate,
+  cwd,
 }: TitlebarProps) {
   const { theme, setTheme } = useTheme();
   const appWindow = getCurrentWindow();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
+  const [pullPending, setPullPending] = useState(false);
+  const [pushPending, setPushPending] = useState(false);
+  const [fetchPending, setFetchPending] = useState(false);
   const projectPathLabel = projectPath
     ? projectPath.split("/").slice(-2).join("/")
     : null;
+
+  const hasChanges = (git?.files.length ?? 0) > 0;
+  const canPush = (git?.aheadBehind.ahead ?? 0) > 0;
+  const canPull = (git?.aheadBehind.behind ?? 0) > 0;
+  const pushLabel = "Push";
+  const anyGitPending = git?.branchActionPending || pullPending || pushPending || fetchPending;
+
+  const handlePull = () => {
+    if (!git?.pull || pullPending || anyGitPending) return;
+    window.setTimeout(async () => {
+      flushSync(() => setPullPending(true));
+      try { await git.pull(); } finally { setPullPending(false); }
+    }, 0);
+  };
+
+  const handlePush = () => {
+    if (!git?.push || pushPending || anyGitPending) return;
+    window.setTimeout(async () => {
+      flushSync(() => setPushPending(true));
+      try { await git.push(); } finally { setPushPending(false); }
+    }, 0);
+  };
+
+  const handleFetch = () => {
+    if (!git?.fetch || fetchPending) return;
+    window.setTimeout(async () => {
+      setFetchPending(true);
+      try { await git.fetch(); } finally { setFetchPending(false); }
+    }, 0);
+  };
 
   useEffect(() => {
     // Check initial fullscreen state
@@ -162,7 +215,7 @@ export function Titlebar({
         </div>
       </div>
 
-      {/* Branch + Create PR — show when project is open OR active session has git state */}
+      {/* Branch + git actions — show when project is open OR active session has git state */}
       {(projectPath || (hasActiveSession && git?.branch)) && git?.branch && (
         <div data-tauri-drag-region className="flex items-center gap-2 text-[11px]">
           <BranchPicker
@@ -180,42 +233,141 @@ export function Titlebar({
           {git.aheadBehind && (git.aheadBehind.ahead > 0 || git.aheadBehind.behind > 0) && (
             <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               {git.aheadBehind.ahead > 0 && (
-                <span className="text-[var(--sb-diff-add-fg)]">+{git.aheadBehind.ahead}</span>
+                <span className="flex items-center gap-0.5 text-[var(--sb-diff-add-fg)]">
+                  <ArrowUp className="size-2.5" />{git.aheadBehind.ahead}
+                </span>
               )}
               {git.aheadBehind.behind > 0 && (
-                <span className="text-[var(--sb-diff-del-fg)]">-{git.aheadBehind.behind}</span>
+                <span className="flex items-center gap-0.5 text-[var(--sb-diff-del-fg)]">
+                  <ArrowDown className="size-2.5" />{git.aheadBehind.behind}
+                </span>
               )}
             </span>
           )}
 
-          {hasActiveSession && (
-            <>
-              <Separator orientation="vertical" className="h-4" />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 gap-1.5 px-2 text-[11px]"
-                      disabled={!githubToken}
-                      onClick={onCreatePr}
-                    >
-                      <GitPullRequest className="size-3" />
-                      Create PR
-                      <ExternalLink className="size-2.5" />
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {!githubToken && (
-                  <TooltipContent>
-                    Add a GitHub token in Settings to create PRs
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </>
-          )}
+          <Separator orientation="vertical" className="h-4" />
+
+          {/* Split commit button */}
+          <div className="flex items-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 rounded-r-none border-r-0 px-2.5 text-xs font-medium"
+                  disabled={!hasChanges || !!anyGitPending}
+                  onClick={() => setCommitDialogOpen(true)}
+                >
+                  {anyGitPending ? (
+                    <Spinner className="size-3" />
+                  ) : (
+                    <GitCommit className="size-3.5" />
+                  )}
+                  {pullPending
+                    ? "Pulling..."
+                    : pushPending
+                    ? `${pushLabel === "Push" ? "Pushing" : "Publishing"}...`
+                    : fetchPending
+                    ? "Fetching..."
+                    : "Commit"}
+                </Button>
+              </TooltipTrigger>
+              {!hasChanges && (
+                <TooltipContent>No changes to commit</TooltipContent>
+              )}
+            </Tooltip>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 rounded-l-none px-1.5 text-xs"
+                  disabled={!!anyGitPending}
+                >
+                  <ChevronDown className="size-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuGroup>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <DropdownMenuItem disabled={!canPush} onSelect={handlePush}>
+                          <ArrowUp className="size-3.5 mr-2" />
+                          {pushLabel}
+                        </DropdownMenuItem>
+                      </span>
+                    </TooltipTrigger>
+                    {!canPush && (
+                      <TooltipContent side="right">Nothing to {pushLabel.toLowerCase()}</TooltipContent>
+                    )}
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <DropdownMenuItem disabled={!canPull} onSelect={handlePull}>
+                          <ArrowDown className="size-3.5 mr-2" />
+                          Pull
+                        </DropdownMenuItem>
+                      </span>
+                    </TooltipTrigger>
+                    {!canPull && (
+                      <TooltipContent side="right">Already up to date</TooltipContent>
+                    )}
+                  </Tooltip>
+
+                  <DropdownMenuItem onSelect={handleFetch}>
+                    <RefreshCw className="size-3.5 mr-2" />
+                    Fetch
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuGroup>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <DropdownMenuItem
+                          disabled={!githubToken}
+                          onSelect={() => { if (githubToken) onCreatePr?.(); }}
+                        >
+                          <GitPullRequest className="size-3.5 mr-2" />
+                          Create PR
+                        </DropdownMenuItem>
+                      </span>
+                    </TooltipTrigger>
+                    {!githubToken && (
+                      <TooltipContent side="right">
+                        Add a GitHub token in Settings to create PRs
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+      )}
+
+      {/* Commit dialog */}
+      {git && cwd && (
+        <CommitDialog
+          open={commitDialogOpen}
+          onClose={() => setCommitDialogOpen(false)}
+          branch={git.branch}
+          files={git.files}
+          additions={git.stats.additions}
+          deletions={git.stats.deletions}
+          cwd={cwd}
+          githubToken={githubToken ?? null}
+          branchActionPending={git.branchActionPending}
+          onCommit={git.commit}
+          onStageAll={git.stageAll}
+          onPush={git.push}
+        />
       )}
 
       {/* Spacer — drag region */}

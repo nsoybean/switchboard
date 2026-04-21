@@ -1,9 +1,7 @@
-import { FolderTree, RefreshCw, Upload } from "lucide-react";
+import { FolderTree } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
-import { GitBranchSummary } from "../git/GitBranchSummary";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 import type { Session } from "@/state/types";
 
@@ -123,48 +121,9 @@ export function WorkspacePanel({
 
   const unavailableState = renderUnavailableState(context, activeTab);
   const changedFileCount = git.files.length;
-  const isNotGitRepo =
-    git.error !== null &&
-    (git.error.includes("not a git repository") ||
-      git.error.includes("needed a single revision"));
-  const showGitStatusBar = Boolean(context.rootPath) && !isNotGitRepo;
-  const branchLabel = git.branch || context.branch || "HEAD";
-  const showPublishAction = git.currentBranchUpstreamStatus !== "tracking";
-
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
       <div className="border-b">
-        {showGitStatusBar && (
-          <div className="flex items-center justify-between gap-2 border-b px-3 py-2 text-[11px] text-muted-foreground">
-            <GitBranchSummary
-              branch={branchLabel}
-              changedCount={changedFileCount}
-              ahead={git.aheadBehind.ahead}
-              behind={git.aheadBehind.behind}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 gap-1.5 px-2 text-[11px]"
-              onClick={() => {
-                if (showPublishAction) {
-                  void git.push();
-                  return;
-                }
-                void git.fetch();
-              }}
-              disabled={git.branchActionPending}
-            >
-              {showPublishAction ? (
-                <Upload className="size-3" />
-              ) : (
-                <RefreshCw className="size-3" />
-              )}
-              {showPublishAction ? "Publish" : "Fetch"}
-            </Button>
-          </div>
-        )}
         <div className="flex items-center justify-between px-2 py-2">
           <div className="flex items-center gap-1">
             {([
@@ -212,7 +171,6 @@ export function WorkspacePanel({
                 cwd={context.rootPath!}
                 git={git}
                 sessions={branchSessions}
-                githubToken={githubToken}
               />
             ) : null}
           </>
