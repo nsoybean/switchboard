@@ -449,30 +449,22 @@ pub fn load_workspace_layout() -> Result<Option<String>, String> {
     }
 }
 
-// -- Notification preferences (commented out — re-enable with dock bounce feature) --
+// -- Notification preferences --
 
-// #[tauri::command]
-// pub fn get_notification_prefs() -> Result<serde_json::Value, String> {
-//     let config = read_config()?;
-//     Ok(config.get("notifications").cloned().unwrap_or_else(|| {
-//         serde_json::json!({
-//             "native_enabled": true,
-//             "notch_enabled": true,
-//             "sound_enabled": false,
-//             "statuses": {
-//                 "idle": true,
-//                 "done": true,
-//                 "error": true,
-//                 "needs_input": true,
-//                 "stopped": true
-//             }
-//         })
-//     }))
-// }
-//
-// #[tauri::command]
-// pub fn set_notification_prefs(prefs: serde_json::Value) -> Result<(), String> {
-//     let mut config = read_config()?;
-//     config["notifications"] = prefs;
-//     write_config(&config)
-// }
+#[tauri::command]
+pub fn get_notification_prefs() -> Result<serde_json::Value, String> {
+    let config = read_config()?;
+    Ok(config.get("notifications").cloned().unwrap_or_else(|| {
+        serde_json::json!({
+            "enabled": true,
+            "sound_enabled": false
+        })
+    }))
+}
+
+#[tauri::command]
+pub fn set_notification_prefs(prefs: serde_json::Value) -> Result<(), String> {
+    let mut config = read_config()?;
+    config["notifications"] = prefs;
+    write_config(&config)
+}

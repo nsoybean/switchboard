@@ -189,16 +189,8 @@ export const settingsCommands = {
 };
 
 export interface NotificationPrefs {
-  native_enabled: boolean;
-  notch_enabled: boolean;
+  enabled: boolean;
   sound_enabled: boolean;
-  statuses: {
-    idle: boolean;
-    done: boolean;
-    error: boolean;
-    needs_input: boolean;
-    stopped: boolean;
-  };
 }
 
 export const hookCommands = {
