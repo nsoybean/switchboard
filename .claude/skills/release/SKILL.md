@@ -117,7 +117,10 @@ npm i --package-lock-only
 # 3. Sync version to tauri.conf.json and Cargo.toml
 npm run version:sync -- <next_version>
 
-# 4. Stage and commit the version bump
+# 4. Regenerate Cargo.lock
+cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+
+# 5. Stage and commit the version bump
 git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
 git commit -m "chore: bump version to <next_version>"
 
