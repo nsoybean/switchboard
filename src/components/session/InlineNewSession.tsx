@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, GitFork, X } from "lucide-react";
+import { CornerDownLeft, GitFork, X, Files } from "lucide-react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agents/AgentIcon";
-import { GitBranchSummary } from "@/components/git/GitBranchSummary";
 import { BranchPicker } from "@/components/git/BranchPicker";
 import { CreateBranchDialog } from "@/components/git/CreateBranchDialog";
 import { ProjectPicker } from "@/components/projects/ProjectPicker";
@@ -278,22 +277,22 @@ export function InlineNewSession({ projectPath, projectPaths, onProjectSelect, o
   const liveBranchSummary = useMemo(() => ({
     branch: currentBranch ?? displayBranch ?? "",
     changedCount: git.files.length,
-    ahead: git.aheadBehind.ahead,
-    behind: git.aheadBehind.behind,
-  }), [currentBranch, displayBranch, git.aheadBehind.ahead, git.aheadBehind.behind, git.files.length]);
+    additions: git.stats.additions,
+    deletions: git.stats.deletions,
+  }), [currentBranch, displayBranch, git.files.length, git.stats.additions, git.stats.deletions]);
 
   const worktreeBranchSummary = useMemo(() => ({
     branch: branchContext?.branch ?? displayBranch ?? "",
     changedCount: branchContext?.dirtyCount ?? 0,
-    ahead: branchContext?.ahead ?? 0,
-    behind: branchContext?.behind ?? 0,
+    additions: 0,
+    deletions: 0,
   }), [branchContext, displayBranch]);
 
   const activeBranchSummary = useWorktree ? worktreeBranchSummary : liveBranchSummary;
 
   return (
     <div className="flex h-full items-center justify-center bg-background">
-      <div className="w-full max-w-xl px-6">
+      <div className="w-full max-w-[640px] px-6">
         {/* Badge-style options bar */}
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
           <ProjectPicker
@@ -315,7 +314,6 @@ export function InlineNewSession({ projectPath, projectPaths, onProjectSelect, o
               >
                 <AgentIcon agent={agent} className="size-3.5" />
                 <span className="font-medium">{selectedAgent.name}</span>
-                <ChevronDown className="size-3 opacity-50" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
@@ -369,13 +367,13 @@ export function InlineNewSession({ projectPath, projectPaths, onProjectSelect, o
                 <span>Worktree</span>
               </label>
             </TooltipTrigger>
-            <TooltipContent>Work in an isolated copy of the repo</TooltipContent>
+            <TooltipContent>Worktree — work in an isolated copy of the repo</TooltipContent>
           </Tooltip>
 
-          {/* Branch badge */}
+          {/* Branch + git status */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <span>
+              <span className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
                 <BranchPicker
                   branches={git.branches}
                   loading={git.branchesLoading}
@@ -385,28 +383,32 @@ export function InlineNewSession({ projectPath, projectPaths, onProjectSelect, o
                   }}
                   onCreateBranch={() => setCreateBranchOpen(true)}
                   disabled={git.branchActionPending}
-                  triggerClassName="h-auto rounded-full border bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground shadow-none hover:bg-muted hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[200px]"
+                  triggerClassName="h-auto border-0 bg-transparent p-0 text-xs text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground disabled:opacity-50 font-normal w-auto min-w-0 max-w-[160px]"
                   showCurrentBadge={false}
                   showIcon
                 />
+                {(activeBranchSummary.changedCount > 0 || activeBranchSummary.additions > 0 || activeBranchSummary.deletions > 0) && (
+                  <span className="inline-flex items-center gap-1 border-l pl-1.5 tabular-nums">
+                    {activeBranchSummary.changedCount > 0 && (
+                      <span className="inline-flex items-center gap-0.5">
+                        <Files className="size-3" />
+                        {activeBranchSummary.changedCount}
+                      </span>
+                    )}
+                    {activeBranchSummary.additions > 0 && (
+                      <span className="text-[var(--sb-diff-add-fg)]">+{activeBranchSummary.additions}</span>
+                    )}
+                    {activeBranchSummary.deletions > 0 && (
+                      <span className="text-[var(--sb-diff-del-fg)]">-{activeBranchSummary.deletions}</span>
+                    )}
+                  </span>
+                )}
               </span>
             </TooltipTrigger>
             <TooltipContent>
               {useWorktree ? "Base branch for the new worktree" : "Current local branch"}
             </TooltipContent>
           </Tooltip>
-
-          {activeBranchSummary.branch ? (
-            <GitBranchSummary
-              branch={activeBranchSummary.branch}
-              changedCount={activeBranchSummary.changedCount}
-              ahead={activeBranchSummary.ahead}
-              behind={activeBranchSummary.behind}
-              showIcon={false}
-              showBranchLabel={false}
-              className="min-w-0 text-[11px]"
-            />
-          ) : null}
         </div>
 
         {/* Chat input */}
