@@ -36,6 +36,7 @@ export interface GitActions {
   unstageFiles: (paths: string[]) => Promise<void>;
   revertFiles: (paths: string[]) => Promise<void>;
   stageAll: () => Promise<void>;
+  unstageAll: () => Promise<void>;
   revertAll: () => Promise<void>;
   commit: (message: string) => Promise<void>;
   pull: () => Promise<void>;
@@ -251,6 +252,13 @@ export function useGitState({
     void refresh();
   }, [cwd, files, refresh]);
 
+  const unstageAll = useCallback(async () => {
+    const staged = files.filter((f) => f.staged).map((f) => f.path);
+    if (staged.length === 0) return;
+    await gitCommands.unstage(cwd, staged);
+    void refresh();
+  }, [cwd, files, refresh]);
+
   const revertAll = useCallback(async () => {
     const unstaged = files.filter((f) => !f.staged).map((f) => f.path);
     if (unstaged.length === 0) return;
@@ -435,6 +443,7 @@ export function useGitState({
     unstageFiles,
     revertFiles,
     stageAll,
+    unstageAll,
     revertAll,
     commit,
     pull,

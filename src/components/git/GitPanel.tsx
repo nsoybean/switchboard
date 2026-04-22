@@ -37,6 +37,7 @@ interface GitPanelProps {
 interface GitSectionProps {
   icon: ReactNode;
   title: string;
+  titleExtra?: ReactNode;
   count?: number;
   defaultOpen?: boolean;
   headerActions?: ReactNode;
@@ -46,6 +47,7 @@ interface GitSectionProps {
 function GitSection({
   icon,
   title,
+  titleExtra,
   count,
   defaultOpen = false,
   headerActions,
@@ -68,6 +70,7 @@ function GitSection({
           )}
           <span className="shrink-0 text-muted-foreground">{icon}</span>
           <span>{title}</span>
+          {titleExtra ? <span className="ml-1">{titleExtra}</span> : null}
           <span className="ml-auto flex items-center gap-1">
             {headerActions ? (
               <span
@@ -197,37 +200,61 @@ export const GitPanel = memo(function GitPanel({
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 text-muted-foreground hover:text-foreground"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void git.revertAll();
-                    }}
-                    disabled={revertableCount === 0}
-                  >
-                    <Undo2 className="size-3.5" />
-                  </Button>
+                  <span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-muted-foreground hover:text-foreground"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void git.revertAll();
+                      }}
+                      disabled={revertableCount === 0}
+                    >
+                      <Undo2 className="size-3.5" />
+                    </Button>
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent>Revert all</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 text-muted-foreground hover:text-foreground"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void git.stageAll();
-                    }}
-                    disabled={unstagedCount === 0}
-                  >
-                    <Plus className="size-3.5" />
-                  </Button>
+                  <span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-muted-foreground hover:text-foreground"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void git.unstageAll();
+                      }}
+                      disabled={stagedCount === 0}
+                    >
+                      <Minus className="size-3.5" />
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Unstage all</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-muted-foreground hover:text-foreground"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void git.stageAll();
+                      }}
+                      disabled={unstagedCount === 0}
+                    >
+                      <Plus className="size-3.5" />
+                    </Button>
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent>Stage all</TooltipContent>
               </Tooltip>
