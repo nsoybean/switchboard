@@ -138,8 +138,8 @@ pub fn git_status(cwd: String) -> Result<GitStatusResult, String> {
         });
     }
 
-    // Get diff stats
-    let stats_output = run_git(&cwd, &["diff", "--shortstat"]).unwrap_or_default();
+    // Get diff stats (staged + unstaged vs HEAD)
+    let stats_output = run_git(&cwd, &["diff", "HEAD", "--shortstat"]).unwrap_or_default();
     let stats = parse_diff_stats(&stats_output);
 
     Ok(GitStatusResult {

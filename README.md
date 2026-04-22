@@ -4,19 +4,17 @@
 
 # Switchboard
 
-**The open-source multi-agent workspace.** Run multiple Claude Code, Codex, and Bash sessions in parallel - its own branch, its own worktree. Review and ship from one window.
+**The open-source multi-agent workspace.** Run multiple Claude Code, Codex, and Bash sessions in parallel — each in its own branch and worktree. Inspect diffs, commit, and push from one window.
 
 <p align="center">
   <img src="./public/main_dark_mode.png" alt="Switchboard showing multiple Claude Code and Codex sessions in one desktop window" width="1120" />
 </p>
 
-Switchboard is an open-source desktop app for running Claude Code, Codex, and Bash side by side without giving up the native terminal workflow. Each session gets a real interactive terminal, optional git worktree isolation, and a built-in git panel for reviewing and shipping changes from the same window.
+Switchboard is a desktop app for managing parallel coding agent sessions without the friction of terminal tabs and branch juggling. Each session gets a real interactive PTY, optional git worktree isolation, and a built-in git panel — all with the native terminal feel you expect.
 
-It is built for the way people actually use coding agents: one agent implementing, another investigating, another running commands, all across the same repo without a pile of terminal tabs and manual branch juggling.
+**Built for multi-agent workflows:** one agent implementing, another investigating, another running commands — all safely isolated in the same repo.
 
-You can launch new sessions, resume past Claude Code and Codex sessions from local history, inspect diffs, commit and push changes, and keep each agent safely isolated when needed.
-
-If you like [Conductor](https://www.conductor.build/), Switchboard is a similar workflow with an open-source, terminal-native, local-first approach.
+If you like [Conductor](https://www.conductor.build/), Switchboard offers a similar workflow with an open-source, terminal-native, local-first approach.
 
 ## Install
 

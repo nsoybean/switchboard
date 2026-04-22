@@ -1310,6 +1310,10 @@ export function AppLayout() {
         setInspectorOpen(true);
         setWorkspaceTab("files");
       },
+      onToggleChanges: () => {
+        setInspectorOpen(true);
+        setWorkspaceTab("changes");
+      },
       onOpenHistory: () => setHistoryOpen(true),
       onCommandPalette: () => setCommandPaletteOpen(true),
       onFocusTerminal: () => {
@@ -1395,6 +1399,7 @@ export function AppLayout() {
       historyOpen={historyOpen}
       onHistoryOpenChange={setHistoryOpen}
       openTabSessionIds={openTabSessionIds}
+      onOpenSettings={openSettings}
     />
   );
 
@@ -1473,7 +1478,6 @@ export function AppLayout() {
         installingUpdate={installingUpdate}
         updateProgress={updateProgress}
         onInstallUpdate={() => void installUpdate()}
-        onOpenSettings={openSettings}
       />
 
       {settingsOpen ? (

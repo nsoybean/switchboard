@@ -10,7 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown, History, MoreHorizontal, Pin, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, History, Keyboard, MoreHorizontal, Moon, Pin, Plus, Settings, Sun, Trash2 } from "lucide-react";
+import { KeyboardShortcutsDialog } from "@/components/dialogs/KeyboardShortcutsDialog";
+import { useTheme } from "@/components/theme-provider";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   DndContext,
   DragOverlay,
@@ -60,6 +67,7 @@ interface SessionSidebarProps {
   historyOpen?: boolean;
   onHistoryOpenChange?: (open: boolean) => void;
   openTabSessionIds?: string[];
+  onOpenSettings?: () => void;
 }
 
 interface ProjectSessionGroup {
@@ -185,7 +193,9 @@ export function SessionSidebar({
   historyOpen,
   onHistoryOpenChange,
   openTabSessionIds,
+  onOpenSettings,
 }: SessionSidebarProps) {
+  const { theme, setTheme } = useTheme();
   const openTabSet = useMemo(() => new Set(openTabSessionIds ?? []), [openTabSessionIds]);
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -195,6 +205,7 @@ export function SessionSidebar({
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
   const [historyOpenInternal, setHistoryOpenInternal] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
@@ -527,7 +538,7 @@ export function SessionSidebar({
           className="w-full justify-center gap-1.5 text-xs"
           onClick={() => onNewSession()}
         >
-          <Plus className="size-3.5" />
+          <Plus className="size-[18px]" />
           New Session
         </Button>
       </div>
@@ -658,7 +669,7 @@ export function SessionSidebar({
                       onClick={() => onNewSession(group.path)}
                       title="New session"
                     >
-                      <Plus className="size-3.5" />
+                      <Plus className="size-[18px]" />
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -670,7 +681,7 @@ export function SessionSidebar({
                           onClick={(event) => event.stopPropagation()}
                           title={`${group.name} actions`}
                         >
-                          <MoreHorizontal className="size-3.5" />
+                          <MoreHorizontal className="size-[18px]" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
@@ -785,7 +796,7 @@ export function SessionSidebar({
                   className="mt-2"
                   onClick={onAddProject}
                 >
-                  <Plus className="size-3.5" />
+                  <Plus className="size-[18px]" />
                   Add project
                 </Button>
               </div>
@@ -800,21 +811,70 @@ export function SessionSidebar({
         </div>
       </div>
 
-      {/* Footer: History */}
-      <div className="border-t p-2">
-        <Button
-          variant="ghost"
-          className="w-full justify-between"
-          onClick={() => setHistoryOpen(true)}
-        >
-          <span className="inline-flex items-center gap-2">
-            <History className="size-4" />
-            History
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {totalHistoryCount}
-          </span>
-        </Button>
+      {/* Footer: History · Settings · Theme */}
+      <div className="flex items-center justify-between border-t px-2 py-1.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <History className="size-[18px]" />
+              History
+              {totalHistoryCount > 0 && (
+                <span className="tabular-nums">{totalHistoryCount}</span>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Session history</TooltipContent>
+        </Tooltip>
+        <div className="flex items-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-foreground"
+                onClick={() => setShortcutsOpen(true)}
+              >
+                <Keyboard className="size-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Keyboard shortcuts</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-foreground"
+                onClick={onOpenSettings}
+              >
+                <Settings className="size-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Settings</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-foreground"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              >
+                {theme === "dark" ? (
+                  <Sun className="size-[18px]" />
+                ) : (
+                  <Moon className="size-[18px]" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle theme</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Rename dialog */}
@@ -915,7 +975,7 @@ export function SessionSidebar({
                   disabled={deletingSelected}
                   onClick={() => void handleDeleteSelected()}
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 className="size-[18px]" />
                   Delete {selectedHistoryIds.size}
                 </Button>
               )}
@@ -1008,6 +1068,7 @@ export function SessionSidebar({
           </div>
         </DialogContent>
       </Dialog>
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <DragOverlay dropAnimation={null} zIndex={1000}>
         {activeDragSession ? (
           <DraggedSessionPreview session={activeDragSession} />
