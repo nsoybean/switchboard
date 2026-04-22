@@ -222,21 +222,6 @@ export function Titlebar({
             onCreateBranch={onCreateBranch}
           />
 
-          {/* Ahead/behind indicators */}
-          {git.aheadBehind && (git.aheadBehind.ahead > 0 || git.aheadBehind.behind > 0) && (
-            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              {git.aheadBehind.ahead > 0 && (
-                <span className="flex items-center gap-0.5 text-[var(--sb-diff-add-fg)]">
-                  <ArrowUp className="size-2.5" />{git.aheadBehind.ahead}
-                </span>
-              )}
-              {git.aheadBehind.behind > 0 && (
-                <span className="flex items-center gap-0.5 text-[var(--sb-diff-del-fg)]">
-                  <ArrowDown className="size-2.5" />{git.aheadBehind.behind}
-                </span>
-              )}
-            </span>
-          )}
 
           <Separator orientation="vertical" className="h-4" />
 
