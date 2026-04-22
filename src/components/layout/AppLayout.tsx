@@ -1310,6 +1310,10 @@ export function AppLayout() {
         setInspectorOpen(true);
         setWorkspaceTab("files");
       },
+      onToggleChanges: () => {
+        setInspectorOpen(true);
+        setWorkspaceTab("changes");
+      },
       onOpenHistory: () => setHistoryOpen(true),
       onCommandPalette: () => setCommandPaletteOpen(true),
       onFocusTerminal: () => {

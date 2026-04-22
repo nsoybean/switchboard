@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronDown, History, MoreHorizontal, Moon, Pin, Plus, Settings, Sun, Trash2 } from "lucide-react";
+import { ChevronDown, History, Keyboard, MoreHorizontal, Moon, Pin, Plus, Settings, Sun, Trash2 } from "lucide-react";
+import { KeyboardShortcutsDialog } from "@/components/dialogs/KeyboardShortcutsDialog";
 import { useTheme } from "@/components/theme-provider";
 import {
   Tooltip,
@@ -204,6 +205,7 @@ export function SessionSidebar({
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
   const [historyOpenInternal, setHistoryOpenInternal] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
@@ -835,6 +837,19 @@ export function SessionSidebar({
                 variant="ghost"
                 size="icon"
                 className="size-7 text-muted-foreground hover:text-foreground"
+                onClick={() => setShortcutsOpen(true)}
+              >
+                <Keyboard className="size-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Keyboard shortcuts</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-foreground"
                 onClick={onOpenSettings}
               >
                 <Settings className="size-[18px]" />
@@ -1053,6 +1068,7 @@ export function SessionSidebar({
           </div>
         </DialogContent>
       </Dialog>
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <DragOverlay dropAnimation={null} zIndex={1000}>
         {activeDragSession ? (
           <DraggedSessionPreview session={activeDragSession} />

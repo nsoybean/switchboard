@@ -41,6 +41,7 @@ interface ShortcutHandlers {
   onToggleGitPanel: () => void;
   onFocusTerminal: () => void;
   onToggleFileTree?: () => void;
+  onToggleChanges?: () => void;
   onOpenHistory?: () => void;
   /** Called on Escape. Return true if handled (suppresses default onFocusTerminal). */
   onEscape?: () => boolean;
@@ -115,9 +116,16 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
       }
 
       // Ctrl+E — open Files tab in the inspector
-      if ((e.ctrlKey || e.metaKey) && e.key === "e") {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "e") {
         e.preventDefault();
         handlers.onToggleFileTree?.();
+        return;
+      }
+
+      // Ctrl+Shift+E — open Changes tab in the inspector
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        handlers.onToggleChanges?.();
         return;
       }
 
