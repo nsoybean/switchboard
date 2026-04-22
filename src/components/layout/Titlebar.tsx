@@ -14,9 +14,6 @@ import {
   PanelLeft,
   PanelRight,
   RefreshCw,
-  Settings,
-  Sun,
-  Moon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -36,7 +33,6 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { BranchPicker } from "@/components/git/BranchPicker";
 import { CommitDialog } from "@/components/git/CommitDialog";
-import { useTheme } from "@/components/theme-provider";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 
 type GitWithActions = GitState &
@@ -57,7 +53,6 @@ interface TitlebarProps {
   cwd?: string | null;
   onCreateBranch?: () => void;
   onCreatePr?: () => void;
-  onOpenSettings?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
   installingUpdate?: boolean;
@@ -79,7 +74,6 @@ export function Titlebar({
   onCreateBranch,
   onCreatePr,
   githubToken,
-  onOpenSettings,
   updateVersion = null,
   checkingForUpdates = false,
   installingUpdate = false,
@@ -87,7 +81,6 @@ export function Titlebar({
   onInstallUpdate,
   cwd,
 }: TitlebarProps) {
-  const { theme, setTheme } = useTheme();
   const appWindow = getCurrentWindow();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [commitDialogOpen, setCommitDialogOpen] = useState(false);
@@ -440,38 +433,6 @@ export function Titlebar({
           <TooltipContent>Toggle Inspector (⌘G)</TooltipContent>
         </Tooltip>
 
-        <Separator orientation="vertical" className="h-4" />
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9"
-              onClick={onOpenSettings}
-            >
-              <Settings className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Settings</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-9"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            >
-              {theme === "dark" ? (
-                <Sun className="size-4" />
-              ) : (
-                <Moon className="size-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Toggle Theme</TooltipContent>
-        </Tooltip>
       </div>
     </div>
   );
