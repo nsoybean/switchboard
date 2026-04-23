@@ -329,20 +329,19 @@ export function RightPanelHeader({
       >
         {git?.branch && (
           <>
+            {/* Branch selector — bordered pill */}
             <BranchPicker
               branches={git.branches}
               loading={git.branchesLoading && git.branches.length === 0}
               value={git.branch}
               disabled={git.branchActionPending}
-              triggerClassName="h-7 w-auto max-w-[200px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium shadow-none hover:bg-accent/50"
+              triggerClassName="h-7 w-auto max-w-[180px] gap-1.5 border bg-background px-2 text-xs font-medium shadow-none hover:bg-accent/50"
               createLabel="Create branch..."
               onSelect={(branchName) => void git.switchBranch(branchName)}
               onCreateBranch={onCreateBranch}
             />
 
-            <Separator orientation="vertical" className="h-4" />
-
-            {/* Commit split button */}
+            {/* Split commit button */}
             <div className="flex items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -389,37 +388,44 @@ export function RightPanelHeader({
                       <TooltipTrigger asChild>
                         <span>
                           <DropdownMenuItem
-                            disabled={!canPush}
-                            onSelect={handlePush}
+                            disabled={!hasChanges}
+                            onSelect={() => setCommitDialogOpen(true)}
                           >
-                            <ArrowUp className="mr-2 size-3.5" />
-                            Push
+                            <GitCommit className="mr-2 size-3.5" />
+                            Commit
                           </DropdownMenuItem>
                         </span>
                       </TooltipTrigger>
-                      {!canPush && (
-                        <TooltipContent side="right">
-                          Nothing to push
-                        </TooltipContent>
+                      {!hasChanges && (
+                        <TooltipContent side="right">No changes to commit</TooltipContent>
                       )}
                     </Tooltip>
 
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span>
-                          <DropdownMenuItem
-                            disabled={!canPull}
-                            onSelect={handlePull}
-                          >
+                          <DropdownMenuItem disabled={!canPush} onSelect={handlePush}>
+                            <ArrowUp className="mr-2 size-3.5" />
+                            Push
+                          </DropdownMenuItem>
+                        </span>
+                      </TooltipTrigger>
+                      {!canPush && (
+                        <TooltipContent side="right">Nothing to push</TooltipContent>
+                      )}
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <DropdownMenuItem disabled={!canPull} onSelect={handlePull}>
                             <ArrowDown className="mr-2 size-3.5" />
                             Pull
                           </DropdownMenuItem>
                         </span>
                       </TooltipTrigger>
                       {!canPull && (
-                        <TooltipContent side="right">
-                          Already up to date
-                        </TooltipContent>
+                        <TooltipContent side="right">Already up to date</TooltipContent>
                       )}
                     </Tooltip>
 
@@ -437,9 +443,7 @@ export function RightPanelHeader({
                         <span>
                           <DropdownMenuItem
                             disabled={!githubToken}
-                            onSelect={() => {
-                              if (githubToken) onCreatePr?.();
-                            }}
+                            onSelect={() => { if (githubToken) onCreatePr?.(); }}
                           >
                             <GitPullRequest className="mr-2 size-3.5" />
                             Create PR
