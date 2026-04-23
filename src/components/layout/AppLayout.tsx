@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppState, useAppDispatch } from "../../state/context";
-import { Titlebar } from "./Titlebar";
+import { LeftPanelHeader, CenterPanelHeader, RightPanelHeader } from "./PanelHeaders";
 import { PaneWorkspace } from "./PaneWorkspace";
 import { SessionSidebar } from "../sidebar/SessionSidebar";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
@@ -154,6 +155,8 @@ function buildWorkspaceIdentity(config: {
 export function AppLayout() {
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const appWindow = useMemo(() => getCurrentWindow(), []);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogProjectPath, setDialogProjectPath] = useState<string | null>(null);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
@@ -315,6 +318,28 @@ export function AppLayout() {
     },
     [],
   );
+
+  useEffect(() => {
+    void appWindow.isFullscreen().then(setIsFullscreen);
+    let unlisten: (() => void) | null = null;
+    void appWindow.onResized(() => {
+      void appWindow.isFullscreen().then(setIsFullscreen);
+    }).then((fn) => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, [appWindow]);
+
+  useEffect(() => {
+    document.documentElement.dataset.fullscreen = isFullscreen ? "true" : "false";
+    return () => { delete document.documentElement.dataset.fullscreen; };
+  }, [isFullscreen]);
+
+  const handleWindowClose = useCallback(() => void appWindow.close(), [appWindow]);
+  const handleWindowMinimize = useCallback(() => void appWindow.minimize(), [appWindow]);
+  const handleWindowMaximize = useCallback(async () => {
+    const fs = await appWindow.isFullscreen();
+    await appWindow.setFullscreen(!fs);
+    setIsFullscreen(!fs);
+  }, [appWindow]);
 
   // Intercept window close to show quit confirmation if sessions are live
   useEffect(() => {
@@ -1359,6 +1384,9 @@ export function AppLayout() {
   useAgentHooks(state.sessions, dispatch, handleAutoLabel);
 
   const hasWorkspaceRoot = workspaceContext?.availability === "ready" && !!workspaceContext.rootPath;
+  const projectPathLabel = state.projectPath
+    ? state.projectPath.split("/").slice(-2).join("/")
+    : null;
   const createBranchPrefix = workspaceContext?.kind === "session" && selectedSession?.agent
     ? getBranchPrefix(selectedSession.agent)
     : undefined;
@@ -1456,191 +1484,27 @@ export function AppLayout() {
     </div>
   );
 
-  return (
-    <div className="flex flex-col h-full bg-background">
-      <Titlebar
-        sidebarOpen={sidebarOpen}
-        sidebarWidth={sidebarWidth}
-        inspectorOpen={inspectorOpen}
-        workspaceShellMode={workspaceShellMode}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        onToggleInspector={() => setInspectorOpen(!inspectorOpen)}
-        onWorkspaceShellModeChange={setWorkspaceShellMode}
-        projectPath={state.projectPath}
-        hasActiveSession={liveSessions.length > 0}
-        git={hasWorkspaceRoot ? git : undefined}
-        githubToken={state.githubToken}
-        cwd={workspaceContext?.rootPath}
-        onCreateBranch={() => setCreateBranchOpen(true)}
-        onCreatePr={() => setCreatePrOpen(true)}
-        updateVersion={availableUpdate?.version ?? null}
-        checkingForUpdates={checkingForUpdates}
-        installingUpdate={installingUpdate}
-        updateProgress={updateProgress}
-        onInstallUpdate={() => void installUpdate()}
-      />
+  const sharedCenterHeaderProps = {
+    sidebarOpen,
+    inspectorOpen: inspectorOpen && !!state.projectPath,
+    isFullscreen,
+    projectPathLabel,
+    workspaceShellMode,
+    onClose: handleWindowClose,
+    onMinimize: handleWindowMinimize,
+    onMaximize: () => void handleWindowMaximize(),
+    onToggleSidebar: () => setSidebarOpen((prev) => !prev),
+    onToggleInspector: () => setInspectorOpen((prev) => !prev),
+    onWorkspaceShellModeChange: setWorkspaceShellMode,
+    updateVersion: availableUpdate?.version ?? null,
+    checkingForUpdates,
+    installingUpdate,
+    updateProgress,
+    onInstallUpdate: () => void installUpdate(),
+  };
 
-      {settingsOpen ? (
-        <div className="flex-1 min-h-0">
-          <SettingsPage
-            onBack={() => setSettingsOpen(false)}
-            currentVersion={currentVersion}
-            updateVersion={availableUpdate?.version ?? null}
-            updateNotes={availableUpdate?.body}
-            checkingForUpdates={checkingForUpdates}
-            installingUpdate={installingUpdate}
-            updateProgress={updateProgress}
-            onCheckForUpdates={() => void checkForUpdates()}
-            onInstallUpdate={() => void installUpdate()}
-          />
-        </div>
-      ) : (
-        workspaceShellMode === "pane" ? (
-          <div className="flex flex-1 min-h-0 overflow-hidden bg-background">
-            {sidebarOpen ? (
-              <>
-                <div
-                  className="h-full shrink-0 overflow-hidden border-r bg-card"
-                  style={{ width: sidebarWidth }}
-                >
-                  {sidebarContent}
-                </div>
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize session sidebar"
-                  className="w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2 relative"
-                  onPointerDown={(event) => startPanelResize("sidebar", event)}
-                />
-              </>
-            ) : null}
-
-            <div className="min-w-0 flex-1 overflow-hidden">
-              {state.projectPath ? (
-                <PaneWorkspace
-                  activeSession={activeSession}
-                  liveSessions={liveSessions}
-                  transcriptSession={resolvedViewingSession}
-                  openFilePath={openFilePath}
-                  revealRequest={paneRevealRequest}
-                  projectPath={state.projectPath}
-                  projectPaths={state.projects}
-                  onInlineNewSession={handleNewSession}
-                  onInlineProjectSelect={handleSelectProject}
-                  onSelectLiveSession={(sessionId) =>
-                    dispatch({ type: "SET_ACTIVE", id: sessionId })
-                  }
-                  onCloseSession={(sessionId) => void handleStopSession(sessionId)}
-                  onCloseTranscript={() => setViewingSession(null)}
-                  onCloseFile={(filePath) =>
-                    setOpenFilePath((current) => (current === filePath ? null : current))
-                  }
-                  onResumeTranscript={
-                    resolvedViewingSession
-                      ? () => {
-                          void handleResumeSession(resolvedViewingSession);
-                          setViewingSession(null);
-                        }
-                      : undefined
-                  }
-                  onSessionStart={handleSessionStart}
-                  onSessionExit={handleSessionExit}
-                  onOpenTabIdsChange={setOpenTabSessionIds}
-                />
-              ) : (
-                welcomeShell
-              )}
-            </div>
-
-            {state.projectPath && inspectorOpen ? (
-              <>
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize inspector panel"
-                  className="w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2 relative"
-                  onPointerDown={(event) => startPanelResize("inspector", event)}
-                />
-                <div
-                  className="h-full shrink-0 overflow-hidden border-l bg-card"
-                  style={{ width: inspectorWidth }}
-                >
-                  {hasWorkspaceRoot ? inspectorContent : null}
-                </div>
-              </>
-            ) : null}
-          </div>
-        ) : (
-          <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
-            {state.projectPath && liveSessions.length > 0 ? (
-              <CanvasView
-                ref={canvasViewRef}
-                projectPath={state.projectPath}
-                sessions={liveSessions}
-                activeSessionId={state.activeSessionId}
-                onSessionStart={handleSessionStart}
-                onSessionExit={handleSessionExit}
-                onSelectSession={handleSelectCanvasSession}
-                onStopSession={handleStopCanvasSession}
-              />
-            ) : (
-              welcomeShell
-            )}
-
-            {sidebarOpen ? (
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 flex max-w-[calc(100vw-2rem)]">
-                <div
-                  className="pointer-events-auto h-full shrink-0 overflow-hidden border-r bg-card"
-                  style={{ width: sidebarWidth }}
-                >
-                  {sidebarContent}
-                </div>
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize session sidebar"
-                  className="pointer-events-auto relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2"
-                  onPointerDown={(event) => startPanelResize("sidebar", event)}
-                />
-              </div>
-            ) : null}
-
-            {state.projectPath && inspectorOpen && hasWorkspaceRoot ? (
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex max-w-[calc(100vw-2rem)]">
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize inspector panel"
-                  className="pointer-events-auto relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2"
-                  onPointerDown={(event) => startPanelResize("inspector", event)}
-                />
-                <div
-                  className="pointer-events-auto h-full shrink-0 overflow-hidden border-l bg-card"
-                  style={{ width: inspectorWidth }}
-                >
-                  {inspectorContent}
-                </div>
-              </div>
-            ) : null}
-
-            {resolvedViewingSession ? (
-              <div className="absolute inset-0 z-30">
-                <SessionTranscriptView
-                  key={`${resolvedViewingSession.agent}:${resolvedViewingSession.resumeTargetId ?? resolvedViewingSession.id}`}
-                  session={resolvedViewingSession}
-                  onClose={() => setViewingSession(null)}
-                  onResume={() => {
-                    void handleResumeSession(resolvedViewingSession);
-                    setViewingSession(null);
-                  }}
-                />
-              </div>
-            ) : null}
-          </div>
-        )
-      )}
-
-      {/* New Session Dialog */}
+  const dialogs = (
+    <>
       <NewSessionDialog
         open={dialogOpen}
         projectPath={dialogProjectPath ?? state.projectPath}
@@ -1652,7 +1516,6 @@ export function AppLayout() {
         onSubmit={handleNewSession}
       />
 
-      {/* Create Branch Dialog */}
       {hasWorkspaceRoot ? (
         <CreateBranchDialog
           open={createBranchOpen}
@@ -1666,7 +1529,6 @@ export function AppLayout() {
         />
       ) : null}
 
-      {/* Create PR Dialog */}
       {state.githubToken && workspaceContext?.rootPath && (
         <CreatePrDialog
           open={createPrOpen}
@@ -1676,7 +1538,6 @@ export function AppLayout() {
         />
       )}
 
-      {/* Quit confirmation dialog */}
       <QuitConfirmDialog
         open={quitDialogOpen}
         liveSessions={liveSessions}
@@ -1691,7 +1552,6 @@ export function AppLayout() {
         }}
       />
 
-      {/* Command Palette */}
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
@@ -1703,7 +1563,6 @@ export function AppLayout() {
         }}
       />
 
-      {/* Project Picker Dialog */}
       <ProjectPickerDialog
         open={projectPickerOpen}
         onClose={() => setProjectPickerOpen(false)}
@@ -1716,6 +1575,262 @@ export function AppLayout() {
           dispatch({ type: "SET_PROJECTS", paths: projectPaths });
         }}
       />
+    </>
+  );
+
+  // ── Settings page (full-width overlay) ────────────────────────────────────
+  if (settingsOpen) {
+    return (
+      <div className="flex h-full flex-col overflow-hidden bg-background">
+        <div
+          data-tauri-drag-region
+          className="flex h-[46px] shrink-0 select-none items-center"
+        >
+          {!isFullscreen && (
+            <div className="flex items-center gap-1.5 pl-3 pr-2">
+              <button onClick={handleWindowClose} className="size-3 rounded-full bg-[#ff5f57] transition-all hover:brightness-90" aria-label="Close" />
+              <button onClick={handleWindowMinimize} className="size-3 rounded-full bg-[#febc2e] transition-all hover:brightness-90" aria-label="Minimize" />
+              <button onClick={() => void handleWindowMaximize()} className="size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90" aria-label="Fullscreen" />
+            </div>
+          )}
+          <div data-tauri-drag-region className="flex-1" />
+        </div>
+        <div className="flex-1 min-h-0">
+          <SettingsPage
+            onBack={() => setSettingsOpen(false)}
+            currentVersion={currentVersion}
+            updateVersion={availableUpdate?.version ?? null}
+            updateNotes={availableUpdate?.body}
+            checkingForUpdates={checkingForUpdates}
+            installingUpdate={installingUpdate}
+            updateProgress={updateProgress}
+            onCheckForUpdates={() => void checkForUpdates()}
+            onInstallUpdate={() => void installUpdate()}
+          />
+        </div>
+        {dialogs}
+      </div>
+    );
+  }
+
+  // ── Canvas mode ────────────────────────────────────────────────────────────
+  if (workspaceShellMode === "canvas") {
+    return (
+      <div className="flex h-full flex-col overflow-hidden bg-background">
+        {/* Same three-column header row as pane mode */}
+        <div className="flex shrink-0">
+          {sidebarOpen && (
+            <>
+              <div className="shrink-0 bg-card" style={{ width: sidebarWidth }}>
+                <LeftPanelHeader
+                  isFullscreen={isFullscreen}
+                  onClose={handleWindowClose}
+                  onMinimize={handleWindowMinimize}
+                  onMaximize={() => void handleWindowMaximize()}
+                  onToggleSidebar={() => setSidebarOpen(false)}
+                />
+              </div>
+              <div className="w-px shrink-0 bg-border" />
+            </>
+          )}
+          <div className="min-w-0 flex-1">
+            <CenterPanelHeader {...sharedCenterHeaderProps} />
+          </div>
+          {state.projectPath && inspectorOpen && (
+            <>
+              <div className="w-px shrink-0 bg-border" />
+              <div className="shrink-0 bg-card" style={{ width: inspectorWidth }}>
+                <RightPanelHeader
+                  git={hasWorkspaceRoot ? git : undefined}
+                  githubToken={state.githubToken}
+                  cwd={workspaceContext?.rootPath}
+                  onCreateBranch={() => setCreateBranchOpen(true)}
+                  onCreatePr={() => setCreatePrOpen(true)}
+                  onToggleInspector={() => setInspectorOpen(false)}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Canvas body — sidebar/inspector float as overlays */}
+        <div className="relative flex-1 min-h-0 overflow-hidden">
+          {state.projectPath && liveSessions.length > 0 ? (
+            <CanvasView
+              ref={canvasViewRef}
+              projectPath={state.projectPath}
+              sessions={liveSessions}
+              activeSessionId={state.activeSessionId}
+              onSessionStart={handleSessionStart}
+              onSessionExit={handleSessionExit}
+              onSelectSession={handleSelectCanvasSession}
+              onStopSession={handleStopCanvasSession}
+            />
+          ) : (
+            welcomeShell
+          )}
+
+          {sidebarOpen ? (
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-20 flex max-w-[calc(100vw-2rem)]">
+              <div
+                className="pointer-events-auto h-full shrink-0 overflow-hidden bg-card"
+                style={{ width: sidebarWidth }}
+              >
+                {sidebarContent}
+              </div>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize session sidebar"
+                className="pointer-events-auto relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2"
+                onPointerDown={(event) => startPanelResize("sidebar", event)}
+              />
+            </div>
+          ) : null}
+
+          {state.projectPath && inspectorOpen && hasWorkspaceRoot ? (
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex max-w-[calc(100vw-2rem)]">
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize inspector panel"
+                className="pointer-events-auto relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2"
+                onPointerDown={(event) => startPanelResize("inspector", event)}
+              />
+              <div
+                className="pointer-events-auto h-full shrink-0 overflow-hidden bg-card"
+                style={{ width: inspectorWidth }}
+              >
+                {inspectorContent}
+              </div>
+            </div>
+          ) : null}
+
+          {resolvedViewingSession ? (
+            <div className="absolute inset-0 z-30">
+              <SessionTranscriptView
+                key={`${resolvedViewingSession.agent}:${resolvedViewingSession.resumeTargetId ?? resolvedViewingSession.id}`}
+                session={resolvedViewingSession}
+                onClose={() => setViewingSession(null)}
+                onResume={() => {
+                  void handleResumeSession(resolvedViewingSession);
+                  setViewingSession(null);
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
+        {dialogs}
+      </div>
+    );
+  }
+
+  // ── Pane mode (three-column layout, dividers span full height) ─────────────
+  return (
+    <div className="flex h-full overflow-hidden bg-background">
+      {/* Left: Session sidebar */}
+      {sidebarOpen && (
+        <div
+          className="flex shrink-0 flex-col overflow-hidden bg-card"
+          style={{ width: sidebarWidth }}
+        >
+          <LeftPanelHeader
+            isFullscreen={isFullscreen}
+            onClose={handleWindowClose}
+            onMinimize={handleWindowMinimize}
+            onMaximize={() => void handleWindowMaximize()}
+            onToggleSidebar={() => setSidebarOpen(false)}
+          />
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar resize handle — spans full height */}
+      {sidebarOpen && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize session sidebar"
+          className="relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2"
+          onPointerDown={(event) => startPanelResize("sidebar", event)}
+        />
+      )}
+
+      {/* Center: main pane workspace */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <CenterPanelHeader {...sharedCenterHeaderProps} />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {state.projectPath ? (
+            <PaneWorkspace
+              activeSession={activeSession}
+              liveSessions={liveSessions}
+              transcriptSession={resolvedViewingSession}
+              openFilePath={openFilePath}
+              revealRequest={paneRevealRequest}
+              projectPath={state.projectPath}
+              projectPaths={state.projects}
+              onInlineNewSession={handleNewSession}
+              onInlineProjectSelect={handleSelectProject}
+              onSelectLiveSession={(sessionId) =>
+                dispatch({ type: "SET_ACTIVE", id: sessionId })
+              }
+              onCloseSession={(sessionId) => void handleStopSession(sessionId)}
+              onCloseTranscript={() => setViewingSession(null)}
+              onCloseFile={(filePath) =>
+                setOpenFilePath((current) => (current === filePath ? null : current))
+              }
+              onResumeTranscript={
+                resolvedViewingSession
+                  ? () => {
+                      void handleResumeSession(resolvedViewingSession);
+                      setViewingSession(null);
+                    }
+                  : undefined
+              }
+              onSessionStart={handleSessionStart}
+              onSessionExit={handleSessionExit}
+              onOpenTabIdsChange={setOpenTabSessionIds}
+            />
+          ) : (
+            welcomeShell
+          )}
+        </div>
+      </div>
+
+      {/* Inspector resize handle — spans full height */}
+      {state.projectPath && inspectorOpen && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize inspector panel"
+          className="relative w-px shrink-0 cursor-col-resize bg-border after:absolute after:inset-y-0 after:left-1/2 after:w-2 after:-translate-x-1/2"
+          onPointerDown={(event) => startPanelResize("inspector", event)}
+        />
+      )}
+
+      {/* Right: workspace inspector */}
+      {state.projectPath && inspectorOpen && (
+        <div
+          className="flex shrink-0 flex-col overflow-hidden bg-card"
+          style={{ width: inspectorWidth }}
+        >
+          <RightPanelHeader
+            git={hasWorkspaceRoot ? git : undefined}
+            githubToken={state.githubToken}
+            cwd={workspaceContext?.rootPath}
+            onCreateBranch={() => setCreateBranchOpen(true)}
+            onCreatePr={() => setCreatePrOpen(true)}
+            onToggleInspector={() => setInspectorOpen(false)}
+          />
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {hasWorkspaceRoot ? inspectorContent : null}
+          </div>
+        </div>
+      )}
+
+      {dialogs}
     </div>
   );
 }

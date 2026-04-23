@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
+import { AgentIcon } from "@/components/agents/AgentIcon";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,8 +15,6 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-  ArrowUp,
-  GitBranch,
   GitMerge,
   GitPullRequest,
   MoreHorizontal,
@@ -68,11 +67,8 @@ export function SessionCard({
   isDragSource,
   isOpenInTab,
   suppressHover,
-  index,
   timestampLabel,
   timestampTitle,
-  diffStats,
-  gitSummary,
   onClick,
   onPin,
   onResume,
@@ -84,10 +80,8 @@ export function SessionCard({
   onRemoveWorktree,
   onDeleteBranch,
 }: SessionCardProps) {
-  const isRunning = session.status === "running";
   const canManage = Boolean(onPin || onResume || onStop || onRename || onDelete);
   const hasGitActions = Boolean(onMerge || onCreatePr || onRemoveWorktree || onDeleteBranch);
-  const branchName = session.workspace.branchName;
   const showHoverActions = !suppressHover && (canManage || hasGitActions);
 
   // When this card is the drag source, show a compact solid card
@@ -108,7 +102,7 @@ export function SessionCard({
     <div
       ref={dragRef}
       className={cn(
-        "group/session flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-sm transition-colors overflow-hidden cursor-pointer",
+        "group/session flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors overflow-hidden cursor-pointer",
         isActive
           ? "bg-accent text-accent-foreground"
           : suppressHover
@@ -121,91 +115,34 @@ export function SessionCard({
       )}
       onClick={onClick}
     >
-      {/* Session number */}
-      {typeof index === "number" && (
+      {/* Agent icon */}
+      <AgentIcon agent={session.agent} className="size-3.5 shrink-0" />
+
+      {/* Status dot */}
+      <StatusDot status={session.status} />
+
+      {/* Label — truncates to keep single row */}
+      <span className={cn(
+        "min-w-0 flex-1 truncate text-[13px] font-medium",
+        !session.label && "italic text-muted-foreground",
+      )}>
+        {session.label || "New session"}
+      </span>
+
+      {/* Right side: timestamp (hidden on hover) / action buttons (shown on hover) */}
+      <div className="relative shrink-0 flex items-center">
+        {/* Timestamp — hidden when hover actions visible */}
         <span
           className={cn(
-            "mt-0.5 shrink-0 w-4 text-right text-[11px] tabular-nums",
-            isRunning
-              ? "text-[var(--sb-status-running)] font-semibold"
-              : session.status === "idle" || session.status === "needs-input"
-                ? "text-[var(--sb-status-done)]"
-                : "text-muted-foreground",
+            "text-[11px] text-muted-foreground tabular-nums",
+            showHoverActions &&
+              "group-hover/session:hidden group-focus-within/session:hidden",
           )}
-        >
-          {index}
-        </span>
-      )}
-
-      {/* Git branch icon */}
-      <GitBranch className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-
-      {/* Content */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <StatusDot status={session.status} />
-          <span className={cn(
-            "truncate text-[13px] font-medium",
-            !session.label && "italic text-muted-foreground",
-          )}>
-            {session.label || "New session"}
-          </span>
-        </div>
-
-        {/* Git status strip */}
-        {branchName && (
-          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="truncate font-mono">{branchName}</span>
-            {gitSummary && gitSummary.ahead > 0 && (
-              <span className="flex items-center gap-0.5 text-[var(--sb-diff-add-fg)] shrink-0">
-                <ArrowUp className="size-2.5" />
-                {gitSummary.ahead}
-              </span>
-            )}
-            {gitSummary && gitSummary.dirty > 0 && (
-              <span className="shrink-0 text-muted-foreground">
-                {gitSummary.dirty} changed
-              </span>
-            )}
-          </div>
-        )}
-
-        <div
-          className="mt-0.5 text-[11px] text-muted-foreground"
           title={timestampTitle}
         >
           {timestampLabel}
-        </div>
-      </div>
+        </span>
 
-      {/* Right side: diff stats / overflow menu / action buttons */}
-      <div className="relative mt-0.5 shrink-0 self-start">
-        {diffStats && (diffStats.additions > 0 || diffStats.deletions > 0) ? (
-          <span
-            className={cn(
-              "flex items-center gap-1 text-[11px] font-medium tabular-nums transition-opacity",
-              showHoverActions &&
-                "group-hover/session:opacity-0 group-hover/session:hidden group-focus-within/session:opacity-0 group-focus-within/session:hidden",
-            )}
-          >
-            <span className="text-[var(--sb-diff-add-fg)]">
-              +{diffStats.additions}
-            </span>
-            <span className="text-[var(--sb-diff-del-fg)]">
-              -{diffStats.deletions}
-            </span>
-          </span>
-        ) : (
-          !canManage && !hasGitActions ? null : (
-            <span
-              className={cn(
-                "flex items-start justify-end text-[10px] text-muted-foreground transition-opacity",
-                showHoverActions &&
-                  "group-hover/session:opacity-0 group-hover/session:hidden group-focus-within/session:opacity-0 group-focus-within/session:hidden",
-              )}
-            />
-          )
-        )}
         <div
           className={cn(
             "items-center gap-0.5",
