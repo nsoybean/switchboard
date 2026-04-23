@@ -124,12 +124,12 @@ export function WorkspacePanel({
   const changedFileCount = git.files.length;
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
-      <div className="border-b">
+      <div>
         <div className="flex items-center justify-between px-2 py-2">
           <div className="flex items-center gap-1">
             {([
-              { key: "files" as const, label: "Files" },
               { key: "changes" as const, label: "Changes" },
+              { key: "files" as const, label: "Files" },
             ]).map((tab) => (
               <button
                 key={tab.key}
