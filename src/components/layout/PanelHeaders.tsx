@@ -157,7 +157,7 @@ export function CenterPanelHeader({
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[46px] shrink-0 select-none items-center gap-1  px-2"
+      className="flex h-[46px] shrink-0 select-none items-center gap-1 bg-card px-2"
     >
       {/* Window controls + sidebar toggle appear here when sidebar is hidden */}
       {!sidebarOpen && (
