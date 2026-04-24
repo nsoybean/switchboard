@@ -85,15 +85,7 @@ async fn handle_hook(
     headers: HeaderMap,
     body: String,
 ) -> StatusCode {
-    // Validate bearer token
-    let auth = match headers.get("authorization").and_then(|v| v.to_str().ok()) {
-        Some(v) => v,
-        None => return StatusCode::UNAUTHORIZED,
-    };
-    let expected = format!("Bearer {}", state.token);
-    if auth != expected {
-        return StatusCode::UNAUTHORIZED;
-    }
+    // No auth required — server only binds to localhost (127.0.0.1)
 
     // Parse payload
     let payload: AgentHookPayload = match serde_json::from_str(&body) {
