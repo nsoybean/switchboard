@@ -2,107 +2,18 @@ import { memo, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { init, Terminal, FitAddon } from "ghostty-web";
-import { fileCommands } from "@/lib/tauri-commands";
-import { useTheme } from "@/components/theme-provider";
-import "../../styles/terminal.css";
 
 // ---------------------------------------------------------------------------
-// Theme
+// WASM init — started eagerly at module load so it's ready before first render
 // ---------------------------------------------------------------------------
 
-const DARK_THEME = {
-  background: "#000000",
-  foreground: "#f2f7fb",
-  cursor: "#87e6ff",
-  black: "#000000",
-  blue: "#58c5ff",
-  brightBlack: "#496476",
-  brightBlue: "#89dbff",
-  brightCyan: "#b0fff2",
-  brightGreen: "#89ffc3",
-  brightMagenta: "#d5c4ff",
-  brightRed: "#ff8f8f",
-  brightWhite: "#ffffff",
-  brightYellow: "#ffd29b",
-  cyan: "#5ff3dd",
-  green: "#7ce6a7",
-  magenta: "#bc9cff",
-  red: "#ff7f7f",
-  white: "#dde8ee",
-  yellow: "#ffbf73",
-};
+const ghosttyReady = init();
 
-const LIGHT_THEME = {
-  background: "#ffffff",
-  foreground: "#1a1a1a",
-  cursor: "#1a1a1a",
-  cursorAccent: "#ffffff",
-  selectionBackground: "#0451a5",
-  selectionForeground: "#ffffff",
-  selectionInactiveBackground: "#0451a580",
-  black: "#1a1a1a",
-  blue: "#0451a5",
-  brightBlack: "#4b4b4b",
-  brightBlue: "#0366d6",
-  brightCyan: "#0b7285",
-  brightGreen: "#1a7f37",
-  brightMagenta: "#7c3aed",
-  brightRed: "#cf222e",
-  brightWhite: "#d4d4d4",
-  brightYellow: "#9a6700",
-  cyan: "#0b6e6e",
-  green: "#116329",
-  magenta: "#7c3aed",
-  red: "#b31d28",
-  white: "#a0a0a0",
-  yellow: "#845306",
-};
+const FLUSH_INTERVAL = 5; // ms
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function extensionFromMime(mime: string): string {
-  if (mime === "image/png") return "png";
-  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
-  if (mime === "image/gif") return "gif";
-  if (mime === "image/webp") return "webp";
-  return "png";
-}
-
-/** Strip SGR dim (code 2) for light theme readability. */
-function stripAnsiDim(data: string): string {
-  return data.replace(/\x1b\[([0-9;]*)m/g, (match, params: string) => {
-    if (!params) return match;
-
-    const tokens = params.split(";").filter((p) => p.length > 0);
-    const next: string[] = [];
-
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i];
-      if ((t === "38" || t === "48" || t === "58") && tokens[i + 1] === "2" && tokens.length >= i + 5) {
-        next.push(t, tokens[i + 1], tokens[i + 2], tokens[i + 3], tokens[i + 4]);
-        i += 4;
-        continue;
-      }
-      if ((t === "38" || t === "48" || t === "58") && tokens[i + 1] === "5" && tokens.length >= i + 3) {
-        next.push(t, tokens[i + 1], tokens[i + 2]);
-        i += 2;
-        continue;
-      }
-      if (t === "2") continue;
-      next.push(t);
-    }
-
-    if (next.length === tokens.length) return match;
-    if (next.length === 0) return "";
-    return `\x1b[${next.join(";")}m`;
-  });
-}
-
-function normalizeOutput(data: string, isDark: boolean): string {
-  return isDark ? data : stripAnsiDim(data);
-}
 
 function dims(terminal: Terminal) {
   return {
@@ -116,14 +27,6 @@ function canMeasureHost(host: HTMLDivElement) {
   const rect = host.getBoundingClientRect();
   return rect.width >= 2 && rect.height >= 2;
 }
-
-// ---------------------------------------------------------------------------
-// WASM init — started eagerly at module load so it's ready before first render
-// ---------------------------------------------------------------------------
-
-const ghosttyReady = init();
-
-const FLUSH_INTERVAL = 5; // ms
 
 // ---------------------------------------------------------------------------
 // Props & memo helpers
@@ -177,15 +80,6 @@ function XTermContainerComponent({
   const isVisibleRef = useRef(isVisible);
   const onStartRef = useRef(onStart);
   const onExitRef = useRef(onExit);
-  const { theme } = useTheme();
-
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const isDarkRef = useRef(isDark);
-  isDarkRef.current = isDark;
-
-  const isShellCommand = /(^|\/)(zsh|bash|sh|fish)$/.test(command);
 
   useEffect(() => { onStartRef.current = onStart; }, [onStart]);
   useEffect(() => { onExitRef.current = onExit; }, [onExit]);
@@ -198,11 +92,6 @@ function XTermContainerComponent({
     const host = containerRef.current;
     if (!host) return;
 
-    const isMac =
-      typeof navigator !== "undefined" &&
-      /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
-
-    // Mutable state shared between run() and cleanup
     let cancelled = false;
     let resizeRaf = 0;
     let lastCols = 0;
@@ -213,67 +102,18 @@ function XTermContainerComponent({
     const unsubs: Array<() => void> = [];
     const disposables: Array<{ dispose(): void }> = [];
     let resizeObserver: ResizeObserver | null = null;
-    let removePasteHandler: (() => void) | null = null;
 
     const run = async () => {
-      // Wait for ghostty WASM to be ready before creating Terminal
       await ghosttyReady;
       if (cancelled) return;
 
-      // --- 1. Create terminal instance ---
+      // --- 1. Create terminal ---
       const terminal = new Terminal({
-        allowTransparency: true,
         cursorBlink: true,
-        fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
-        fontSize: 13.5,
-        scrollback: 200000,
-        theme: isDarkRef.current ? DARK_THEME : LIGHT_THEME,
+        scrollback: 10000,
       });
 
-      // --- 2. Custom key handlers ---
-      terminal.attachCustomKeyEventHandler((event) => {
-        if (event.type !== "keydown") return true;
-
-        // Shift+Enter → newline (Claude Code / Codex multi-line)
-        if (!isShellCommand && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
-          event.preventDefault();
-          if (sessionActiveRef.current) {
-            void invoke("write_terminal", { tileId, data: "\n" });
-          }
-          return false;
-        }
-
-        // Alt+Arrow → word navigation (shell)
-        if (isMac && isShellCommand && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-          event.preventDefault();
-          if (sessionActiveRef.current) {
-            void invoke("write_terminal", { tileId, data: event.key === "ArrowLeft" ? "\u001bb" : "\u001bf" });
-          }
-          return false;
-        }
-
-        // Cmd+Arrow → line start/end (Claude Code / Codex)
-        if (isMac && !isShellCommand && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-          event.preventDefault();
-          if (sessionActiveRef.current) {
-            void invoke("write_terminal", { tileId, data: event.key === "ArrowLeft" ? "\u0001" : "\u0005" });
-          }
-          return false;
-        }
-
-        // Alt+Backspace → delete word
-        if (isMac && event.key === "Backspace" && event.altKey && !event.ctrlKey && !event.metaKey) {
-          event.preventDefault();
-          if (sessionActiveRef.current) {
-            void invoke("write_terminal", { tileId, data: "\u0017" });
-          }
-          return false;
-        }
-
-        return true;
-      });
-
-      // --- 3. Load FitAddon and open ---
+      // --- 2. Load FitAddon and open ---
       const fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       terminal.open(host);
@@ -281,17 +121,12 @@ function XTermContainerComponent({
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
+      // --- 3. Resize pipeline ---
       const fit = () => {
         if (!isVisibleRef.current || !canMeasureHost(host)) return false;
-        try {
-          fitAddon.fit();
-          return true;
-        } catch {
-          return false;
-        }
+        try { fitAddon.fit(); return true; } catch { return false; }
       };
 
-      // --- 4. Resize pipeline ---
       const resizePty = () => {
         if (!sessionActiveRef.current || !isVisibleRef.current || !canMeasureHost(host)) return;
         const { cols, rows } = dims(terminal);
@@ -315,7 +150,7 @@ function XTermContainerComponent({
       });
       resizeObserver.observe(host);
 
-      // --- 5. Input ---
+      // --- 4. Input → PTY ---
       disposables.push(
         terminal.onData((data) => {
           if (!sessionActiveRef.current) return;
@@ -323,42 +158,11 @@ function XTermContainerComponent({
         }),
       );
 
-      // --- 5b. Image paste ---
-      const handlePaste = async (e: ClipboardEvent) => {
-        const items = e.clipboardData?.items;
-        if (!items) return;
-
-        for (const item of Array.from(items)) {
-          if (!item.type.startsWith("image/")) continue;
-
-          e.preventDefault();
-          e.stopPropagation();
-          const blob = item.getAsFile();
-          if (!blob) continue;
-
-          const ext = extensionFromMime(item.type);
-          const buffer = await blob.arrayBuffer();
-          const data = Array.from(new Uint8Array(buffer));
-
-          try {
-            const filePath = await fileCommands.saveTempImage(data, ext);
-            if (sessionActiveRef.current) {
-              void invoke("write_terminal", { tileId, data: filePath });
-            }
-          } catch {
-            // Failed to save image — fall through to default paste
-          }
-          return;
-        }
-      };
-      host.addEventListener("paste", handlePaste);
-      removePasteHandler = () => host.removeEventListener("paste", handlePaste);
-
-      // --- 6. Output buffering ---
+      // --- 5. Output buffering ---
       const flushOutput = () => {
         flushTimer = 0;
-        if (pendingData && terminal) {
-          terminal.write(normalizeOutput(pendingData, isDarkRef.current));
+        if (pendingData) {
+          terminal.write(pendingData);
           pendingData = "";
         }
       };
@@ -370,7 +174,7 @@ function XTermContainerComponent({
         }
       };
 
-      // --- 7. Event listeners (registered BEFORE PTY creation) ---
+      // --- 6. Tauri event listeners (before PTY creation) ---
       unsubs.push(
         await listen<{ tileId: string; data: string }>("workspace-output", (event) => {
           if (cancelled || event.payload.tileId !== tileId) return;
@@ -381,10 +185,7 @@ function XTermContainerComponent({
       unsubs.push(
         await listen<{ tileId: string; code: number | null }>("workspace-exit", (event) => {
           if (cancelled || event.payload.tileId !== tileId) return;
-          if (pendingData) {
-            window.clearTimeout(flushTimer);
-            flushOutput();
-          }
+          if (pendingData) { window.clearTimeout(flushTimer); flushOutput(); }
           sessionActiveRef.current = false;
           onExitRef.current?.(event.payload.code);
         }),
@@ -392,8 +193,8 @@ function XTermContainerComponent({
 
       if (cancelled) return;
 
-      // --- 8. Create or reconnect PTY ---
-      try { await document.fonts.ready; } catch { /* older browsers */ }
+      // --- 7. Wait for layout then create/reconnect PTY ---
+      try { await document.fonts.ready; } catch { /* ignore */ }
       if (cancelled) return;
 
       const waitForVisibleLayout = async () => {
@@ -406,28 +207,20 @@ function XTermContainerComponent({
         let prevW = host.clientWidth;
         let prevH = host.clientHeight;
         let stableFrames = 0;
-        const MAX_FRAMES = 10;
         let totalFrames = 0;
-
-        while (stableFrames < 2 && totalFrames < MAX_FRAMES) {
+        while (stableFrames < 2 && totalFrames < 10) {
           await new Promise<void>((r) => requestAnimationFrame(() => r()));
           if (cancelled) return;
           totalFrames++;
           const w = host.clientWidth;
           const h = host.clientHeight;
-          if (w === prevW && h === prevH) {
-            stableFrames++;
-          } else {
-            stableFrames = 0;
-            prevW = w;
-            prevH = h;
-          }
+          if (w === prevW && h === prevH) { stableFrames++; }
+          else { stableFrames = 0; prevW = w; prevH = h; }
         }
       };
 
       await waitForVisibleLayout();
       if (cancelled) return;
-
       await waitForStableLayout();
       if (cancelled) return;
 
@@ -442,7 +235,7 @@ function XTermContainerComponent({
 
         if (exists) {
           const buf = await invoke<string>("get_terminal_buffer", { tileId });
-          if (buf) terminal.write(normalizeOutput(buf, isDarkRef.current));
+          if (buf) terminal.write(buf);
           sessionActiveRef.current = true;
           void invoke("resize_terminal", { tileId, cols, rows });
           terminal.focus();
@@ -467,21 +260,19 @@ function XTermContainerComponent({
         terminal.focus();
       } catch (error) {
         if (cancelled) return;
-        terminal.writeln("");
         terminal.writeln(`\x1b[31mFailed to launch terminal: ${String(error)}\x1b[0m`);
       }
     };
 
     void run();
 
-    // --- 9. Cleanup ---
+    // --- Cleanup ---
     return () => {
       cancelled = true;
       sessionActiveRef.current = false;
       cancelAnimationFrame(resizeRaf);
       window.clearTimeout(flushTimer);
       resizeObserver?.disconnect();
-      removePasteHandler?.();
       fitAddonRef.current = null;
       disposables.forEach((d) => d.dispose());
       unsubs.forEach((fn) => fn());
@@ -494,14 +285,8 @@ function XTermContainerComponent({
   }, [args, closeOnUnmount, command, cwd, env, tileId]);
 
   // -----------------------------------------------------------------------
-  // Theme sync (visual only)
+  // Visibility change — refit and refocus
   // -----------------------------------------------------------------------
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.options.theme = isDark ? DARK_THEME : LIGHT_THEME;
-    }
-  }, [isDark]);
-
   useEffect(() => {
     if (!isVisible) return;
 
@@ -512,17 +297,11 @@ function XTermContainerComponent({
 
     const frame = requestAnimationFrame(() => {
       if (!canMeasureHost(host)) return;
-      try {
-        fitAddon.fit();
-      } catch {
-        return;
-      }
-
+      try { fitAddon.fit(); } catch { return; }
       if (sessionActiveRef.current) {
         const { cols, rows } = dims(terminal);
         void invoke("resize_terminal", { tileId, cols, rows });
       }
-
       terminal.focus();
     });
 
