@@ -2,9 +2,60 @@ import { memo, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { init, Terminal, FitAddon } from "ghostty-web";
+import { fileCommands } from "@/lib/tauri-commands";
+import { useTheme } from "@/components/theme-provider";
 
 // ---------------------------------------------------------------------------
-// WASM init — started eagerly at module load so it's ready before first render
+// Theme
+// ---------------------------------------------------------------------------
+
+const DARK_THEME = {
+  background: "#000000",
+  foreground: "#f2f7fb",
+  cursor: "#87e6ff",
+  black: "#000000",
+  blue: "#58c5ff",
+  brightBlack: "#496476",
+  brightBlue: "#89dbff",
+  brightCyan: "#b0fff2",
+  brightGreen: "#89ffc3",
+  brightMagenta: "#d5c4ff",
+  brightRed: "#ff8f8f",
+  brightWhite: "#ffffff",
+  brightYellow: "#ffd29b",
+  cyan: "#5ff3dd",
+  green: "#7ce6a7",
+  magenta: "#bc9cff",
+  red: "#ff7f7f",
+  white: "#dde8ee",
+  yellow: "#ffbf73",
+};
+
+const LIGHT_THEME = {
+  background: "#ffffff",
+  foreground: "#1a1a1a",
+  cursor: "#1a1a1a",
+  cursorAccent: "#ffffff",
+  black: "#1a1a1a",
+  blue: "#0451a5",
+  brightBlack: "#4b4b4b",
+  brightBlue: "#0366d6",
+  brightCyan: "#0b7285",
+  brightGreen: "#1a7f37",
+  brightMagenta: "#7c3aed",
+  brightRed: "#cf222e",
+  brightWhite: "#d4d4d4",
+  brightYellow: "#9a6700",
+  cyan: "#0b6e6e",
+  green: "#116329",
+  magenta: "#7c3aed",
+  red: "#b31d28",
+  white: "#a0a0a0",
+  yellow: "#845306",
+};
+
+// ---------------------------------------------------------------------------
+// WASM init — started eagerly at module load
 // ---------------------------------------------------------------------------
 
 const ghosttyReady = init();
@@ -14,6 +65,14 @@ const FLUSH_INTERVAL = 5; // ms
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function extensionFromMime(mime: string): string {
+  if (mime === "image/png") return "png";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "image/gif") return "gif";
+  if (mime === "image/webp") return "webp";
+  return "png";
+}
 
 function dims(terminal: Terminal) {
   return {
@@ -80,6 +139,18 @@ function XTermContainerComponent({
   const isVisibleRef = useRef(isVisible);
   const onStartRef = useRef(onStart);
   const onExitRef = useRef(onExit);
+  const { theme } = useTheme();
+
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const isDarkRef = useRef(isDark);
+  isDarkRef.current = isDark;
+
+  // Whether the command is a bare shell (vs claude-code / codex)
+  const isShellCommand = /(^|\/)(zsh|bash|sh|fish)$/.test(command);
+  const isShellCommandRef = useRef(isShellCommand);
+  isShellCommandRef.current = isShellCommand;
 
   useEffect(() => { onStartRef.current = onStart; }, [onStart]);
   useEffect(() => { onExitRef.current = onExit; }, [onExit]);
@@ -103,6 +174,57 @@ function XTermContainerComponent({
     const disposables: Array<{ dispose(): void }> = [];
     let resizeObserver: ResizeObserver | null = null;
 
+    // --- Shift+Enter: capture-phase keydown so we intercept before ghostty-web ---
+    // attachCustomKeyEventHandler was blocking all input in ghostty-web,
+    // so we handle Shift+Enter at the DOM level instead.
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === "Enter" &&
+        e.shiftKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !isShellCommandRef.current
+      ) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (sessionActiveRef.current) {
+          void invoke("write_terminal", { tileId, data: "\n" });
+        }
+      }
+    };
+    host.addEventListener("keydown", handleKeyDown, { capture: true });
+
+    // --- Image paste: intercept clipboard images before ghostty-web handles paste ---
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith("image/")) continue;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const blob = item.getAsFile();
+        if (!blob) continue;
+
+        const ext = extensionFromMime(item.type);
+        const buffer = await blob.arrayBuffer();
+        const data = Array.from(new Uint8Array(buffer));
+
+        try {
+          const filePath = await fileCommands.saveTempImage(data, ext);
+          if (sessionActiveRef.current) {
+            void invoke("write_terminal", { tileId, data: filePath });
+          }
+        } catch {
+          // Failed to save — fall through to default paste behavior
+        }
+        return;
+      }
+    };
+    host.addEventListener("paste", handlePaste, { capture: true });
+
     const run = async () => {
       await ghosttyReady;
       if (cancelled) return;
@@ -111,6 +233,7 @@ function XTermContainerComponent({
       const terminal = new Terminal({
         cursorBlink: true,
         scrollback: 10000,
+        theme: isDarkRef.current ? DARK_THEME : LIGHT_THEME,
       });
 
       // --- 2. Load FitAddon and open ---
@@ -273,6 +396,8 @@ function XTermContainerComponent({
       cancelAnimationFrame(resizeRaf);
       window.clearTimeout(flushTimer);
       resizeObserver?.disconnect();
+      host.removeEventListener("keydown", handleKeyDown, { capture: true });
+      host.removeEventListener("paste", handlePaste, { capture: true });
       fitAddonRef.current = null;
       disposables.forEach((d) => d.dispose());
       unsubs.forEach((fn) => fn());
@@ -283,6 +408,15 @@ function XTermContainerComponent({
       }
     };
   }, [args, closeOnUnmount, command, cwd, env, tileId]);
+
+  // -----------------------------------------------------------------------
+  // Theme sync
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.options.theme = isDark ? DARK_THEME : LIGHT_THEME;
+  }, [isDark]);
 
   // -----------------------------------------------------------------------
   // Visibility change — refit and refocus
