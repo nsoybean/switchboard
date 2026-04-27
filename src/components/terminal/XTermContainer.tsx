@@ -1,14 +1,9 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { SearchAddon } from "@xterm/addon-search";
-import { WebglAddon } from "@xterm/addon-webgl";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { init, Terminal, FitAddon } from "ghostty-web";
 import { fileCommands } from "@/lib/tauri-commands";
 import { useTheme } from "@/components/theme-provider";
-import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
 
 // ---------------------------------------------------------------------------
@@ -85,7 +80,6 @@ function stripAnsiDim(data: string): string {
 
     for (let i = 0; i < tokens.length; i++) {
       const t = tokens[i];
-      // Preserve extended color sequences (38;2;r;g;b / 48;2;r;g;b / 38;5;n / 48;5;n)
       if ((t === "38" || t === "48" || t === "58") && tokens[i + 1] === "2" && tokens.length >= i + 5) {
         next.push(t, tokens[i + 1], tokens[i + 2], tokens[i + 3], tokens[i + 4]);
         i += 4;
@@ -96,7 +90,7 @@ function stripAnsiDim(data: string): string {
         i += 2;
         continue;
       }
-      if (t === "2") continue; // Drop dim
+      if (t === "2") continue;
       next.push(t);
     }
 
@@ -122,6 +116,14 @@ function canMeasureHost(host: HTMLDivElement) {
   const rect = host.getBoundingClientRect();
   return rect.width >= 2 && rect.height >= 2;
 }
+
+// ---------------------------------------------------------------------------
+// WASM init — started eagerly at module load so it's ready before first render
+// ---------------------------------------------------------------------------
+
+const ghosttyReady = init();
+
+const FLUSH_INTERVAL = 5; // ms
 
 // ---------------------------------------------------------------------------
 // Props & memo helpers
@@ -171,16 +173,11 @@ function XTermContainerComponent({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const searchAddonRef = useRef<SearchAddon | null>(null);
   const sessionActiveRef = useRef(false);
   const isVisibleRef = useRef(isVisible);
   const onStartRef = useRef(onStart);
   const onExitRef = useRef(onExit);
   const { theme } = useTheme();
-
-  const [searchVisible, setSearchVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isDark =
     theme === "dark" ||
@@ -190,33 +187,12 @@ function XTermContainerComponent({
 
   const isShellCommand = /(^|\/)(zsh|bash|sh|fish)$/.test(command);
 
-  const openSearch = useCallback(() => {
-    setSearchVisible(true);
-    requestAnimationFrame(() => searchInputRef.current?.focus());
-  }, []);
-
-  const closeSearch = useCallback(() => {
-    setSearchVisible(false);
-    setSearchQuery("");
-    searchAddonRef.current?.clearDecorations();
-    terminalRef.current?.focus();
-  }, []);
-
-  const doSearch = useCallback((query: string, direction: "next" | "prev" = "next") => {
-    if (!searchAddonRef.current || !query) return;
-    if (direction === "next") {
-      searchAddonRef.current.findNext(query);
-    } else {
-      searchAddonRef.current.findPrevious(query);
-    }
-  }, []);
-
   useEffect(() => { onStartRef.current = onStart; }, [onStart]);
   useEffect(() => { onExitRef.current = onExit; }, [onExit]);
   useEffect(() => { isVisibleRef.current = isVisible; }, [isVisible]);
 
   // -----------------------------------------------------------------------
-  // Core terminal lifecycle — single effect owns PTY + listeners
+  // Core terminal lifecycle
   // -----------------------------------------------------------------------
   useEffect(() => {
     const host = containerRef.current;
@@ -226,221 +202,175 @@ function XTermContainerComponent({
       typeof navigator !== "undefined" &&
       /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform);
 
-    // --- 1. Create xterm.js instance ---
-    const terminal = new Terminal({
-      allowTransparency: true,
-      allowProposedApi: true,
-      cursorBlink: true,
-      fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
-      fontSize: 13.5,
-      fontWeight: "normal",
-      fontWeightBold: "bold",
-      lineHeight: 1.3,
-      macOptionIsMeta: true,
-      minimumContrastRatio: 1,
-      scrollback: 200000,
-      theme: isDarkRef.current ? DARK_THEME : LIGHT_THEME,
-    });
-
-    // --- 2. Custom key handlers ---
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (event.type !== "keydown") return true;
-
-      // Cmd+F → open search bar
-      if (event.key === "f" && (isMac ? event.metaKey : event.ctrlKey) && !event.altKey && !event.shiftKey) {
-        event.preventDefault();
-        openSearch();
-        return false;
-      }
-
-      // Shift+Enter → newline (Claude Code / Codex multi-line)
-      if (!isShellCommand && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        event.preventDefault();
-        if (sessionActiveRef.current) {
-          void invoke("write_terminal", { tileId, data: "\n" });
-        }
-        return false;
-      }
-
-      // Alt+Arrow → word navigation (shell)
-      if (isMac && isShellCommand && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-        event.preventDefault();
-        if (sessionActiveRef.current) {
-          void invoke("write_terminal", { tileId, data: event.key === "ArrowLeft" ? "\u001bb" : "\u001bf" });
-        }
-        return false;
-      }
-
-      // Cmd+Arrow → line start/end (Claude Code / Codex)
-      if (isMac && !isShellCommand && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-        event.preventDefault();
-        if (sessionActiveRef.current) {
-          void invoke("write_terminal", { tileId, data: event.key === "ArrowLeft" ? "\u0001" : "\u0005" });
-        }
-        return false;
-      }
-
-      // Alt+Backspace → delete word
-      if (isMac && event.key === "Backspace" && event.altKey && !event.ctrlKey && !event.metaKey) {
-        event.preventDefault();
-        if (sessionActiveRef.current) {
-          void invoke("write_terminal", { tileId, data: "\u0017" });
-        }
-        return false;
-      }
-
-      return true;
-    });
-
-    // --- 3. Load addons and open ---
-    const fitAddon = new FitAddon();
-    const searchAddon = new SearchAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.loadAddon(searchAddon);
-    searchAddonRef.current = searchAddon;
-    terminal.open(host);
-
-    // Unicode 11 for proper character width measurement
-    const unicode11 = new Unicode11Addon();
-    terminal.loadAddon(unicode11);
-    terminal.unicode.activeVersion = "11";
-
-    // WebGL renderer with context loss recovery
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-      });
-      terminal.loadAddon(webgl);
-    } catch {
-      // WebGL can fail; xterm falls back to canvas automatically.
-    }
-
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    const fit = () => {
-      if (!isVisibleRef.current || !canMeasureHost(host)) return false;
-      try {
-        fitAddon.fit();
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    // --- 4. Resize pipeline ---
-    //
-    // ResizeObserver → fit xterm (visual) → resize PTY (SIGWINCH)
-    //
-    // The first resize is sent immediately so the child process gets
-    // correct dimensions before it draws anything. Subsequent resizes
-    // are debounced via rAF so we send at most one per frame — fast
-    // enough for smooth window drags, slow enough to avoid flooding
-    // the child with SIGWINCH mid-redraw.
-    //
-    // We never call terminal.clear() — the child process handles its
-    // own redraw in response to SIGWINCH. Clearing scrollback causes
-    // visible flicker, especially with TUI apps like Claude Code.
+    // Mutable state shared between run() and cleanup
+    let cancelled = false;
+    let resizeRaf = 0;
     let lastCols = 0;
     let lastRows = 0;
-    let resizeRaf = 0;
     let initialResizeDone = false;
-
-    const resizePty = () => {
-      if (!sessionActiveRef.current || !isVisibleRef.current || !canMeasureHost(host)) return;
-      const { cols, rows } = dims(terminal);
-      if (cols !== lastCols || rows !== lastRows) {
-        lastCols = cols;
-        lastRows = rows;
-        void invoke("resize_terminal", { tileId, cols, rows });
-      }
-      initialResizeDone = true;
-    };
-
-    const observer = new ResizeObserver(() => {
-      if (!fit()) return;
-      if (!initialResizeDone) {
-        cancelAnimationFrame(resizeRaf);
-        resizePty();
-      } else {
-        cancelAnimationFrame(resizeRaf);
-        resizeRaf = requestAnimationFrame(() => resizePty());
-      }
-    });
-    observer.observe(host);
-
-    // --- 5. Input ---
-    const disposables = [
-      terminal.onData((data) => {
-        if (!sessionActiveRef.current) return;
-        void invoke("write_terminal", { tileId, data });
-      }),
-    ];
-
-    // --- 5b. Image paste ---
-    //
-    // Intercept paste events containing images, save to a temp file,
-    // and write the file path into the PTY so Claude Code can pick it up.
-    const handlePaste = async (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (const item of Array.from(items)) {
-        if (!item.type.startsWith("image/")) continue;
-
-        e.preventDefault();
-        e.stopPropagation();
-        const blob = item.getAsFile();
-        if (!blob) continue;
-
-        const ext = extensionFromMime(item.type);
-        const buffer = await blob.arrayBuffer();
-        const data = Array.from(new Uint8Array(buffer));
-
-        try {
-          const filePath = await fileCommands.saveTempImage(data, ext);
-          if (sessionActiveRef.current) {
-            void invoke("write_terminal", { tileId, data: filePath });
-          }
-        } catch {
-          // Failed to save image — fall through to default paste
-        }
-        return;
-      }
-    };
-    host.addEventListener("paste", handlePaste);
-
-    // --- 6. Output buffering ---
-    //
-    // Coalesce rapid PTY writes into a single xterm.write() call.
-    // Prevents renderer artifacts from high-frequency event bursts
-    // (e.g. large command output, TUI redraws).
     let pendingData = "";
     let flushTimer = 0;
-    const FLUSH_INTERVAL = 5; // ms
-
-    const flushOutput = () => {
-      flushTimer = 0;
-      if (pendingData && terminal) {
-        terminal.write(normalizeOutput(pendingData, isDarkRef.current));
-        pendingData = "";
-      }
-    };
-
-    const bufferOutput = (data: string) => {
-      pendingData += data;
-      if (!flushTimer) {
-        flushTimer = window.setTimeout(flushOutput, FLUSH_INTERVAL);
-      }
-    };
-
-    // --- 7. Event listeners (registered BEFORE PTY creation) ---
-    let cancelled = false;
     const unsubs: Array<() => void> = [];
+    const disposables: Array<{ dispose(): void }> = [];
+    let resizeObserver: ResizeObserver | null = null;
+    let removePasteHandler: (() => void) | null = null;
 
-    const registerListenersAndInit = async () => {
-      // Register listeners FIRST to avoid race with PTY output
+    const run = async () => {
+      // Wait for ghostty WASM to be ready before creating Terminal
+      await ghosttyReady;
+      if (cancelled) return;
+
+      // --- 1. Create terminal instance ---
+      const terminal = new Terminal({
+        allowTransparency: true,
+        cursorBlink: true,
+        fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
+        fontSize: 13.5,
+        scrollback: 200000,
+        theme: isDarkRef.current ? DARK_THEME : LIGHT_THEME,
+      });
+
+      // --- 2. Custom key handlers ---
+      terminal.attachCustomKeyEventHandler((event) => {
+        if (event.type !== "keydown") return true;
+
+        // Shift+Enter → newline (Claude Code / Codex multi-line)
+        if (!isShellCommand && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          if (sessionActiveRef.current) {
+            void invoke("write_terminal", { tileId, data: "\n" });
+          }
+          return false;
+        }
+
+        // Alt+Arrow → word navigation (shell)
+        if (isMac && isShellCommand && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+          event.preventDefault();
+          if (sessionActiveRef.current) {
+            void invoke("write_terminal", { tileId, data: event.key === "ArrowLeft" ? "\u001bb" : "\u001bf" });
+          }
+          return false;
+        }
+
+        // Cmd+Arrow → line start/end (Claude Code / Codex)
+        if (isMac && !isShellCommand && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+          event.preventDefault();
+          if (sessionActiveRef.current) {
+            void invoke("write_terminal", { tileId, data: event.key === "ArrowLeft" ? "\u0001" : "\u0005" });
+          }
+          return false;
+        }
+
+        // Alt+Backspace → delete word
+        if (isMac && event.key === "Backspace" && event.altKey && !event.ctrlKey && !event.metaKey) {
+          event.preventDefault();
+          if (sessionActiveRef.current) {
+            void invoke("write_terminal", { tileId, data: "\u0017" });
+          }
+          return false;
+        }
+
+        return true;
+      });
+
+      // --- 3. Load FitAddon and open ---
+      const fitAddon = new FitAddon();
+      terminal.loadAddon(fitAddon);
+      terminal.open(host);
+
+      terminalRef.current = terminal;
+      fitAddonRef.current = fitAddon;
+
+      const fit = () => {
+        if (!isVisibleRef.current || !canMeasureHost(host)) return false;
+        try {
+          fitAddon.fit();
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      // --- 4. Resize pipeline ---
+      const resizePty = () => {
+        if (!sessionActiveRef.current || !isVisibleRef.current || !canMeasureHost(host)) return;
+        const { cols, rows } = dims(terminal);
+        if (cols !== lastCols || rows !== lastRows) {
+          lastCols = cols;
+          lastRows = rows;
+          void invoke("resize_terminal", { tileId, cols, rows });
+        }
+        initialResizeDone = true;
+      };
+
+      resizeObserver = new ResizeObserver(() => {
+        if (!fit()) return;
+        if (!initialResizeDone) {
+          cancelAnimationFrame(resizeRaf);
+          resizePty();
+        } else {
+          cancelAnimationFrame(resizeRaf);
+          resizeRaf = requestAnimationFrame(() => resizePty());
+        }
+      });
+      resizeObserver.observe(host);
+
+      // --- 5. Input ---
+      disposables.push(
+        terminal.onData((data) => {
+          if (!sessionActiveRef.current) return;
+          void invoke("write_terminal", { tileId, data });
+        }),
+      );
+
+      // --- 5b. Image paste ---
+      const handlePaste = async (e: ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        for (const item of Array.from(items)) {
+          if (!item.type.startsWith("image/")) continue;
+
+          e.preventDefault();
+          e.stopPropagation();
+          const blob = item.getAsFile();
+          if (!blob) continue;
+
+          const ext = extensionFromMime(item.type);
+          const buffer = await blob.arrayBuffer();
+          const data = Array.from(new Uint8Array(buffer));
+
+          try {
+            const filePath = await fileCommands.saveTempImage(data, ext);
+            if (sessionActiveRef.current) {
+              void invoke("write_terminal", { tileId, data: filePath });
+            }
+          } catch {
+            // Failed to save image — fall through to default paste
+          }
+          return;
+        }
+      };
+      host.addEventListener("paste", handlePaste);
+      removePasteHandler = () => host.removeEventListener("paste", handlePaste);
+
+      // --- 6. Output buffering ---
+      const flushOutput = () => {
+        flushTimer = 0;
+        if (pendingData && terminal) {
+          terminal.write(normalizeOutput(pendingData, isDarkRef.current));
+          pendingData = "";
+        }
+      };
+
+      const bufferOutput = (data: string) => {
+        pendingData += data;
+        if (!flushTimer) {
+          flushTimer = window.setTimeout(flushOutput, FLUSH_INTERVAL);
+        }
+      };
+
+      // --- 7. Event listeners (registered BEFORE PTY creation) ---
       unsubs.push(
         await listen<{ tileId: string; data: string }>("workspace-output", (event) => {
           if (cancelled || event.payload.tileId !== tileId) return;
@@ -451,7 +381,6 @@ function XTermContainerComponent({
       unsubs.push(
         await listen<{ tileId: string; code: number | null }>("workspace-exit", (event) => {
           if (cancelled || event.payload.tileId !== tileId) return;
-          // Flush any remaining buffered output before marking exit
           if (pendingData) {
             window.clearTimeout(flushTimer);
             flushOutput();
@@ -463,13 +392,7 @@ function XTermContainerComponent({
 
       if (cancelled) return;
 
-      // --- 8. Create or reconnect PTY (after listeners are ready) ---
-      //
-      // Wait for the container size to stabilize before measuring.
-      // The layout may still be settling (inspector panel mounting,
-      // sidebar animation, React re-renders).  We poll until the
-      // container width/height is unchanged for 2 consecutive frames,
-      // capped at 10 frames (~160ms) to avoid infinite waits.
+      // --- 8. Create or reconnect PTY ---
       try { await document.fonts.ready; } catch { /* older browsers */ }
       if (cancelled) return;
 
@@ -549,7 +472,7 @@ function XTermContainerComponent({
       }
     };
 
-    void registerListenersAndInit();
+    void run();
 
     // --- 9. Cleanup ---
     return () => {
@@ -557,22 +480,21 @@ function XTermContainerComponent({
       sessionActiveRef.current = false;
       cancelAnimationFrame(resizeRaf);
       window.clearTimeout(flushTimer);
-      observer.disconnect();
-      host.removeEventListener("paste", handlePaste);
+      resizeObserver?.disconnect();
+      removePasteHandler?.();
       fitAddonRef.current = null;
-      searchAddonRef.current = null;
-      terminalRef.current = null;
       disposables.forEach((d) => d.dispose());
       unsubs.forEach((fn) => fn());
-      terminal.dispose();
+      terminalRef.current?.dispose();
+      terminalRef.current = null;
       if (closeOnUnmount) {
         void invoke("close_terminal", { tileId }).catch(() => {});
       }
     };
-  }, [args, closeOnUnmount, command, cwd, env, openSearch, tileId]);
+  }, [args, closeOnUnmount, command, cwd, env, tileId]);
 
   // -----------------------------------------------------------------------
-  // Theme sync (visual only — no listener re-registration)
+  // Theme sync (visual only)
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (terminalRef.current) {
@@ -601,7 +523,6 @@ function XTermContainerComponent({
         void invoke("resize_terminal", { tileId, cols, rows });
       }
 
-      terminal.refresh(0, Math.max(terminal.rows - 1, 0));
       terminal.focus();
     });
 
@@ -610,54 +531,6 @@ function XTermContainerComponent({
 
   return (
     <div className="relative h-full w-full min-h-0 min-w-0 overflow-hidden px-3 py-2">
-      {searchVisible && (
-        <div className="absolute top-1 right-2 z-10 flex items-center gap-1 rounded border border-border bg-background px-2 py-1 shadow-sm">
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              doSearch(e.target.value);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                closeSearch();
-              } else if (e.key === "Enter") {
-                e.preventDefault();
-                doSearch(searchQuery, e.shiftKey ? "prev" : "next");
-              }
-            }}
-            placeholder="Search..."
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            className="h-6 w-48 border-none bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-            style={{ fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace' }}
-          />
-          <button
-            onClick={() => doSearch(searchQuery, "prev")}
-            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-            title="Previous (Shift+Enter)"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 9.5V2.5M6 2.5L2.5 6M6 2.5L9.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button
-            onClick={() => doSearch(searchQuery, "next")}
-            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-            title="Next (Enter)"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2.5V9.5M6 9.5L2.5 6M6 9.5L9.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button
-            onClick={closeSearch}
-            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-            title="Close (Esc)"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3L9 9M9 3L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-      )}
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );
