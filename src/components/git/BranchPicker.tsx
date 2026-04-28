@@ -322,7 +322,7 @@ export function BranchPicker({
                         role="menuitem"
                         tabIndex={0}
                         className={cn(
-                          "grid cursor-default grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                          "group/stash grid cursor-default grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
                           isExpanded && "bg-accent/70 text-foreground",
                         )}
                         onClick={() => {
@@ -345,7 +345,7 @@ export function BranchPicker({
                           <span className="block truncate font-medium">#{stash.index}: {stash.message}</span>
                           <span className="block truncate text-[11px] text-muted-foreground">{stash.date}</span>
                         </span>
-                        <span className="flex items-center gap-0.5">
+                        <span className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100">
                           {onStashView ? (
                             <StashActionButton
                               label={isExpanded ? "Hide stash diff" : "View stash diff"}
@@ -445,10 +445,10 @@ function StashActionButton({
       <TooltipTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="icon"
           className={cn(
-            "size-6 border-border/70 bg-background/85 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
+            "size-6 text-muted-foreground hover:bg-background/80 hover:text-foreground",
             destructive && "hover:text-destructive",
           )}
           onClick={(event) => {
