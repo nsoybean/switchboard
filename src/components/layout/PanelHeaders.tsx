@@ -25,7 +25,22 @@ import { WorktreePicker } from "@/components/git/WorktreePicker";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 
 type GitWithActions = GitState &
-  Pick<GitActions, "switchBranch" | "createBranch" | "commit" | "stageAll" | "pull" | "push" | "fetch" | "refresh" | "refreshStashes">;
+  Pick<
+    GitActions,
+    | "switchBranch"
+    | "createBranch"
+    | "commit"
+    | "stageAll"
+    | "pull"
+    | "push"
+    | "fetch"
+    | "refresh"
+    | "refreshStashes"
+    | "stashApply"
+    | "stashPop"
+    | "stashDrop"
+    | "stashShow"
+  >;
 
 interface WindowControlsProps {
   isFullscreen: boolean;
@@ -236,6 +251,10 @@ export function CenterPanelHeader({
                 stashes={git.stashes}
                 stashesLoading={git.stashesLoading}
                 onStashTabOpen={() => void git.refreshStashes()}
+                onStashApply={(index) => git.stashApply(index)}
+                onStashPop={(index) => git.stashPop(index)}
+                onStashDrop={(index) => git.stashDrop(index)}
+                onStashView={(index) => git.stashShow(index)}
                 compact
               />
             </>
