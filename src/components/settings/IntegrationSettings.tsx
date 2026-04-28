@@ -78,7 +78,7 @@ export function IntegrationSettings() {
       {/* GitHub Section */}
       <section>
         <div className="flex items-center gap-2 mb-1">
-          <GitPullRequest className="size-4" />
+          <GitPullRequest className="size-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">GitHub</h2>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
@@ -86,7 +86,7 @@ export function IntegrationSettings() {
           Switchboard.
         </p>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 rounded-md border bg-card p-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-muted-foreground">
               Personal Access Token
@@ -130,7 +130,7 @@ export function IntegrationSettings() {
           </div>
 
           {githubUser && (
-            <div className="flex items-center justify-between rounded-md border bg-muted/50 px-3 py-2">
+            <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
               <div className="flex items-center gap-2">
                 <Check className="size-3.5 text-green-500" />
                 <span className="text-xs">
@@ -149,7 +149,7 @@ export function IntegrationSettings() {
             </div>
           )}
 
-          <div className="text-[11px] text-muted-foreground leading-relaxed">
+          <div className="border-t pt-3 text-[11px] leading-relaxed text-muted-foreground">
             <p>
               Create a token at{" "}
               <button

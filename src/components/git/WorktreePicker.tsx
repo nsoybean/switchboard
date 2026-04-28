@@ -84,7 +84,7 @@ export function WorktreePicker({
           variant="ghost"
           disabled={!projectPath}
           className={cn(
-            "h-7 max-w-[220px] justify-start gap-1.5 rounded-md border border-transparent bg-transparent px-2 font-sans text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-background hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-background data-[state=open]:text-foreground",
+            "h-7 max-w-[220px] justify-start gap-1.5 rounded-md border border-transparent bg-transparent px-2 font-sans text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-card hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-card data-[state=open]:text-foreground",
             triggerClassName,
           )}
         >
@@ -94,9 +94,9 @@ export function WorktreePicker({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className={cn("w-[min(34rem,calc(100vw-2rem))] p-0", compact && "w-[min(25rem,calc(100vw-2rem))]")}
+        className={cn("w-[min(32rem,calc(100vw-2rem))] overflow-hidden rounded-md p-0 font-sans", compact && "w-[min(25rem,calc(100vw-2rem))]")}
       >
-        <div className="flex items-center gap-2 border-b px-2 py-1.5">
+        <div className="flex items-center gap-2 border-b bg-card px-2 py-1.5">
           <Search className="size-3.5 text-muted-foreground" />
           <Input
             autoFocus
@@ -116,7 +116,7 @@ export function WorktreePicker({
                   setOpen(false);
                   onCreateWorktree(trimmedQuery || undefined);
                 }}
-                className="gap-2 rounded-md px-3 py-2 text-sm"
+                className="gap-2 rounded-md px-2 py-2 text-sm"
               >
                 <Plus className="size-4 text-muted-foreground" />
                 {trimmedQuery
@@ -144,8 +144,8 @@ export function WorktreePicker({
                       onSelectPath?.(worktree.path);
                     }}
                     className={cn(
-                      "grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 px-3 py-2.5 text-sm",
-                      isCurrent && "bg-muted text-foreground",
+                      "grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 rounded-md px-2 py-2 text-sm",
+                      isCurrent && "bg-accent/70 text-foreground",
                     )}
                   >
                     <span className="flex justify-center pt-0.5">

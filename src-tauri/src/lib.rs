@@ -10,7 +10,6 @@ pub fn run() {
 
     // Bind hook server port synchronously so state is always available
     let (hook_state, hook_listener) = hook_server::init_hook_server();
-    let hook_token = hook_state.token.clone();
 
     tauri::Builder::default()
         .manage(SessionRegistry::new())
@@ -34,7 +33,7 @@ pub fn run() {
             }
 
             // Spawn the async HTTP server now that the runtime is available
-            hook_server::spawn_hook_server(app.handle().clone(), hook_listener, hook_token);
+            hook_server::spawn_hook_server(app.handle().clone(), hook_listener);
 
             Ok(())
         })

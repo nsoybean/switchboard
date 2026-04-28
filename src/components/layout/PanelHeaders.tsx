@@ -402,7 +402,7 @@ export function RightPanelHeader({
         data-tauri-drag-region
         className="flex h-10 shrink-0 select-none items-center gap-2 border-b bg-card/95 px-2 font-sans text-xs"
       >
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
           {git?.branch && (
             <>
             <WorktreePicker
@@ -411,7 +411,7 @@ export function RightPanelHeader({
               currentBranch={git.branch}
               onCreateWorktree={onCreateWorktree}
               onSelectPath={onSelectWorktree}
-              triggerClassName="h-6 max-w-[150px] px-2 text-xs"
+              triggerClassName="h-6 min-w-0 flex-1 basis-0 shrink px-1.5 text-xs"
               compact
             />
             <BranchPicker
@@ -419,7 +419,7 @@ export function RightPanelHeader({
               loading={git.branchesLoading && git.branches.length === 0}
               value={git.branch}
               disabled={git.branchActionPending}
-              triggerClassName="h-6 w-auto max-w-[150px] gap-1.5 border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-card hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-card data-[state=open]:text-foreground"
+              triggerClassName="h-6 min-w-0 flex-1 basis-0 shrink gap-1 border border-transparent bg-transparent px-1.5 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-card hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-card data-[state=open]:text-foreground"
               createLabel="Create branch..."
               onSelect={(branchName) => void git.switchBranch(branchName)}
               onCreateBranch={onCreateBranch}
@@ -430,13 +430,13 @@ export function RightPanelHeader({
             />
 
             {/* Split commit button */}
-            <div className="flex min-w-0 items-center">
+            <div className="flex shrink-0 items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-6 gap-1.5 rounded-r-none border-r-0 px-2.5 text-xs font-medium"
+                    className="h-6 max-w-[86px] gap-1.5 rounded-r-none border-r-0 px-2 text-xs font-medium"
                     disabled={!hasChanges || !!anyGitPending}
                     onClick={() => setCommitDialogOpen(true)}
                   >
@@ -445,13 +445,15 @@ export function RightPanelHeader({
                     ) : (
                       <GitCommit className="size-3.5" />
                     )}
-                    {pullPending
-                      ? "Pulling..."
-                      : pushPending
-                        ? "Pushing..."
-                        : fetchPending
-                          ? "Fetching..."
-                          : "Commit"}
+                    <span className="truncate">
+                      {pullPending
+                        ? "Pulling..."
+                        : pushPending
+                          ? "Pushing..."
+                          : fetchPending
+                            ? "Fetching..."
+                            : "Commit"}
+                    </span>
                   </Button>
                 </TooltipTrigger>
                 {!hasChanges && (

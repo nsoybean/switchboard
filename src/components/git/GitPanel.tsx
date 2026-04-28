@@ -322,110 +322,113 @@ export const GitPanel = memo(function GitPanel({
             </div>
           )}
 
-          {!git.error &&
-            filteredFiles.map((file) => {
-              const isExpanded = expandedFile === file.path;
-              const isSelectedDocument =
-                activeDiffPath === file.path && activeDiffStaged === showStaged;
+          {!git.error && filteredFiles.length > 0 ? (
+            <div className="ml-3 border-l border-l-border/80">
+              {filteredFiles.map((file) => {
+                const isExpanded = expandedFile === file.path;
+                const isSelectedDocument =
+                  activeDiffPath === file.path && activeDiffStaged === showStaged;
 
-              return (
-                <div key={`${file.path}-${file.staged}`}>
-                  <div
-                    onClick={() => {
-                      if (onOpenDiff) {
-                        onOpenDiff({
-                          path: file.path,
-                          staged: showStaged,
-                          status: file.status,
-                        });
-                        return;
-                      }
-                      toggleFile(file.path);
-                    }}
-                    className={cn(
-                      "group/file grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 overflow-hidden border-t px-2 py-1.5 text-xs transition-colors",
-                      isExpanded || isSelectedDocument
-                        ? "bg-accent/70"
-                        : "hover:bg-muted/55",
-                    )}
-                  >
-                    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                      <ChevronRight
-                        className={cn(
-                          "size-3 shrink-0 text-muted-foreground transition-transform",
-                          isExpanded && "rotate-90",
-                        )}
-                      />
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "h-4 shrink-0 px-1 font-mono text-[10px]",
-                          (file.status === "A" || file.status === "??") &&
-                            "text-[var(--sb-diff-add-fg)]",
-                          file.status === "D" && "text-[var(--sb-diff-del-fg)]",
-                          file.status === "M" && "text-[var(--sb-status-warning)]",
-                        )}
-                      >
-                        {file.status}
-                      </Badge>
-                      <span
-                        className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground"
-                        title={file.path}
-                      >
-                        {file.path}
-                      </span>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/file:opacity-100 group-focus-within/file:opacity-100">
-                      {showStaged ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-5 shrink-0"
-                              onClick={(e) => handleUnstageFile(e, file.path)}
-                            >
-                              <Minus />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Unstage</TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-5 shrink-0"
-                                onClick={(e) => handleStageFile(e, file.path)}
-                              >
-                                <Plus />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Stage</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-5 shrink-0"
-                                onClick={(e) => handleRevertFile(e, file.path)}
-                              >
-                                <Undo2 />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Revert</TooltipContent>
-                          </Tooltip>
-                        </>
+                return (
+                  <div key={`${file.path}-${file.staged}`}>
+                    <div
+                      onClick={() => {
+                        if (onOpenDiff) {
+                          onOpenDiff({
+                            path: file.path,
+                            staged: showStaged,
+                            status: file.status,
+                          });
+                          return;
+                        }
+                        toggleFile(file.path);
+                      }}
+                      className={cn(
+                        "group/file grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 overflow-hidden border-b px-2 py-1.5 text-xs transition-colors",
+                        isExpanded || isSelectedDocument
+                          ? "bg-accent/70"
+                          : "hover:bg-muted/55",
                       )}
+                    >
+                      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                        <ChevronRight
+                          className={cn(
+                            "size-3 shrink-0 text-muted-foreground transition-transform",
+                            isExpanded && "rotate-90",
+                          )}
+                        />
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "h-4 shrink-0 px-1 font-mono text-[10px]",
+                            (file.status === "A" || file.status === "??") &&
+                              "text-[var(--sb-diff-add-fg)]",
+                            file.status === "D" && "text-[var(--sb-diff-del-fg)]",
+                            file.status === "M" && "text-[var(--sb-status-warning)]",
+                          )}
+                        >
+                          {file.status}
+                        </Badge>
+                        <span
+                          className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground"
+                          title={file.path}
+                        >
+                          {file.path}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/file:opacity-100 group-focus-within/file:opacity-100">
+                        {showStaged ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-5 shrink-0"
+                                onClick={(e) => handleUnstageFile(e, file.path)}
+                              >
+                                <Minus />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Unstage</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-5 shrink-0"
+                                  onClick={(e) => handleStageFile(e, file.path)}
+                                >
+                                  <Plus />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Stage</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-5 shrink-0"
+                                  onClick={(e) => handleRevertFile(e, file.path)}
+                                >
+                                  <Undo2 />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Revert</TooltipContent>
+                            </Tooltip>
+                          </>
+                        )}
+                      </div>
                     </div>
+                    {!onOpenDiff && isExpanded && fileDiff ? <DiffView diff={fileDiff} /> : null}
                   </div>
-                  {!onOpenDiff && isExpanded && fileDiff ? <DiffView diff={fileDiff} /> : null}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          ) : null}
         </GitSection>
 
         <GitSection

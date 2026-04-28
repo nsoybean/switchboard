@@ -99,7 +99,7 @@ export function BranchPicker({
         variant="outline"
         disabled
         className={cn(
-          "h-10 w-full justify-between px-3 font-sans text-xs font-medium",
+          "h-8 w-full justify-between px-2.5 font-sans text-xs font-medium",
           triggerClassName,
         )}
       >
@@ -115,7 +115,7 @@ export function BranchPicker({
         variant="outline"
         disabled
         className={cn(
-          "h-10 w-full justify-between px-3 font-sans text-xs font-medium",
+          "h-8 w-full justify-between px-2.5 font-sans text-xs font-medium",
           triggerClassName,
         )}
       >
@@ -132,7 +132,7 @@ export function BranchPicker({
           variant="ghost"
           disabled={disabled}
           className={cn(
-            "h-10 w-full justify-between px-3 font-sans text-xs font-medium",
+            "h-8 w-full justify-between px-2.5 font-sans text-xs font-medium",
             triggerClassName,
           )}
         >
@@ -145,11 +145,11 @@ export function BranchPicker({
       <DropdownMenuContent
         align={align}
         className={cn(
-          "w-[min(34rem,calc(100vw-2rem))] p-0 font-sans",
+          "w-[min(32rem,calc(100vw-2rem))] overflow-hidden rounded-md p-0 font-sans",
           compact && "w-[min(25rem,calc(100vw-2rem))]",
         )}
       >
-        <div className="border-b px-2 pt-2">
+        <div className="border-b bg-card px-2 pt-2">
           <Tabs value={tab} onValueChange={(value) => setTab(value as "branches" | "stash")}>
             <TabsList className="h-8 rounded-md bg-muted/70 p-0.5">
               <TabsTrigger value="branches" className="h-7 px-3 text-xs">
@@ -161,14 +161,14 @@ export function BranchPicker({
             </TabsList>
           </Tabs>
         </div>
-        <div className="border-b p-1">
+        <div className="border-b bg-card p-1">
           <Input
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.stopPropagation()}
             placeholder={tab === "branches" ? "Select branch..." : "Select stash..."}
-            className="h-9 w-full border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
+            className="h-8 w-full border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
           />
         </div>
         {showInlineCreate ? (
@@ -179,7 +179,7 @@ export function BranchPicker({
                   setOpen(false);
                   onCreateBranch?.(trimmedQuery);
                 }}
-                className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 px-2 py-2.5 text-sm"
+                className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 rounded-md px-2 py-2 text-sm"
               >
                 <PlusIcon className="size-4 text-muted-foreground" />
                 <span className="min-w-0">
@@ -203,8 +203,8 @@ export function BranchPicker({
                       setOpen(false);
                     }}
                     className={cn(
-                      "grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2.5 text-sm",
-                      value === branch.name && "bg-muted text-foreground",
+                      "grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-2 text-sm",
+                      value === branch.name && "bg-accent/70 text-foreground",
                     )}
                   >
                     <span className="flex justify-center">
@@ -242,7 +242,7 @@ export function BranchPicker({
                   .map((stash) => (
                     <DropdownMenuItem
                       key={stash.ref_name}
-                      className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2 px-2 py-2.5 text-sm"
+                      className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-2 text-sm"
                       onSelect={(event) => event.preventDefault()}
                     >
                       <Archive className="size-3.5 text-muted-foreground" />
@@ -267,7 +267,7 @@ export function BranchPicker({
                   setOpen(false);
                   onCreateBranch();
                 }}
-                className="px-2 py-1.5 font-mono text-[11px] font-medium"
+                className="rounded-md px-2 py-1.5 font-sans text-xs font-medium"
               >
                 <PlusIcon />
                 {createLabel}

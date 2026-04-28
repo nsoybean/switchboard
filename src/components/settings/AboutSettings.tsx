@@ -25,7 +25,7 @@ export function AboutSettings({
   return (
     <>
       <section>
-        <div className="flex items-center justify-between gap-3 mb-1">
+        <div className="mb-1 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold">App Updates</h2>
             <p className="text-xs text-muted-foreground mt-1">
@@ -35,7 +35,7 @@ export function AboutSettings({
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5"
+            className="h-7 gap-1.5"
             onClick={onCheckForUpdates}
             disabled={checkingForUpdates || installingUpdate}
           >
@@ -48,7 +48,7 @@ export function AboutSettings({
           </Button>
         </div>
 
-        <div className="rounded-lg border bg-muted/30 px-4 py-3 mt-4 space-y-3">
+        <div className="mt-4 space-y-3 rounded-md border bg-card px-3 py-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs text-muted-foreground">Current version</p>

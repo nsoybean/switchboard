@@ -61,7 +61,7 @@ export function NotificationSettings() {
     <section>
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
-          <Bell className="size-4" />
+          <Bell className="size-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">Notifications</h2>
         </div>
         <Button variant="outline" size="sm" onClick={testNotification}>
@@ -72,8 +72,8 @@ export function NotificationSettings() {
         Desktop notifications when a session finishes while you're in another window.
       </p>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="divide-y rounded-md border bg-card">
+        <div className="flex items-center justify-between px-3 py-3">
           <div>
             <p className="text-sm">Enable notifications</p>
             <p className="text-[11px] text-muted-foreground">
@@ -86,7 +86,7 @@ export function NotificationSettings() {
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between px-3 py-3">
           <div>
             <p className="text-sm">Sound</p>
             <p className="text-[11px] text-muted-foreground">
