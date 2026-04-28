@@ -54,7 +54,7 @@ const RESIZE_HANDLES: ResizeHandle[] = [
   {
     direction: "NorthWest",
     cursor: "nwseResize",
-    className: "top-0 left-0 h-6 w-6 cursor-nwse-resize z-30",
+    className: "top-0 left-0 h-3 w-6 cursor-nwse-resize z-30",
   },
   {
     direction: "SouthEast",
