@@ -159,6 +159,8 @@ export function AppLayout() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogProjectPath, setDialogProjectPath] = useState<string | null>(null);
+  const [dialogInitialLabel, setDialogInitialLabel] = useState<string | undefined>();
+  const [dialogInitialUseWorktree, setDialogInitialUseWorktree] = useState<boolean | undefined>();
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
@@ -590,12 +592,13 @@ export function AppLayout() {
 
       if (config.useWorktree) {
         try {
-          const slug = slugifyLabel(config.label || `session-${Date.now().toString(36)}`);
+          const worktreeLabel = config.label || `session-${Date.now().toString(36)}`;
+          const slug = slugifyLabel(worktreeLabel);
           const branchName = `${getBranchPrefix(config.agent)}${slug}`;
           const info = await worktreeCommands.create(
             config.projectPath,
             branchName,
-            config.label,
+            worktreeLabel,
             config.baseBranch,
           );
           cwd = info.path;
@@ -787,8 +790,13 @@ export function AppLayout() {
 
   const openSettings = useCallback(() => setSettingsOpen(true), []);
 
-  const openNewSessionDialog = useCallback((projectPath?: string) => {
+  const openNewSessionDialog = useCallback((
+    projectPath?: string,
+    defaults?: { label?: string; useWorktree?: boolean },
+  ) => {
     setDialogProjectPath(projectPath ?? state.projectPath ?? state.projects[0] ?? null);
+    setDialogInitialLabel(defaults?.label);
+    setDialogInitialUseWorktree(defaults?.useWorktree);
     setDialogOpen(true);
   }, [state.projectPath, state.projects]);
 
@@ -1385,17 +1393,34 @@ export function AppLayout() {
 
   const hasWorkspaceRoot = workspaceContext?.availability === "ready" && !!workspaceContext.rootPath;
   const projectPathLabel = state.projectPath
-    ? state.projectPath.split("/").slice(-2).join("/")
+    ? state.projectPath.split("/").filter(Boolean).pop() ?? state.projectPath
     : null;
   const createBranchPrefix = workspaceContext?.kind === "session" && selectedSession?.agent
     ? getBranchPrefix(selectedSession.agent)
     : undefined;
   const git = useGitState({
     cwd: hasWorkspaceRoot ? workspaceContext!.rootPath! : "",
-    visible: hasWorkspaceRoot && inspectorOpen,
+    visible: hasWorkspaceRoot,
     sessionId: workspaceContext?.kind === "session" ? selectedSession?.id : null,
     onSessionBranchChange: handleSessionBranchChange,
   });
+
+  const handleSelectWorktree = useCallback((path: string) => {
+    const matchingSession = liveSessions.find((session) =>
+      session.worktreePath === path ||
+      session.workspace.launchRoot === path ||
+      session.cwd === path
+    );
+    if (!matchingSession) return;
+
+    setViewingSession(null);
+    dispatch({ type: "SET_ACTIVE", id: matchingSession.id });
+    if (workspaceShellMode !== "canvas") {
+      requestPaneReveal(`live:${matchingSession.id}`);
+    } else {
+      canvasViewRef.current?.panToSession(matchingSession.id);
+    }
+  }, [dispatch, liveSessions, requestPaneReveal, workspaceShellMode]);
 
   const sidebarContent = (
     <SessionSidebar
@@ -1489,6 +1514,9 @@ export function AppLayout() {
     inspectorOpen: inspectorOpen && !!state.projectPath,
     isFullscreen,
     projectPathLabel,
+    projectPath: state.projectPath,
+    cwd: workspaceContext?.rootPath,
+    git: hasWorkspaceRoot ? git : undefined,
     workspaceShellMode,
     onClose: handleWindowClose,
     onMinimize: handleWindowMinimize,
@@ -1496,6 +1524,21 @@ export function AppLayout() {
     onToggleSidebar: () => setSidebarOpen((prev) => !prev),
     onToggleInspector: () => setInspectorOpen((prev) => !prev),
     onWorkspaceShellModeChange: setWorkspaceShellMode,
+    onCreateBranch: (branchName?: string) => {
+      if (branchName && hasWorkspaceRoot) {
+        void git.createBranch(branchName);
+      } else {
+        setCreateBranchOpen(true);
+      }
+    },
+    onCreateWorktree: (label?: string) => openNewSessionDialog(undefined, {
+      label,
+      useWorktree: true,
+    }),
+    onSelectWorktree: handleSelectWorktree,
+    onOpenProjectFolder: state.projectPath
+      ? () => void handleOpenProject(state.projectPath!)
+      : undefined,
     updateVersion: availableUpdate?.version ?? null,
     checkingForUpdates,
     installingUpdate,
@@ -1509,9 +1552,13 @@ export function AppLayout() {
         open={dialogOpen}
         projectPath={dialogProjectPath ?? state.projectPath}
         projectPaths={state.projects}
+        initialLabel={dialogInitialLabel}
+        initialUseWorktree={dialogInitialUseWorktree}
         onClose={() => {
           setDialogOpen(false);
           setDialogProjectPath(null);
+          setDialogInitialLabel(undefined);
+          setDialogInitialUseWorktree(undefined);
         }}
         onSubmit={handleNewSession}
       />
@@ -1588,9 +1635,9 @@ export function AppLayout() {
         >
           {!isFullscreen && (
             <div className="flex items-center gap-1.5 pl-3 pr-2">
-              <button onClick={handleWindowClose} className="size-3 rounded-full bg-[#ff5f57] transition-all hover:brightness-90" aria-label="Close" />
-              <button onClick={handleWindowMinimize} className="size-3 rounded-full bg-[#febc2e] transition-all hover:brightness-90" aria-label="Minimize" />
-              <button onClick={() => void handleWindowMaximize()} className="size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90" aria-label="Fullscreen" />
+              <button onClick={handleWindowClose} className="sb-window-control sb-window-control-close size-3 rounded-full bg-[#ff5f57] transition-all hover:brightness-90" aria-label="Close" />
+              <button onClick={handleWindowMinimize} className="sb-window-control sb-window-control-minimize size-3 rounded-full bg-[#febc2e] transition-all hover:brightness-90" aria-label="Minimize" />
+              <button onClick={() => void handleWindowMaximize()} className="sb-window-control sb-window-control-fullscreen size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90" aria-label="Fullscreen" />
             </div>
           )}
           <div data-tauri-drag-region className="flex-1" />
@@ -1643,8 +1690,20 @@ export function AppLayout() {
                 <RightPanelHeader
                   git={hasWorkspaceRoot ? git : undefined}
                   githubToken={state.githubToken}
+                  projectPath={state.projectPath}
                   cwd={workspaceContext?.rootPath}
-                  onCreateBranch={() => setCreateBranchOpen(true)}
+                  onCreateBranch={(branchName?: string) => {
+                    if (branchName && hasWorkspaceRoot) {
+                      void git.createBranch(branchName);
+                    } else {
+                      setCreateBranchOpen(true);
+                    }
+                  }}
+                  onCreateWorktree={(label?: string) => openNewSessionDialog(undefined, {
+                    label,
+                    useWorktree: true,
+                  })}
+                  onSelectWorktree={handleSelectWorktree}
                   onCreatePr={() => setCreatePrOpen(true)}
                   onToggleInspector={() => setInspectorOpen(false)}
                 />
@@ -1819,8 +1878,20 @@ export function AppLayout() {
           <RightPanelHeader
             git={hasWorkspaceRoot ? git : undefined}
             githubToken={state.githubToken}
+            projectPath={state.projectPath}
             cwd={workspaceContext?.rootPath}
-            onCreateBranch={() => setCreateBranchOpen(true)}
+            onCreateBranch={(branchName?: string) => {
+              if (branchName && hasWorkspaceRoot) {
+                void git.createBranch(branchName);
+              } else {
+                setCreateBranchOpen(true);
+              }
+            }}
+            onCreateWorktree={(label?: string) => openNewSessionDialog(undefined, {
+              label,
+              useWorktree: true,
+            })}
+            onSelectWorktree={handleSelectWorktree}
             onCreatePr={() => setCreatePrOpen(true)}
             onToggleInspector={() => setInspectorOpen(false)}
           />

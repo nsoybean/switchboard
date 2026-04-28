@@ -125,8 +125,8 @@ export function WorkspacePanel({
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
       <div>
-        <div className="flex items-center justify-between px-2 py-2">
-          <div className="flex items-center gap-1">
+        <div className="flex items-start justify-between gap-2 px-2 py-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {([
               { key: "changes" as const, label: "Changes" },
               { key: "files" as const, label: "Files" },
@@ -136,7 +136,7 @@ export function WorkspacePanel({
                 type="button"
                 onClick={() => onTabChange(tab.key)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                  "inline-flex min-w-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
                   activeTab === tab.key
                     ? "border-border bg-background text-foreground shadow-sm"
                     : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground",

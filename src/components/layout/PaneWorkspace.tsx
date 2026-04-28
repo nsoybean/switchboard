@@ -56,6 +56,7 @@ import {
   getFirstLeaf,
   moveTabBetweenLeaves,
   paneLayoutEqual,
+  reorderTabInLeaf,
   setLeafActiveTab,
   splitLeaf,
   splitLeafWithExternalTab,
@@ -159,6 +160,10 @@ function makeDropId(leafId: string, zone: DropZone) {
   return `${leafId}--pane-drop--${zone}`;
 }
 
+function makeTabDropId(tabId: string, leafId: string) {
+  return `tab--drop--${tabId}--${leafId}`;
+}
+
 function parseDragId(id: string): { tabId: string; fromLeafId: string } | null {
   const prefix = "tab--drag--";
   if (!id.startsWith(prefix)) return null;
@@ -168,6 +173,16 @@ function parseDragId(id: string): { tabId: string; fromLeafId: string } | null {
   const sepIdx = rest.lastIndexOf(sep);
   if (sepIdx === -1) return null;
   return { tabId: rest.slice(0, sepIdx), fromLeafId: `pane-${rest.slice(sepIdx + sep.length)}` };
+}
+
+function parseTabDropId(id: string): { tabId: string; leafId: string } | null {
+  const prefix = "tab--drop--";
+  if (!id.startsWith(prefix)) return null;
+  const rest = id.slice(prefix.length);
+  const sep = "--pane-";
+  const sepIdx = rest.lastIndexOf(sep);
+  if (sepIdx === -1) return null;
+  return { tabId: rest.slice(0, sepIdx), leafId: `pane-${rest.slice(sepIdx + sep.length)}` };
 }
 
 function DropHint({
@@ -315,10 +330,17 @@ function DraggableTab({
     id: makeDragId(tabId, leafId),
     data: { type: "tab", tabId, fromLeafId: leafId } satisfies TabDragData,
   });
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id: makeTabDropId(tabId, leafId),
+  });
+  const setTabNodeRef = useCallback((node: HTMLButtonElement | null) => {
+    setNodeRef(node);
+    setDropNodeRef(node);
+  }, [setDropNodeRef, setNodeRef]);
 
   return (
     <button
-      ref={setNodeRef}
+      ref={setTabNodeRef}
       key={tabId}
       type="button"
       {...attributes}
@@ -334,6 +356,7 @@ function DraggableTab({
         isActive
           ? "text-foreground"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+        isOver && !isDragging && "bg-accent/70 text-foreground",
         isDragging && "opacity-40",
       )}
     >
@@ -933,6 +956,32 @@ export function PaneWorkspace({
     if (!over) return;
 
     const drag = parseDragId(String(active.id));
+    const tabDrop = parseTabDropId(String(over.id));
+    if (drag && tabDrop) {
+      const { tabId, fromLeafId } = drag;
+      const { tabId: targetTabId, leafId: toLeafId } = tabDrop;
+
+      setLayout((current) => {
+        if (!current.root || tabId === targetTabId) return current;
+
+        const targetLeaf = findLeaf(current.root, toLeafId);
+        if (!targetLeaf) return current;
+
+        const insertIndex = targetLeaf.tabIds.indexOf(targetTabId);
+        if (insertIndex === -1) return current;
+
+        const nextRoot = fromLeafId === toLeafId
+          ? reorderTabInLeaf(current.root, fromLeafId, tabId, targetTabId)
+          : moveTabBetweenLeaves(current.root, fromLeafId, tabId, toLeafId, insertIndex);
+        const next = {
+          root: ensureActiveTabs(nextRoot),
+          activePaneId: toLeafId,
+        };
+        return paneLayoutEqual(current, next) ? current : next;
+      });
+      return;
+    }
+
     const drop = parseDropId(String(over.id));
     if (!drag || !drop) return;
 

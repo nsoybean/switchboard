@@ -244,6 +244,58 @@ html[data-platform="macos"] #root {
   box-shadow: 0 0 0 1px oklch(1 0 0 / 0.06);
 }
 
+.sb-window-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sb-window-control::before,
+.sb-window-control::after {
+  content: "";
+  position: absolute;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.sb-window-control:hover::before,
+.sb-window-control:hover::after {
+  opacity: 0.72;
+}
+
+.sb-window-control-close::before,
+.sb-window-control-close::after {
+  width: 7px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: oklch(0.18 0.04 25);
+}
+
+.sb-window-control-close::before {
+  transform: rotate(45deg);
+}
+
+.sb-window-control-close::after {
+  transform: rotate(-45deg);
+}
+
+.sb-window-control-minimize::before {
+  width: 7px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: oklch(0.22 0.05 75);
+}
+
+.sb-window-control-fullscreen::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  border-top: 2px solid oklch(0.18 0.07 145);
+  border-right: 2px solid oklch(0.18 0.07 145);
+  transform: rotate(-45deg);
+}
+
 /* ── Fullscreen overrides ── */
 html[data-fullscreen="true"] .sb-window-shell {
   border-radius: 0;

@@ -159,7 +159,7 @@ export function Titlebar({
   return (
     <div
       data-tauri-drag-region
-      className="flex items-center h-[52px] border-b bg-background select-none shrink-0"
+      className="flex h-[52px] shrink-0 select-none items-center border-b bg-background font-sans text-xs"
     >
       {/* Left section — width matches sidebar so branch selector aligns with middle pane */}
       <div
@@ -172,17 +172,17 @@ export function Titlebar({
           <div className="flex items-center gap-1.5 pl-3 pr-2">
             <button
               onClick={() => appWindow.close()}
-              className="size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
+              className="sb-window-control sb-window-control-close size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
               aria-label="Close"
             />
             <button
               onClick={() => appWindow.minimize()}
-              className="size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
+              className="sb-window-control sb-window-control-minimize size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
               aria-label="Minimize"
             />
             <button
               onClick={handleMaximize}
-              className="size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
+              className="sb-window-control sb-window-control-fullscreen size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
               aria-label="Fullscreen"
             />
           </div>
@@ -210,7 +210,7 @@ export function Titlebar({
 
       {/* Branch + git actions — show when project is open OR active session has git state */}
       {(projectPath || (hasActiveSession && git?.branch)) && git?.branch && (
-        <div data-tauri-drag-region className="flex items-center gap-2 text-[11px]">
+        <div data-tauri-drag-region className="flex items-center gap-2 text-xs">
           <BranchPicker
             branches={git.branches}
             loading={git.branchesLoading && git.branches.length === 0}
@@ -360,7 +360,7 @@ export function Titlebar({
               <Button
                 variant={workspaceShellMode === "pane" ? "secondary" : "ghost"}
                 size="sm"
-                className="h-6 gap-1.5 px-2 text-[11px]"
+                className="h-6 gap-1.5 px-2 text-xs"
                 onClick={() => onWorkspaceShellModeChange?.("pane")}
               >
                 <PanelTop className="size-3.5" />
@@ -369,7 +369,7 @@ export function Titlebar({
               <Button
                 variant={workspaceShellMode === "canvas" ? "secondary" : "ghost"}
                 size="sm"
-                className="h-6 gap-1.5 px-2 text-[11px]"
+                className="h-6 gap-1.5 px-2 text-xs"
                 onClick={() => onWorkspaceShellModeChange?.("canvas")}
               >
                 <LayoutGrid className="size-3.5" />

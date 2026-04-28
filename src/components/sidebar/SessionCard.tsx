@@ -129,14 +129,14 @@ export function SessionCard({
         {session.label || "New session"}
       </span>
 
-      {/* Right side: timestamp (hidden on hover) / action buttons (shown on hover) */}
-      <div className="relative shrink-0 flex items-center">
+      {/* Right side: keep a stable footprint so hover actions never shift the row */}
+      <div className="relative flex h-5 w-[34px] shrink-0 items-center justify-end">
         {/* Timestamp — hidden when hover actions visible */}
         <span
           className={cn(
-            "text-[11px] text-muted-foreground tabular-nums",
+            "absolute right-0 text-[11px] text-muted-foreground tabular-nums transition-opacity",
             showHoverActions &&
-              "group-hover/session:hidden group-focus-within/session:hidden",
+              "group-hover/session:opacity-0 group-focus-within/session:opacity-0",
           )}
           title={timestampTitle}
         >
@@ -145,10 +145,10 @@ export function SessionCard({
 
         <div
           className={cn(
-            "items-center gap-0.5",
+            "absolute right-0 z-10 flex items-center gap-0.5 rounded-md bg-accent/95 px-0.5 transition-opacity",
             showHoverActions
-              ? "hidden group-hover/session:flex group-focus-within/session:flex"
-              : "hidden",
+              ? "pointer-events-none opacity-0 group-hover/session:pointer-events-auto group-hover/session:opacity-100 group-focus-within/session:pointer-events-auto group-focus-within/session:opacity-100"
+              : "pointer-events-none opacity-0",
           )}
         >
           {/* Git actions overflow menu */}

@@ -5,6 +5,7 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronDown,
+  FolderOpen,
   GitCommit,
   GitPullRequest,
   LayoutGrid,
@@ -31,11 +32,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { BranchPicker } from "@/components/git/BranchPicker";
+import { WorktreePicker } from "@/components/git/WorktreePicker";
 import { CommitDialog } from "@/components/git/CommitDialog";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 
 type GitWithActions = GitState &
-  Pick<GitActions, "switchBranch" | "createBranch" | "commit" | "stageAll" | "pull" | "push" | "fetch" | "refresh">;
+  Pick<GitActions, "switchBranch" | "createBranch" | "commit" | "stageAll" | "pull" | "push" | "fetch" | "refresh" | "refreshStashes">;
 
 interface WindowControlsProps {
   isFullscreen: boolean;
@@ -50,17 +52,17 @@ function WindowControls({ isFullscreen, onClose, onMinimize, onMaximize }: Windo
     <div className="flex items-center gap-1.5 pl-3 pr-2">
       <button
         onClick={onClose}
-        className="size-3 rounded-full bg-[#ff5f57] transition-all hover:brightness-90"
+        className="sb-window-control sb-window-control-close size-3 rounded-full bg-[#ff5f57] transition-all hover:brightness-90"
         aria-label="Close"
       />
       <button
         onClick={onMinimize}
-        className="size-3 rounded-full bg-[#febc2e] transition-all hover:brightness-90"
+        className="sb-window-control sb-window-control-minimize size-3 rounded-full bg-[#febc2e] transition-all hover:brightness-90"
         aria-label="Minimize"
       />
       <button
         onClick={onMaximize}
-        className="size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90"
+        className="sb-window-control sb-window-control-fullscreen size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90"
         aria-label="Fullscreen"
       />
     </div>
@@ -87,7 +89,7 @@ export function LeftPanelHeader({
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[46px] shrink-0 select-none items-center "
+      className="flex h-[46px] shrink-0 select-none items-center font-sans text-xs"
     >
       <WindowControls
         isFullscreen={isFullscreen}
@@ -122,6 +124,9 @@ interface CenterPanelHeaderProps {
   inspectorOpen: boolean;
   isFullscreen: boolean;
   projectPathLabel?: string | null;
+  projectPath?: string | null;
+  cwd?: string | null;
+  git?: GitWithActions;
   workspaceShellMode?: "pane" | "canvas";
   onClose: () => void;
   onMinimize: () => void;
@@ -129,6 +134,10 @@ interface CenterPanelHeaderProps {
   onToggleSidebar: () => void;
   onToggleInspector: () => void;
   onWorkspaceShellModeChange?: (mode: "pane" | "canvas") => void;
+  onCreateBranch?: (branchName?: string) => void;
+  onCreateWorktree?: (label?: string) => void;
+  onSelectWorktree?: (path: string) => void;
+  onOpenProjectFolder?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
   installingUpdate?: boolean;
@@ -141,6 +150,9 @@ export function CenterPanelHeader({
   inspectorOpen,
   isFullscreen,
   projectPathLabel,
+  projectPath,
+  cwd,
+  git,
   workspaceShellMode = "pane",
   onClose,
   onMinimize,
@@ -148,6 +160,10 @@ export function CenterPanelHeader({
   onToggleSidebar,
   onToggleInspector,
   onWorkspaceShellModeChange,
+  onCreateBranch,
+  onCreateWorktree,
+  onSelectWorktree,
+  onOpenProjectFolder,
   updateVersion = null,
   checkingForUpdates = false,
   installingUpdate = false,
@@ -157,7 +173,7 @@ export function CenterPanelHeader({
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[46px] shrink-0 select-none items-center gap-1 bg-card px-2"
+      className="flex h-[46px] shrink-0 select-none items-center gap-1 bg-card px-2 font-sans text-xs"
     >
       {/* Window controls + sidebar toggle appear here when sidebar is hidden */}
       {!sidebarOpen && (
@@ -186,6 +202,59 @@ export function CenterPanelHeader({
         </>
       )}
 
+      {projectPathLabel ? (
+        <div className="flex min-w-0 items-center gap-1 text-xs">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-7 max-w-[160px] justify-start rounded-md border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-background hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-background data-[state=open]:text-foreground"
+              >
+                <span className="truncate">{projectPathLabel}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44">
+              <DropdownMenuItem
+                disabled={!onOpenProjectFolder}
+                onSelect={() => onOpenProjectFolder?.()}
+              >
+                <FolderOpen className="size-3.5" />
+                Open in Finder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <span className="text-muted-foreground/50">/</span>
+          <WorktreePicker
+            projectPath={projectPath ?? null}
+            currentPath={cwd ?? projectPath ?? null}
+            currentBranch={git?.branch ?? null}
+            onCreateWorktree={onCreateWorktree}
+            onSelectPath={onSelectWorktree}
+            triggerClassName="max-w-[190px]"
+          />
+          {git?.branch ? (
+            <>
+              <span className="text-muted-foreground/50">/</span>
+              <BranchPicker
+                branches={git.branches}
+                loading={git.branchesLoading && git.branches.length === 0}
+                value={git.branch}
+                disabled={git.branchActionPending}
+                triggerClassName="h-7 w-auto max-w-[190px] gap-1.5 border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-background hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-background data-[state=open]:text-foreground"
+                createLabel="Create branch..."
+                onSelect={(branchName) => void git.switchBranch(branchName)}
+                onCreateBranch={onCreateBranch}
+                stashes={git.stashes}
+                stashesLoading={git.stashesLoading}
+                onStashTabOpen={() => void git.refreshStashes()}
+                compact
+              />
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       <div data-tauri-drag-region className="flex-1" />
 
       {projectPathLabel && (
@@ -194,7 +263,7 @@ export function CenterPanelHeader({
             <Button
               variant={workspaceShellMode === "pane" ? "secondary" : "ghost"}
               size="sm"
-              className="h-6 gap-1.5 px-2 text-[11px]"
+              className="h-6 gap-1.5 px-2 text-xs"
               onClick={() => onWorkspaceShellModeChange?.("pane")}
             >
               <PanelTop className="size-3.5" />
@@ -203,7 +272,7 @@ export function CenterPanelHeader({
             <Button
               variant={workspaceShellMode === "canvas" ? "secondary" : "ghost"}
               size="sm"
-              className="h-6 gap-1.5 px-2 text-[11px]"
+              className="h-6 gap-1.5 px-2 text-xs"
               onClick={() => onWorkspaceShellModeChange?.("canvas")}
             >
               <LayoutGrid className="size-3.5" />
@@ -260,8 +329,11 @@ export function CenterPanelHeader({
 interface RightPanelHeaderProps {
   git?: GitWithActions;
   githubToken?: string | null;
+  projectPath?: string | null;
   cwd?: string | null;
-  onCreateBranch?: () => void;
+  onCreateBranch?: (branchName?: string) => void;
+  onCreateWorktree?: (label?: string) => void;
+  onSelectWorktree?: (path: string) => void;
   onCreatePr?: () => void;
   onToggleInspector: () => void;
 }
@@ -269,8 +341,11 @@ interface RightPanelHeaderProps {
 export function RightPanelHeader({
   git,
   githubToken,
+  projectPath,
   cwd,
   onCreateBranch,
+  onCreateWorktree,
+  onSelectWorktree,
   onCreatePr,
   onToggleInspector,
 }: RightPanelHeaderProps) {
@@ -325,24 +400,37 @@ export function RightPanelHeader({
     <>
       <div
         data-tauri-drag-region
-        className="flex h-[46px] shrink-0 select-none items-center gap-2  px-2"
+        className="flex h-[46px] shrink-0 select-none items-center gap-2 px-2 font-sans text-xs"
       >
-        {git?.branch && (
-          <>
-            {/* Branch selector — bordered pill */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          {git?.branch && (
+            <>
+            <WorktreePicker
+              projectPath={projectPath ?? null}
+              currentPath={cwd ?? projectPath ?? null}
+              currentBranch={git.branch}
+              onCreateWorktree={onCreateWorktree}
+              onSelectPath={onSelectWorktree}
+              triggerClassName="h-7 max-w-[150px] px-2 text-xs"
+              compact
+            />
             <BranchPicker
               branches={git.branches}
               loading={git.branchesLoading && git.branches.length === 0}
               value={git.branch}
               disabled={git.branchActionPending}
-              triggerClassName="h-7 w-auto max-w-[180px] gap-1.5 border bg-background px-2 text-xs font-medium shadow-none hover:bg-accent/50"
+              triggerClassName="h-7 w-auto max-w-[150px] gap-1.5 border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-background hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-background data-[state=open]:text-foreground"
               createLabel="Create branch..."
               onSelect={(branchName) => void git.switchBranch(branchName)}
               onCreateBranch={onCreateBranch}
+              stashes={git.stashes}
+              stashesLoading={git.stashesLoading}
+              onStashTabOpen={() => void git.refreshStashes()}
+              compact
             />
 
             {/* Split commit button */}
-            <div className="flex items-center">
+            <div className="flex min-w-0 items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -460,17 +548,16 @@ export function RightPanelHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          </>
-        )}
-
-        <div data-tauri-drag-region className="flex-1" />
+            </>
+          )}
+        </div>
 
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="size-9"
+              className="size-9 shrink-0"
               onClick={onToggleInspector}
             >
               <PanelRight className="size-4" />
