@@ -322,7 +322,7 @@ export function BranchPicker({
                         role="menuitem"
                         tabIndex={0}
                         className={cn(
-                          "group/stash grid cursor-default grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                          "group/stash relative grid cursor-default grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
                           isExpanded && "bg-accent/70 text-foreground",
                         )}
                         onClick={() => {
@@ -345,7 +345,7 @@ export function BranchPicker({
                           <span className="block truncate font-medium">#{stash.index}: {stash.message}</span>
                           <span className="block truncate text-[11px] text-muted-foreground">{stash.date}</span>
                         </span>
-                        <span className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/stash:opacity-100 group-focus-within/stash:opacity-100">
+                        <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-background/95 opacity-0 shadow-sm transition-opacity group-hover/stash:pointer-events-auto group-hover/stash:opacity-100 group-focus-within/stash:pointer-events-auto group-focus-within/stash:opacity-100">
                           {onStashView ? (
                             <StashActionButton
                               label={isExpanded ? "Hide stash diff" : "View stash diff"}
