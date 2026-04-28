@@ -145,17 +145,17 @@ export function BranchPicker({
       <DropdownMenuContent
         align={align}
         className={cn(
-          "w-[min(32rem,calc(100vw-2rem))] overflow-hidden rounded-md p-0 font-sans",
-          compact && "w-[min(25rem,calc(100vw-2rem))]",
+          "w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-md p-0 font-sans",
+          compact && "w-[min(24rem,calc(100vw-2rem))]",
         )}
       >
-        <div className="border-b bg-card px-2 pt-2">
+        <div className="border-b bg-card px-2 pt-1.5">
           <Tabs value={tab} onValueChange={(value) => setTab(value as "branches" | "stash")}>
-            <TabsList className="h-8 rounded-md bg-muted/70 p-0.5">
-              <TabsTrigger value="branches" className="h-7 px-3 text-xs">
+            <TabsList className="h-7 rounded-md bg-muted/70 p-0.5">
+              <TabsTrigger value="branches" className="h-6 px-2.5 text-xs">
                 Branches
               </TabsTrigger>
-              <TabsTrigger value="stash" className="h-7 px-3 text-xs">
+              <TabsTrigger value="stash" className="h-6 px-2.5 text-xs">
                 Stash
               </TabsTrigger>
             </TabsList>
@@ -168,7 +168,7 @@ export function BranchPicker({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.stopPropagation()}
             placeholder={tab === "branches" ? "Select branch..." : "Select stash..."}
-            className="h-8 w-full border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
+            className="h-7 w-full border-0 bg-transparent px-2 text-xs shadow-none focus-visible:ring-0"
           />
         </div>
         {showInlineCreate ? (
@@ -179,12 +179,12 @@ export function BranchPicker({
                   setOpen(false);
                   onCreateBranch?.(trimmedQuery);
                 }}
-                className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 rounded-md px-2 py-2 text-sm"
+                className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2 rounded-md px-2 py-1.5 text-xs"
               >
-                <PlusIcon className="size-4 text-muted-foreground" />
+                <PlusIcon className="size-3.5 text-muted-foreground" />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">Create Branch: "{trimmedQuery}"</span>
-                  <span className="block truncate text-xs text-muted-foreground">Based off {value || "current branch"}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">Based off {value || "current branch"}</span>
                 </span>
               </DropdownMenuItem>
             </div>
@@ -203,7 +203,7 @@ export function BranchPicker({
                       setOpen(false);
                     }}
                     className={cn(
-                      "grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-2 text-sm",
+                      "grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 text-xs",
                       value === branch.name && "bg-accent/70 text-foreground",
                     )}
                   >
@@ -216,7 +216,7 @@ export function BranchPicker({
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{branch.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span className="block truncate text-[11px] text-muted-foreground">
                         {branch.last_commit_date ? `${branch.last_commit_date} · ` : ""}
                         {branch.last_commit_subject ?? (branch.is_remote ? "Remote branch" : "Local branch")}
                       </span>
@@ -242,13 +242,13 @@ export function BranchPicker({
                   .map((stash) => (
                     <DropdownMenuItem
                       key={stash.ref_name}
-                      className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-2 text-sm"
+                      className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-xs"
                       onSelect={(event) => event.preventDefault()}
                     >
                       <Archive className="size-3.5 text-muted-foreground" />
                       <span className="min-w-0">
                         <span className="block truncate font-medium">#{stash.index}: {stash.message}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{stash.date}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{stash.date}</span>
                       </span>
                     </DropdownMenuItem>
                   ))}

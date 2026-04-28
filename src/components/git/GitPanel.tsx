@@ -10,6 +10,7 @@ import {
   GitCommit,
   GitPullRequest,
   List,
+  FileText,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -52,6 +53,7 @@ interface GitPanelProps {
   onCreateWorktree?: (label?: string) => void;
   onSelectWorktree?: (path: string) => void;
   onCreatePr?: () => void;
+  onFileSelect?: (filePath: string) => void;
   onOpenDiff?: (diff: { path: string; staged: boolean; status: string }) => void;
   activeDiffPath?: string | null;
   activeDiffStaged?: boolean | null;
@@ -86,6 +88,18 @@ function hasFileStats(file: ChangedFile) {
   return typeof file.additions === "number" || typeof file.deletions === "number";
 }
 
+function splitFilePath(path: string) {
+  const index = path.lastIndexOf("/");
+  if (index === -1) {
+    return { name: path, directory: "" };
+  }
+
+  return {
+    name: path.slice(index + 1),
+    directory: path.slice(0, index),
+  };
+}
+
 function countTreeFiles(node: ChangeTreeNode): number {
   let count = node.files.length;
   node.dirs.forEach((child) => {
@@ -101,6 +115,7 @@ export const GitPanel = memo(function GitPanel({
   githubToken = null,
   onCreateBranch,
   onCreatePr,
+  onFileSelect,
 }: GitPanelProps) {
   const [expandedFileKey, setExpandedFileKey] = useState<string | null>(null);
   const [fileDiff, setFileDiff] = useState("");
@@ -302,6 +317,11 @@ export const GitPanel = memo(function GitPanel({
     await git.revertFiles([file.path]);
   };
 
+  const handleOpenFile = (file: ChangedFile) => {
+    if (file.status === "D") return;
+    onFileSelect?.(`${cwd.replace(/\/$/, "")}/${file.path}`);
+  };
+
   const handlePull = async () => {
     if (!canPull || pullPending || anyGitPending) return;
     setPullPending(true);
@@ -365,6 +385,7 @@ export const GitPanel = memo(function GitPanel({
   const renderFileRow = (file: ChangedFile, depth = 0) => {
     const key = fileKey(file);
     const isExpanded = expandedFileKey === key;
+    const filePathParts = splitFilePath(file.path);
 
     return (
       <div key={key}>
@@ -372,7 +393,7 @@ export const GitPanel = memo(function GitPanel({
           onClick={() => toggleFile(file)}
           style={{ paddingLeft: `${12 + depth * 16}px` }}
           className={cn(
-            "group/file grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto_4rem_1.25rem_auto] items-center gap-2 py-1.5 pr-3 text-xs transition-colors",
+            "group/file grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto_auto_1.25rem_1.25rem_auto] items-center gap-1.5 py-1.5 pr-3 text-xs transition-colors",
             isExpanded ? "bg-accent/55" : "hover:bg-muted/35",
           )}
         >
@@ -386,10 +407,17 @@ export const GitPanel = memo(function GitPanel({
             />
           </span>
           <span
-            className="min-w-0 truncate font-mono text-[11px] text-muted-foreground"
+            className="flex min-w-0 items-baseline gap-1.5 font-mono text-[11px]"
             title={file.path}
           >
-            {viewMode === "tree" ? file.path.split("/").pop() : file.path}
+            <span className="min-w-0 truncate text-foreground/85">
+              {filePathParts.name}
+            </span>
+            {viewMode === "flat" && filePathParts.directory ? (
+              <span className="min-w-0 truncate text-muted-foreground">
+                {filePathParts.directory}
+              </span>
+            ) : null}
           </span>
           <Badge
             variant="secondary"
@@ -403,7 +431,7 @@ export const GitPanel = memo(function GitPanel({
           >
             {statusLabel(file.status)}
           </Badge>
-          <span className="flex w-16 shrink-0 items-center justify-end gap-1 font-mono text-[10px] tabular-nums">
+          <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] tabular-nums">
             {hasFileStats(file) ? (
               <>
               {typeof file.additions === "number" && file.additions > 0 ? (
@@ -415,6 +443,26 @@ export const GitPanel = memo(function GitPanel({
               </>
             ) : null}
           </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/file:opacity-100 group-focus-within/file:opacity-100"
+                disabled={!onFileSelect || file.status === "D"}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleOpenFile(file);
+                }}
+              >
+                <FileText />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {file.status === "D" ? "Deleted file cannot be opened" : "Open file"}
+            </TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -481,6 +529,17 @@ export const GitPanel = memo(function GitPanel({
               >
                 {file.status === "??" ? "Delete file" : "Revert file"}
               </Button>
+              {file.status !== "D" && onFileSelect ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-muted-foreground"
+                  onClick={() => handleOpenFile(file)}
+                >
+                  Open file
+                </Button>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -538,10 +597,9 @@ export const GitPanel = memo(function GitPanel({
     <div className="flex h-full flex-col overflow-hidden bg-card font-sans">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="text-xs font-medium text-foreground">Changed files</span>
-          <Badge variant="secondary" className="h-4 px-1 text-[10px]">
-            {git.files.length}
-          </Badge>
+          <span className="whitespace-nowrap text-xs font-medium text-foreground">
+            {git.files.length} {git.files.length === 1 ? "file" : "files"}
+          </span>
           {(git.stats.additions > 0 || git.stats.deletions > 0) && (
             <span className="flex items-center gap-1 font-mono text-[10px] tabular-nums">
               {git.stats.additions > 0 ? (

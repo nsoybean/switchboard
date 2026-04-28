@@ -1,4 +1,3 @@
-import { File } from "@phosphor-icons/react";
 import { FolderTree, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FilePanel } from "../files/FilePanel";
@@ -159,8 +158,7 @@ export function WorkspacePanel({
               >
                 {tab.label}
                 {tab.key === "changes" && changedFileCount > 0 && (
-                  <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground">
-                    <File className="size-3" />
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
                     {changedFileCount}
                   </span>
                 )}
@@ -168,16 +166,6 @@ export function WorkspacePanel({
                   <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground">
                     <History className="size-3" />
                     {git.log.length}
-                  </span>
-                )}
-                {tab.key === "changes" && (git.stats.additions > 0 || git.stats.deletions > 0) && (
-                  <span className="flex items-center gap-0.5 font-mono text-[10px]">
-                    {git.stats.additions > 0 && (
-                      <span className="text-[var(--sb-diff-add-fg)]">+{git.stats.additions}</span>
-                    )}
-                    {git.stats.deletions > 0 && (
-                      <span className="text-[var(--sb-diff-del-fg)]">-{git.stats.deletions}</span>
-                    )}
                   </span>
                 )}
               </button>
@@ -210,6 +198,7 @@ export function WorkspacePanel({
                 onCreateWorktree={onCreateWorktree}
                 onSelectWorktree={onSelectWorktree}
                 onCreatePr={onCreatePr}
+                onFileSelect={onFileSelect}
               />
             ) : null}
 

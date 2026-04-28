@@ -94,7 +94,7 @@ export function WorktreePicker({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className={cn("w-[min(32rem,calc(100vw-2rem))] overflow-hidden rounded-md p-0 font-sans", compact && "w-[min(25rem,calc(100vw-2rem))]")}
+        className={cn("w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-md p-0 font-sans", compact && "w-[min(24rem,calc(100vw-2rem))]")}
       >
         <div className="flex items-center gap-2 border-b bg-card px-2 py-1.5">
           <Search className="size-3.5 text-muted-foreground" />
@@ -104,7 +104,7 @@ export function WorktreePicker({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.stopPropagation()}
             placeholder="Select a worktree..."
-            className="h-8 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+            className="h-7 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0"
           />
         </div>
 
@@ -116,9 +116,9 @@ export function WorktreePicker({
                   setOpen(false);
                   onCreateWorktree(trimmedQuery || undefined);
                 }}
-                className="gap-2 rounded-md px-2 py-2 text-sm"
+                className="gap-2 rounded-md px-2 py-1.5 text-xs"
               >
-                <Plus className="size-4 text-muted-foreground" />
+                <Plus className="size-3.5 text-muted-foreground" />
                 {trimmedQuery
                   ? `Create "${trimmedQuery}" based on ${currentBranch || selected?.branch || "current branch"}`
                   : `Create new worktree based on ${currentBranch || selected?.branch || "current branch"}`}
@@ -131,7 +131,7 @@ export function WorktreePicker({
         <ScrollArea className={cn("h-52", compact && "h-44")}>
           <div className="flex flex-col p-1">
             {loading ? (
-              <div className="px-3 py-3 text-xs text-muted-foreground">Loading worktrees...</div>
+              <div className="px-2 py-2 text-xs text-muted-foreground">Loading worktrees...</div>
             ) : filteredWorktrees.length > 0 ? (
               filteredWorktrees.map((worktree) => {
                 const isCurrent = worktree.path === currentPath;
@@ -144,7 +144,7 @@ export function WorktreePicker({
                       onSelectPath?.(worktree.path);
                     }}
                     className={cn(
-                      "grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 rounded-md px-2 py-2 text-sm",
+                      "grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2 rounded-md px-2 py-1.5 text-xs",
                       isCurrent && "bg-accent/70 text-foreground",
                     )}
                   >
@@ -157,7 +157,7 @@ export function WorktreePicker({
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{name}</span>
-                      <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground">
+                      <span className="flex min-w-0 items-center gap-1.5 truncate text-[11px] text-muted-foreground">
                         <GitBranch className="size-3 shrink-0" />
                         <span className="truncate">{worktree.branch || "detached"}</span>
                         {worktree.head ? <span className="shrink-0">· {worktree.head}</span> : null}
@@ -168,7 +168,7 @@ export function WorktreePicker({
                 );
               })
             ) : (
-              <div className="px-3 py-3 text-xs text-muted-foreground">No matching worktrees.</div>
+              <div className="px-2 py-2 text-xs text-muted-foreground">No matching worktrees.</div>
             )}
           </div>
         </ScrollArea>
