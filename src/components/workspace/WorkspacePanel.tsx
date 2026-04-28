@@ -214,7 +214,9 @@ export function WorkspacePanel({
             ) : null}
 
             {activeTab === "history" ? (
-              <GitHistory cwd={context.rootPath!} git={git} />
+              <div className="h-full overflow-y-auto">
+                <GitHistory cwd={context.rootPath!} git={git} />
+              </div>
             ) : null}
           </>
         )}
