@@ -41,30 +41,30 @@ export function SettingsPage({
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex h-full flex-col bg-background font-sans">
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b shrink-0">
-        <Button variant="ghost" size="icon" className="size-8" onClick={onBack}>
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-card/95 px-3">
+        <Button variant="ghost" size="icon" className="size-7" onClick={onBack}>
           <ArrowLeft className="size-4" />
         </Button>
-        <h1 className="text-base font-semibold">Settings</h1>
+        <h1 className="text-sm font-semibold">Settings</h1>
       </div>
 
       {/* Sidebar + Content */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1">
         {/* Left sidebar nav */}
-        <nav className="w-44 border-r py-4 px-2 shrink-0">
+        <nav className="w-52 shrink-0 border-r bg-card px-2 py-3">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors ${
                 activeTab === tab.id
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:bg-accent/50"
+                  ? "bg-accent/80 font-medium text-accent-foreground"
+                  : "text-muted-foreground hover:bg-muted/55 hover:text-foreground"
               }`}
             >
-              <tab.icon className="size-4" />
+              <tab.icon className="size-3.5 shrink-0" />
               {tab.label}
             </button>
           ))}
@@ -72,7 +72,7 @@ export function SettingsPage({
 
         {/* Right content area */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-xl py-8 px-6">
+          <div className="max-w-2xl px-8 py-7">
             {activeTab === "general" && <GeneralSettings />}
             {activeTab === "notifications" && <NotificationSettings />}
             {activeTab === "integrations" && <IntegrationSettings />}

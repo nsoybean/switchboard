@@ -89,7 +89,7 @@ export function SessionTranscriptView({
   return (
     <div className="flex h-full min-w-0 flex-col bg-background font-sans text-foreground">
       {showHeader ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2.5 text-sm">
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-card/70 px-3 py-2 text-sm">
           <AgentIcon agent={session.agent} className="size-4 shrink-0" />
           <span
             className="min-w-0 max-w-[40ch] truncate font-semibold"

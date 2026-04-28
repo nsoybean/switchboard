@@ -24,6 +24,8 @@ interface NewSessionDialogProps {
   open: boolean;
   projectPath: string | null;
   projectPaths: string[];
+  initialLabel?: string;
+  initialUseWorktree?: boolean;
   onClose: () => void;
   onSubmit: (config: {
     projectPath: string;
@@ -46,6 +48,8 @@ export function NewSessionDialog({
   open,
   projectPath,
   projectPaths,
+  initialLabel,
+  initialUseWorktree,
   onClose,
   onSubmit,
 }: NewSessionDialogProps) {
@@ -64,6 +68,9 @@ export function NewSessionDialog({
   useEffect(() => {
     if (!open) return;
 
+    setLabel(initialLabel ?? "");
+    setUseWorktree(initialUseWorktree ?? false);
+
     setSelectedProjectPath((current) => {
       if (current && projectPaths.includes(current)) {
         return current;
@@ -73,7 +80,7 @@ export function NewSessionDialog({
       }
       return projectPaths[0] ?? null;
     });
-  }, [open, projectPath, projectPaths]);
+  }, [initialLabel, initialUseWorktree, open, projectPath, projectPaths]);
 
   useEffect(() => {
     if (!open || !selectedProjectPath) {
@@ -271,7 +278,17 @@ export function NewSessionDialog({
               loading={branchesLoading}
               value={baseBranch}
               onSelect={setBaseBranch}
-              onCreateBranch={branchesLoading ? undefined : () => setCreateBranchOpen(true)}
+              onCreateBranch={
+                branchesLoading
+                  ? undefined
+                  : (branchName) => {
+                      if (branchName) {
+                        void handleCreateBranch(branchName);
+                      } else {
+                        setCreateBranchOpen(true);
+                      }
+                    }
+              }
             />
           </div>
 

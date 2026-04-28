@@ -36,7 +36,7 @@ const TILE_INTERACTION_SELECTOR = ".sb-canvas-tile-shell";
 
 export function getCanvasBackgroundStyle(viewport: CanvasViewport) {
   return {
-    backgroundImage: `radial-gradient(circle at ${Math.max(1, DOT_GRID_INSET * viewport.zoom)}px ${Math.max(1, DOT_GRID_INSET * viewport.zoom)}px, rgba(91, 101, 112, 0.18) ${Math.max(0.9, 1.15 * viewport.zoom)}px, transparent ${Math.max(1.15, 1.45 * viewport.zoom)}px)`,
+    backgroundImage: `radial-gradient(circle at ${Math.max(1, DOT_GRID_INSET * viewport.zoom)}px ${Math.max(1, DOT_GRID_INSET * viewport.zoom)}px, rgba(91, 101, 112, 0.12) ${Math.max(0.75, 0.95 * viewport.zoom)}px, transparent ${Math.max(1.05, 1.25 * viewport.zoom)}px)`,
     backgroundSize: `${DOT_GRID_SIZE * viewport.zoom}px ${DOT_GRID_SIZE * viewport.zoom}px`,
     backgroundPosition: `${viewport.panX}px ${viewport.panY}px`,
   };

@@ -48,8 +48,10 @@ export interface GitActions {
   deleteBranch: (branch: string, force: boolean) => Promise<void>;
   pushDeleteRemote: (branch: string) => Promise<void>;
   stash: (message?: string) => Promise<void>;
+  stashApply: (index: number) => Promise<void>;
   stashPop: (index?: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
+  stashShow: (index: number) => Promise<string>;
   cleanupWorktree: (worktreePath: string, branch: string, deleteRemote: boolean) => Promise<void>;
 }
 
@@ -62,6 +64,29 @@ interface UseGitStateOptions {
 
 const emptyStats: DiffStats = { additions: 0, deletions: 0, files_changed: 0 };
 const emptyAheadBehind: GitAheadBehind = { ahead: 0, behind: 0 };
+
+function changedFilesEqual(a: ChangedFile[], b: ChangedFile[]) {
+  if (a.length !== b.length) return false;
+
+  return a.every((file, index) => {
+    const next = b[index];
+    return (
+      file.path === next.path &&
+      file.status === next.status &&
+      file.staged === next.staged &&
+      file.additions === next.additions &&
+      file.deletions === next.deletions
+    );
+  });
+}
+
+function diffStatsEqual(a: DiffStats, b: DiffStats) {
+  return (
+    a.additions === b.additions &&
+    a.deletions === b.deletions &&
+    a.files_changed === b.files_changed
+  );
+}
 
 export function useGitState({
   cwd,
@@ -85,6 +110,7 @@ export function useGitState({
   const [stashesLoading, setStashesLoading] = useState(false);
 
   const branchesLoadedRef = useRef(false);
+  const statusLoadedRef = useRef(false);
 
   // Reset state when cwd changes
   useEffect(() => {
@@ -100,13 +126,17 @@ export function useGitState({
     setLog([]);
     setStashes([]);
     branchesLoadedRef.current = false;
+    statusLoadedRef.current = false;
   }, [cwd]);
 
   const refresh = useCallback(async () => {
     const shouldShowBranchLoading = !branchesLoadedRef.current;
+    const shouldShowStatusLoading = !statusLoadedRef.current;
 
     try {
-      setLoading(true);
+      if (shouldShowStatusLoading) {
+        setLoading(true);
+      }
       if (shouldShowBranchLoading) {
         setBranchesLoading(true);
       }
@@ -123,8 +153,9 @@ export function useGitState({
         nextBranches.find((candidate) => candidate.name === status.branch);
       setCurrentBranchUpstreamStatus(currentBranchInfo?.upstream_status ?? "none");
       branchesLoadedRef.current = nextBranches.length > 0;
-      setFiles(status.files);
-      setStats(status.stats);
+      statusLoadedRef.current = true;
+      setFiles((prev) => (changedFilesEqual(prev, status.files) ? prev : status.files));
+      setStats((prev) => (diffStatsEqual(prev, status.stats) ? prev : status.stats));
       setAheadBehind(ab);
     } catch (err) {
       setBranches([]);
@@ -135,7 +166,9 @@ export function useGitState({
       if (shouldShowBranchLoading) {
         setBranchesLoading(false);
       }
-      setLoading(false);
+      if (shouldShowStatusLoading) {
+        setLoading(false);
+      }
     }
   }, [cwd]);
 
@@ -389,6 +422,20 @@ export function useGitState({
     );
   }, [cwd, refresh, refreshStashes]);
 
+  const stashApply = useCallback(async (index: number) => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.stashApply(cwd, index);
+        await refresh();
+      })(),
+      {
+        loading: "Applying stash...",
+        success: "Stash applied",
+        error: (err) => `Failed to apply stash: ${String(err)}`,
+      },
+    );
+  }, [cwd, refresh]);
+
   const stashDrop = useCallback(async (index: number) => {
     await toast.promise(
       (async () => {
@@ -402,6 +449,10 @@ export function useGitState({
       },
     );
   }, [cwd, refreshStashes]);
+
+  const stashShow = useCallback(async (index: number) => {
+    return gitCommands.stashShow(cwd, index);
+  }, [cwd]);
 
   const cleanupWorktree = useCallback(async (
     worktreePath: string,
@@ -453,8 +504,10 @@ export function useGitState({
     deleteBranch,
     pushDeleteRemote,
     stash,
+    stashApply,
     stashPop,
     stashDrop,
+    stashShow,
     cleanupWorktree,
   };
 }

@@ -17,6 +17,7 @@ import {
 } from "../workspace/WorkspacePanel";
 import { CreateBranchDialog } from "../git/CreateBranchDialog";
 import { CreatePrDialog } from "../git/CreatePrDialog";
+import type { StashDiffDocumentData } from "../git/StashDiffDocument";
 import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useAgentHooks } from "../../hooks/useClaudeHooks";
 import { useGitState } from "../../hooks/useGitState";
@@ -30,6 +31,7 @@ import {
   projectCommands,
   quitCommands,
   worktreeCommands,
+  type StashEntry,
 } from "../../lib/tauri-commands";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -159,6 +161,8 @@ export function AppLayout() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogProjectPath, setDialogProjectPath] = useState<string | null>(null);
+  const [dialogInitialLabel, setDialogInitialLabel] = useState<string | undefined>();
+  const [dialogInitialUseWorktree, setDialogInitialUseWorktree] = useState<boolean | undefined>();
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
@@ -170,6 +174,7 @@ export function AppLayout() {
   const [workspaceShellMode, setWorkspaceShellMode] = useState<"pane" | "canvas">("pane");
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [openTabSessionIds, setOpenTabSessionIds] = useState<string[]>([]);
+  const [stashDiffTabs, setStashDiffTabs] = useState<StashDiffDocumentData[]>([]);
   const [paneRevealRequest, setPaneRevealRequest] = useState<{
     tabId: string;
     nonce: number;
@@ -590,12 +595,13 @@ export function AppLayout() {
 
       if (config.useWorktree) {
         try {
-          const slug = slugifyLabel(config.label || `session-${Date.now().toString(36)}`);
+          const worktreeLabel = config.label || `session-${Date.now().toString(36)}`;
+          const slug = slugifyLabel(worktreeLabel);
           const branchName = `${getBranchPrefix(config.agent)}${slug}`;
           const info = await worktreeCommands.create(
             config.projectPath,
             branchName,
-            config.label,
+            worktreeLabel,
             config.baseBranch,
           );
           cwd = info.path;
@@ -787,8 +793,13 @@ export function AppLayout() {
 
   const openSettings = useCallback(() => setSettingsOpen(true), []);
 
-  const openNewSessionDialog = useCallback((projectPath?: string) => {
+  const openNewSessionDialog = useCallback((
+    projectPath?: string,
+    defaults?: { label?: string; useWorktree?: boolean },
+  ) => {
     setDialogProjectPath(projectPath ?? state.projectPath ?? state.projects[0] ?? null);
+    setDialogInitialLabel(defaults?.label);
+    setDialogInitialUseWorktree(defaults?.useWorktree);
     setDialogOpen(true);
   }, [state.projectPath, state.projects]);
 
@@ -1385,17 +1396,64 @@ export function AppLayout() {
 
   const hasWorkspaceRoot = workspaceContext?.availability === "ready" && !!workspaceContext.rootPath;
   const projectPathLabel = state.projectPath
-    ? state.projectPath.split("/").slice(-2).join("/")
+    ? state.projectPath.split("/").filter(Boolean).pop() ?? state.projectPath
     : null;
   const createBranchPrefix = workspaceContext?.kind === "session" && selectedSession?.agent
     ? getBranchPrefix(selectedSession.agent)
     : undefined;
   const git = useGitState({
     cwd: hasWorkspaceRoot ? workspaceContext!.rootPath! : "",
-    visible: hasWorkspaceRoot && inspectorOpen,
+    visible: hasWorkspaceRoot,
     sessionId: workspaceContext?.kind === "session" ? selectedSession?.id : null,
     onSessionBranchChange: handleSessionBranchChange,
   });
+
+  const handleOpenStashDiff = useCallback(async (stash: StashEntry) => {
+    if (!hasWorkspaceRoot || !workspaceContext?.rootPath) return;
+
+    try {
+      const diff = await git.stashShow(stash.index);
+      const id = `stash:${encodeURIComponent(`${workspaceContext.rootPath}:${stash.ref_name}`)}`;
+      setStashDiffTabs((current) => {
+        const nextTab: StashDiffDocumentData = {
+          id,
+          refName: stash.ref_name,
+          message: stash.message,
+          date: stash.date,
+          diff,
+        };
+        const existingIndex = current.findIndex((tab) => tab.id === id);
+        if (existingIndex === -1) return [...current, nextTab];
+
+        const next = [...current];
+        next[existingIndex] = nextTab;
+        return next;
+      });
+      setWorkspaceShellMode("pane");
+      requestPaneReveal(id);
+    } catch (err) {
+      toast.error("Failed to open stash diff", {
+        description: String(err),
+      });
+    }
+  }, [git, hasWorkspaceRoot, requestPaneReveal, workspaceContext?.rootPath]);
+
+  const handleSelectWorktree = useCallback((path: string) => {
+    const matchingSession = liveSessions.find((session) =>
+      session.worktreePath === path ||
+      session.workspace.launchRoot === path ||
+      session.cwd === path
+    );
+    if (!matchingSession) return;
+
+    setViewingSession(null);
+    dispatch({ type: "SET_ACTIVE", id: matchingSession.id });
+    if (workspaceShellMode !== "canvas") {
+      requestPaneReveal(`live:${matchingSession.id}`);
+    } else {
+      canvasViewRef.current?.panToSession(matchingSession.id);
+    }
+  }, [dispatch, liveSessions, requestPaneReveal, workspaceShellMode]);
 
   const sidebarContent = (
     <SessionSidebar
@@ -1438,7 +1496,22 @@ export function AppLayout() {
       git={git}
       branchSessions={branchRelevantSessions}
       githubToken={state.githubToken}
+      projectPath={state.projectPath}
+      onCreateBranch={(branchName?: string) => {
+        if (branchName && hasWorkspaceRoot) {
+          void git.createBranch(branchName);
+        } else {
+          setCreateBranchOpen(true);
+        }
+      }}
+      onCreateWorktree={(label?: string) => openNewSessionDialog(undefined, {
+        label,
+        useWorktree: true,
+      })}
+      onSelectWorktree={handleSelectWorktree}
+      onCreatePr={() => setCreatePrOpen(true)}
       onFileSelect={setOpenFilePath}
+      onOpenStashDiff={handleOpenStashDiff}
       onTabChange={setWorkspaceTab}
     />
   ) : null;
@@ -1489,6 +1562,9 @@ export function AppLayout() {
     inspectorOpen: inspectorOpen && !!state.projectPath,
     isFullscreen,
     projectPathLabel,
+    projectPath: state.projectPath,
+    cwd: workspaceContext?.rootPath,
+    git: hasWorkspaceRoot ? git : undefined,
     workspaceShellMode,
     onClose: handleWindowClose,
     onMinimize: handleWindowMinimize,
@@ -1496,6 +1572,22 @@ export function AppLayout() {
     onToggleSidebar: () => setSidebarOpen((prev) => !prev),
     onToggleInspector: () => setInspectorOpen((prev) => !prev),
     onWorkspaceShellModeChange: setWorkspaceShellMode,
+    onCreateBranch: (branchName?: string) => {
+      if (branchName && hasWorkspaceRoot) {
+        void git.createBranch(branchName);
+      } else {
+        setCreateBranchOpen(true);
+      }
+    },
+    onCreateWorktree: (label?: string) => openNewSessionDialog(undefined, {
+      label,
+      useWorktree: true,
+    }),
+    onSelectWorktree: handleSelectWorktree,
+    onOpenStashDiff: handleOpenStashDiff,
+    onOpenProjectFolder: state.projectPath
+      ? () => void handleOpenProject(state.projectPath!)
+      : undefined,
     updateVersion: availableUpdate?.version ?? null,
     checkingForUpdates,
     installingUpdate,
@@ -1509,9 +1601,13 @@ export function AppLayout() {
         open={dialogOpen}
         projectPath={dialogProjectPath ?? state.projectPath}
         projectPaths={state.projects}
+        initialLabel={dialogInitialLabel}
+        initialUseWorktree={dialogInitialUseWorktree}
         onClose={() => {
           setDialogOpen(false);
           setDialogProjectPath(null);
+          setDialogInitialLabel(undefined);
+          setDialogInitialUseWorktree(undefined);
         }}
         onSubmit={handleNewSession}
       />
@@ -1584,13 +1680,13 @@ export function AppLayout() {
       <div className="flex h-full flex-col overflow-hidden bg-background">
         <div
           data-tauri-drag-region
-          className="flex h-[46px] shrink-0 select-none items-center"
+          className="flex h-10 shrink-0 select-none items-center border-b bg-card/95"
         >
           {!isFullscreen && (
             <div className="flex items-center gap-1.5 pl-3 pr-2">
-              <button onClick={handleWindowClose} className="size-3 rounded-full bg-[#ff5f57] transition-all hover:brightness-90" aria-label="Close" />
-              <button onClick={handleWindowMinimize} className="size-3 rounded-full bg-[#febc2e] transition-all hover:brightness-90" aria-label="Minimize" />
-              <button onClick={() => void handleWindowMaximize()} className="size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90" aria-label="Fullscreen" />
+              <button onClick={handleWindowClose} className="sb-window-control sb-window-control-close size-3 rounded-full bg-[#ff5f57] transition-all hover:brightness-90" aria-label="Close" />
+              <button onClick={handleWindowMinimize} className="sb-window-control sb-window-control-minimize size-3 rounded-full bg-[#febc2e] transition-all hover:brightness-90" aria-label="Minimize" />
+              <button onClick={() => void handleWindowMaximize()} className="sb-window-control sb-window-control-fullscreen size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90" aria-label="Fullscreen" />
             </div>
           )}
           <div data-tauri-drag-region className="flex-1" />
@@ -1641,11 +1737,6 @@ export function AppLayout() {
               <div className="w-px shrink-0 bg-border" />
               <div className="shrink-0 bg-card" style={{ width: inspectorWidth }}>
                 <RightPanelHeader
-                  git={hasWorkspaceRoot ? git : undefined}
-                  githubToken={state.githubToken}
-                  cwd={workspaceContext?.rootPath}
-                  onCreateBranch={() => setCreateBranchOpen(true)}
-                  onCreatePr={() => setCreatePrOpen(true)}
                   onToggleInspector={() => setInspectorOpen(false)}
                 />
               </div>
@@ -1673,7 +1764,7 @@ export function AppLayout() {
           {sidebarOpen ? (
             <div className="pointer-events-none absolute inset-y-0 left-0 z-20 flex max-w-[calc(100vw-2rem)]">
               <div
-                className="pointer-events-auto h-full shrink-0 overflow-hidden bg-card"
+                className="pointer-events-auto h-full shrink-0 overflow-hidden border-r bg-card"
                 style={{ width: sidebarWidth }}
               >
                 {sidebarContent}
@@ -1698,7 +1789,7 @@ export function AppLayout() {
                 onPointerDown={(event) => startPanelResize("inspector", event)}
               />
               <div
-                className="pointer-events-auto h-full shrink-0 overflow-hidden bg-card"
+                className="pointer-events-auto h-full shrink-0 overflow-hidden border-l bg-card"
                 style={{ width: inspectorWidth }}
               >
                 {inspectorContent}
@@ -1768,6 +1859,7 @@ export function AppLayout() {
               liveSessions={liveSessions}
               transcriptSession={resolvedViewingSession}
               openFilePath={openFilePath}
+              stashDiffs={stashDiffTabs}
               revealRequest={paneRevealRequest}
               projectPath={state.projectPath}
               projectPaths={state.projects}
@@ -1780,6 +1872,9 @@ export function AppLayout() {
               onCloseTranscript={() => setViewingSession(null)}
               onCloseFile={(filePath) =>
                 setOpenFilePath((current) => (current === filePath ? null : current))
+              }
+              onCloseStashDiff={(id) =>
+                setStashDiffTabs((current) => current.filter((tab) => tab.id !== id))
               }
               onResumeTranscript={
                 resolvedViewingSession
@@ -1817,11 +1912,6 @@ export function AppLayout() {
           style={{ width: inspectorWidth }}
         >
           <RightPanelHeader
-            git={hasWorkspaceRoot ? git : undefined}
-            githubToken={state.githubToken}
-            cwd={workspaceContext?.rootPath}
-            onCreateBranch={() => setCreateBranchOpen(true)}
-            onCreatePr={() => setCreatePrOpen(true)}
             onToggleInspector={() => setInspectorOpen(false)}
           />
           <div className="flex-1 min-h-0 overflow-hidden">

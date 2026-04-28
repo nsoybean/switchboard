@@ -87,7 +87,7 @@ function ProjectAvatar({ name }: { name: string }) {
   const letter = (name[0] ?? "?").toUpperCase();
   return (
     <span
-      className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-semibold text-muted-foreground"
+      className="flex size-5 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-semibold text-muted-foreground"
     >
       {letter}
     </span>
@@ -117,7 +117,7 @@ function DraggableSessionCard(props: React.ComponentProps<typeof SessionCard> & 
 
 function DraggedSessionPreview({ session }: { session: Session }) {
   return (
-    <div className="inline-flex max-w-[240px] items-center rounded bg-card px-1.5 py-0.5 shadow-lg ring-1 ring-border">
+    <div className="inline-flex max-w-[240px] items-center rounded-md bg-card px-2 py-1 shadow-lg ring-1 ring-border">
       <span className="truncate text-[12px] font-medium">
         {session.label || "New session"}
       </span>
@@ -529,13 +529,13 @@ export function SessionSidebar({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-    <div className="flex h-full w-full flex-col overflow-hidden bg-card overscroll-x-none">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-card font-sans overscroll-x-none">
       {/* New session button */}
       <div className="shrink-0 px-3 pt-2">
         <Button
           variant="outline"
           size="sm"
-          className="w-full justify-center gap-1.5 text-xs"
+          className="h-7 w-full justify-center gap-1.5 text-xs"
           onClick={() => onNewSession()}
         >
           <Plus className="size-[18px]" />
@@ -555,7 +555,7 @@ export function SessionSidebar({
                 <span className="flex size-6 shrink-0 items-center justify-center">
                   <Pin className="size-3 text-muted-foreground" />
                 </span>
-                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <span className="text-[11px] font-medium text-muted-foreground">
                   Pinned
                 </span>
                 <ChevronDown
@@ -571,7 +571,7 @@ export function SessionSidebar({
                       items={pinnedSessions.map((s) => `pinned-${s.id}`)}
                       strategy={verticalListSortingStrategy}
                     >
-                    <div className="flex min-w-0 flex-col gap-px px-1 overflow-hidden">
+                    <div className="flex min-w-0 flex-col gap-0.5 overflow-hidden px-1">
                       {pinnedSessions.map((session) => {
                         const isHistorySession =
                           getSessionRailBucket(session.status) === "history";
@@ -623,12 +623,12 @@ export function SessionSidebar({
                     </div>
                     </SortableContext>
                   ) : dragOverPinned ? (
-                    <div className="mx-1 rounded-md border border-dashed border-foreground/30 bg-accent/30 px-3 py-2.5 text-center text-[11px] text-muted-foreground">
+                    <div className="mx-1 rounded-md border border-dashed border-border bg-muted/45 px-3 py-2.5 text-center text-[11px] text-muted-foreground">
                       Drop here to pin
                     </div>
                   ) : (
                     <div className="px-3 py-2 text-[11px] text-muted-foreground">
-                      Drag to pin
+                      Drag sessions here
                     </div>
                   )}
                 </PinnedDropArea>
@@ -650,7 +650,7 @@ export function SessionSidebar({
                     onClick={() => toggleProject(group.path)}
                   >
                     <ProjectAvatar name={group.name} />
-                    <span className="truncate text-sm font-semibold">
+                    <span className="truncate text-[13px] font-semibold">
                       {group.name}
                     </span>
                     <ChevronDown
@@ -718,7 +718,7 @@ export function SessionSidebar({
                 {!isCollapsed && (
                   <div className="pb-2 pl-4">
                     {visibleSessions.length > 0 ? (
-                      <div className="flex min-w-0 flex-col gap-px px-1 overflow-hidden">
+                      <div className="flex min-w-0 flex-col gap-0.5 overflow-hidden px-1">
                         {visibleSessions.map((session) => {
                           const isHistorySession =
                             getSessionRailBucket(session.status) === "history";
@@ -812,34 +812,39 @@ export function SessionSidebar({
       </div>
 
       {/* Footer: History · Settings · Theme */}
-      <div className="flex items-center justify-between border-t px-2 py-1.5">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setHistoryOpen(true)}
-            >
-              <History className="size-[18px]" />
-              History
-              {totalHistoryCount > 0 && (
-                <span className="tabular-nums">{totalHistoryCount}</span>
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Session history</TooltipContent>
-        </Tooltip>
-        <div className="flex items-center">
+      <div className="flex items-center justify-between border-t bg-background/95 px-2 py-1.5">
+        <div className="inline-flex items-center rounded-md bg-card/70 p-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <History className="size-3.5" />
+                History
+                {totalHistoryCount > 0 && (
+                  <span className="rounded bg-muted px-1 font-mono text-[10px] tabular-nums text-muted-foreground">
+                    {totalHistoryCount}
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Session history</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <div className="inline-flex items-center rounded-md bg-card/70 p-0.5">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
+                className="size-7 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 onClick={() => setShortcutsOpen(true)}
               >
-                <Keyboard className="size-[18px]" />
+                <Keyboard className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Keyboard shortcuts</TooltipContent>
@@ -849,10 +854,10 @@ export function SessionSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
+                className="size-7 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 onClick={onOpenSettings}
               >
-                <Settings className="size-[18px]" />
+                <Settings className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Settings</TooltipContent>
@@ -862,13 +867,13 @@ export function SessionSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
+                className="size-7 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               >
                 {theme === "dark" ? (
-                  <Sun className="size-[18px]" />
+                  <Sun className="size-3.5" />
                 ) : (
-                  <Moon className="size-[18px]" />
+                  <Moon className="size-3.5" />
                 )}
               </Button>
             </TooltipTrigger>
@@ -890,7 +895,7 @@ export function SessionSidebar({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <label className="text-xs font-medium text-muted-foreground">
               Session Label
             </label>
             <Input
@@ -1005,7 +1010,7 @@ export function SessionSidebar({
                   {filteredHistoryGroups.map((group) => (
                     <div key={group.path} className="space-y-2">
                       <div className="flex items-center justify-between px-1">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        <div className="text-[11px] font-medium text-muted-foreground">
                           {group.name}
                         </div>
                         <div className="text-[10px] text-muted-foreground">

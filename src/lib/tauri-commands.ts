@@ -4,6 +4,8 @@ export interface ChangedFile {
   path: string;
   status: string;
   staged: boolean;
+  additions?: number | null;
+  deletions?: number | null;
 }
 
 export interface DiffStats {
@@ -131,10 +133,14 @@ export const gitCommands = {
     invoke<void>("git_stash", { cwd, message }),
   stashList: (cwd: string) =>
     invoke<StashEntry[]>("git_stash_list", { cwd }),
+  stashApply: (cwd: string, index: number) =>
+    invoke<void>("git_stash_apply", { cwd, index }),
   stashPop: (cwd: string, index?: number) =>
     invoke<void>("git_stash_pop", { cwd, index }),
   stashDrop: (cwd: string, index: number) =>
     invoke<void>("git_stash_drop", { cwd, index }),
+  stashShow: (cwd: string, index: number) =>
+    invoke<string>("git_stash_show", { cwd, index }),
   cleanupWorktree: (repoPath: string, worktreePath: string, branch: string, deleteRemote: boolean) =>
     invoke<void>("cleanup_worktree", { repoPath, worktreePath, branch, deleteRemote }),
   showCommit: (cwd: string, hash: string) =>

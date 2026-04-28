@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from "react";
 import {
+  Archive,
   FileText,
   GripVertical,
   Plus,
@@ -56,6 +57,7 @@ import {
   getFirstLeaf,
   moveTabBetweenLeaves,
   paneLayoutEqual,
+  reorderTabInLeaf,
   setLeafActiveTab,
   splitLeaf,
   splitLeafWithExternalTab,
@@ -64,6 +66,7 @@ import {
 import { StatusDot } from "../ui/status-dot";
 import { InlineNewSession, type InlineNewSessionConfig } from "../session/InlineNewSession";
 import { FilePreview } from "../files/FilePreview";
+import { StashDiffDocument, type StashDiffDocumentData } from "../git/StashDiffDocument";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
 
@@ -72,6 +75,7 @@ interface PaneWorkspaceProps {
   liveSessions: Session[];
   transcriptSession: Session | null;
   openFilePath: string | null;
+  stashDiffs: StashDiffDocumentData[];
   revealRequest: { tabId: string; nonce: number } | null;
   projectPath: string | null;
   projectPaths: string[];
@@ -81,6 +85,7 @@ interface PaneWorkspaceProps {
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (filePath: string) => void;
+  onCloseStashDiff: (id: string) => void;
   onResumeTranscript?: () => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
@@ -111,7 +116,15 @@ interface FileSurface {
   closable: true;
 }
 
-type PaneSurface = LiveSurface | TranscriptSurface | FileSurface;
+interface StashDiffSurface {
+  id: string;
+  kind: "stash-diff";
+  stash: StashDiffDocumentData;
+  title: string;
+  closable: true;
+}
+
+type PaneSurface = LiveSurface | TranscriptSurface | FileSurface | StashDiffSurface;
 
 type DropZone = "center" | "top" | "right" | "bottom" | "left";
 
@@ -159,6 +172,10 @@ function makeDropId(leafId: string, zone: DropZone) {
   return `${leafId}--pane-drop--${zone}`;
 }
 
+function makeTabDropId(tabId: string, leafId: string) {
+  return `tab--drop--${tabId}--${leafId}`;
+}
+
 function parseDragId(id: string): { tabId: string; fromLeafId: string } | null {
   const prefix = "tab--drag--";
   if (!id.startsWith(prefix)) return null;
@@ -168,6 +185,16 @@ function parseDragId(id: string): { tabId: string; fromLeafId: string } | null {
   const sepIdx = rest.lastIndexOf(sep);
   if (sepIdx === -1) return null;
   return { tabId: rest.slice(0, sepIdx), fromLeafId: `pane-${rest.slice(sepIdx + sep.length)}` };
+}
+
+function parseTabDropId(id: string): { tabId: string; leafId: string } | null {
+  const prefix = "tab--drop--";
+  if (!id.startsWith(prefix)) return null;
+  const rest = id.slice(prefix.length);
+  const sep = "--pane-";
+  const sepIdx = rest.lastIndexOf(sep);
+  if (sepIdx === -1) return null;
+  return { tabId: rest.slice(0, sepIdx), leafId: `pane-${rest.slice(sepIdx + sep.length)}` };
 }
 
 function DropHint({
@@ -298,6 +325,7 @@ function DraggableTab({
   onSelectTab,
   onCloseSession,
   onCloseFile,
+  onCloseStashDiff,
   onCloseTranscript,
   onSelectLiveSession,
 }: {
@@ -308,6 +336,7 @@ function DraggableTab({
   onSelectTab: () => void;
   onCloseSession: (id: string) => void;
   onCloseFile: (id: string) => void;
+  onCloseStashDiff: (id: string) => void;
   onCloseTranscript: () => void;
   onSelectLiveSession: (id: string) => void;
 }) {
@@ -315,10 +344,17 @@ function DraggableTab({
     id: makeDragId(tabId, leafId),
     data: { type: "tab", tabId, fromLeafId: leafId } satisfies TabDragData,
   });
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id: makeTabDropId(tabId, leafId),
+  });
+  const setTabNodeRef = useCallback((node: HTMLButtonElement | null) => {
+    setNodeRef(node);
+    setDropNodeRef(node);
+  }, [setDropNodeRef, setNodeRef]);
 
   return (
     <button
-      ref={setNodeRef}
+      ref={setTabNodeRef}
       key={tabId}
       type="button"
       {...attributes}
@@ -330,10 +366,11 @@ function DraggableTab({
         }
       }}
       className={cn(
-        "group/pane-tab relative flex max-w-[260px] shrink-0 cursor-pointer items-center gap-1.5 pl-1.5 pr-3 py-2 text-left text-xs transition-colors active:cursor-grabbing",
+        "group/pane-tab relative flex max-w-[260px] shrink-0 cursor-pointer items-center gap-1.5 py-1.5 pl-1.5 pr-3 text-left font-sans text-xs transition-colors active:cursor-grabbing",
         isActive
           ? "text-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+        isOver && !isDragging && "bg-accent/70 text-foreground",
         isDragging && "opacity-40",
       )}
     >
@@ -345,6 +382,8 @@ function DraggableTab({
       </span>
       {surface.kind === "file" ? (
         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+      ) : surface.kind === "stash-diff" ? (
+        <Archive className="size-3.5 shrink-0 text-muted-foreground" />
       ) : surface.kind === "live-session" ? (
         <AgentIcon agent={surface.session.agent} className="size-3.5 shrink-0" />
       ) : null}
@@ -364,6 +403,8 @@ function DraggableTab({
               onCloseSession(surface.session.id);
             } else if (surface.kind === "file") {
               onCloseFile(surface.id);
+            } else if (surface.kind === "stash-diff") {
+              onCloseStashDiff(surface.id);
             } else {
               onCloseTranscript();
             }
@@ -375,7 +416,7 @@ function DraggableTab({
         </span>
       ) : null}
       {isActive && (
-        <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-foreground" />
+        <span className="absolute bottom-0 left-2 right-2 h-px rounded-full bg-foreground" />
       )}
     </button>
   );
@@ -392,6 +433,7 @@ function PaneLeafView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseStashDiff,
   onExternalFileDrop,
   onResumeTranscript,
   onSelectLiveSession,
@@ -408,6 +450,7 @@ function PaneLeafView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onCloseStashDiff: (id: string) => void;
   onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
@@ -477,7 +520,7 @@ function PaneLeafView({
       onMouseDown={() => onFocusPane(leaf.id)}
     >
       {/* Tab bar */}
-      <div className="relative shrink-0 bg-muted/50">
+      <div className="relative shrink-0 bg-card/80">
         <div className="flex items-center">
           <div className="flex min-w-0 flex-1 items-end gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {leaf.tabIds.map((tabId) => {
@@ -494,6 +537,7 @@ function PaneLeafView({
                   onSelectTab={() => onSelectTab(leaf.id, tabId)}
                   onCloseSession={onCloseSession}
                   onCloseFile={onCloseFile}
+                  onCloseStashDiff={onCloseStashDiff}
                   onCloseTranscript={onCloseTranscript}
                   onSelectLiveSession={onSelectLiveSession}
                 />
@@ -557,7 +601,7 @@ function PaneLeafView({
               <button
                 type="button"
                 onClick={() => onClosePane(leaf.id)}
-                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title="Close pane"
                 aria-label="Close pane"
               >
@@ -566,7 +610,7 @@ function PaneLeafView({
             ) : null}
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-border/80" />
       </div>
 
       <div
@@ -592,7 +636,7 @@ function PaneLeafView({
             <div key={tabId} className={cn(
               "h-full min-h-0",
               isActive ? "block" : "hidden",
-              surface.kind !== "live-session" && "p-1",
+              surface.kind !== "live-session" && "p-1.5",
             )}>
               {surface.kind === "live-session" ? (
                 <XTermContainer
@@ -612,6 +656,8 @@ function PaneLeafView({
                   onClose={() => onCloseFile(surface.id)}
                   showHeader={false}
                 />
+              ) : surface.kind === "stash-diff" ? (
+                <StashDiffDocument stash={surface.stash} />
               ) : (
                 <SessionTranscriptView
                   session={surface.session}
@@ -641,6 +687,7 @@ function PaneTreeView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseStashDiff,
   onExternalFileDrop,
   onResumeTranscript,
   onSelectLiveSession,
@@ -660,6 +707,7 @@ function PaneTreeView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onCloseStashDiff: (id: string) => void;
   onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
@@ -680,6 +728,7 @@ function PaneTreeView({
         onCloseSession={onCloseSession}
         onCloseTranscript={onCloseTranscript}
         onCloseFile={onCloseFile}
+        onCloseStashDiff={onCloseStashDiff}
         onExternalFileDrop={onExternalFileDrop}
         onResumeTranscript={onResumeTranscript}
         onSelectLiveSession={onSelectLiveSession}
@@ -711,6 +760,7 @@ function PaneTreeView({
               onCloseSession={onCloseSession}
               onCloseTranscript={onCloseTranscript}
               onCloseFile={onCloseFile}
+              onCloseStashDiff={onCloseStashDiff}
               onExternalFileDrop={onExternalFileDrop}
               onResumeTranscript={onResumeTranscript}
               onSelectLiveSession={onSelectLiveSession}
@@ -733,6 +783,7 @@ export function PaneWorkspace({
   liveSessions,
   transcriptSession,
   openFilePath,
+  stashDiffs,
   revealRequest,
   projectPath,
   projectPaths,
@@ -742,6 +793,7 @@ export function PaneWorkspace({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseStashDiff,
   onResumeTranscript,
   onSessionStart,
   onSessionExit,
@@ -778,8 +830,18 @@ export function PaneWorkspace({
       });
     }
 
+    for (const stash of stashDiffs) {
+      nextSurfaces.push({
+        id: stash.id,
+        kind: "stash-diff",
+        stash,
+        title: stash.refName,
+        closable: true,
+      });
+    }
+
     return nextSurfaces;
-  }, [fileSurfacePaths, liveSessions, transcriptSession]);
+  }, [fileSurfacePaths, liveSessions, stashDiffs, transcriptSession]);
 
   const surfacesById = useMemo(
     () => new Map(surfaces.map((surface) => [surface.id, surface])),
@@ -933,6 +995,32 @@ export function PaneWorkspace({
     if (!over) return;
 
     const drag = parseDragId(String(active.id));
+    const tabDrop = parseTabDropId(String(over.id));
+    if (drag && tabDrop) {
+      const { tabId, fromLeafId } = drag;
+      const { tabId: targetTabId, leafId: toLeafId } = tabDrop;
+
+      setLayout((current) => {
+        if (!current.root || tabId === targetTabId) return current;
+
+        const targetLeaf = findLeaf(current.root, toLeafId);
+        if (!targetLeaf) return current;
+
+        const insertIndex = targetLeaf.tabIds.indexOf(targetTabId);
+        if (insertIndex === -1) return current;
+
+        const nextRoot = fromLeafId === toLeafId
+          ? reorderTabInLeaf(current.root, fromLeafId, tabId, targetTabId)
+          : moveTabBetweenLeaves(current.root, fromLeafId, tabId, toLeafId, insertIndex);
+        const next = {
+          root: ensureActiveTabs(nextRoot),
+          activePaneId: toLeafId,
+        };
+        return paneLayoutEqual(current, next) ? current : next;
+      });
+      return;
+    }
+
     const drop = parseDropId(String(over.id));
     if (!drag || !drop) return;
 
@@ -1096,6 +1184,7 @@ export function PaneWorkspace({
           onCloseSession={onCloseSession}
           onCloseTranscript={onCloseTranscript}
           onCloseFile={handleCloseFileSurface}
+          onCloseStashDiff={onCloseStashDiff}
           onExternalFileDrop={handleExternalFileDrop}
           onResumeTranscript={onResumeTranscript}
           onSelectLiveSession={onSelectLiveSession}
@@ -1110,8 +1199,12 @@ export function PaneWorkspace({
           <div className="flex max-w-[360px] min-w-0 items-center gap-2 overflow-hidden rounded-md border border-border bg-background px-3 py-1.5 text-xs shadow-lg">
             {dragSurface.kind === "file" ? (
               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-            ) : (
+            ) : dragSurface.kind === "stash-diff" ? (
+              <Archive className="size-3.5 shrink-0 text-muted-foreground" />
+            ) : dragSurface.kind === "live-session" ? (
               <AgentIcon agent={dragSurface.session.agent} className="size-3.5 shrink-0" />
+            ) : (
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
             )}
             <span className="min-w-0 truncate font-medium">{dragSurface.title}</span>
           </div>

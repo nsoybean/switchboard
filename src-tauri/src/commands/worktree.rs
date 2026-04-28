@@ -1,6 +1,7 @@
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize, Clone)]
 pub struct WorktreeInfo {
@@ -38,6 +39,27 @@ pub fn label_to_slug(label: &str) -> String {
     }
 }
 
+fn unique_worktree_path(repo_path: &str, slug: &str) -> PathBuf {
+    let worktrees_dir = Path::new(repo_path).join(".switchboard-worktrees");
+    let mut candidate = worktrees_dir.join(slug);
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    for index in 2..1000 {
+        candidate = worktrees_dir.join(format!("{slug}-{index}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    worktrees_dir.join(format!("{slug}-{timestamp}"))
+}
+
 /// Create a new git worktree for a session
 #[tauri::command]
 pub fn create_worktree(
@@ -47,9 +69,7 @@ pub fn create_worktree(
     base_branch: Option<String>,
 ) -> Result<WorktreeInfo, String> {
     let slug = label_to_slug(&label);
-    let worktree_path = Path::new(&repo_path)
-        .join(".switchboard-worktrees")
-        .join(&slug);
+    let worktree_path = unique_worktree_path(&repo_path, &slug);
     let worktree_str = worktree_path.to_str().ok_or("Invalid path")?.to_string();
 
     // Create parent directory if needed
@@ -185,5 +205,24 @@ mod tests {
         assert_eq!(label_to_slug("---"), "untitled");
         assert_eq!(label_to_slug("simple"), "simple");
         assert_eq!(label_to_slug("CamelCase"), "camelcase");
+    }
+
+    #[test]
+    fn test_unique_worktree_path_suffixes_existing_path() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let existing = temp_dir
+            .path()
+            .join(".switchboard-worktrees")
+            .join("untitled");
+        std::fs::create_dir_all(&existing).unwrap();
+
+        let path = unique_worktree_path(temp_dir.path().to_str().unwrap(), "untitled");
+        assert_eq!(
+            path,
+            temp_dir
+                .path()
+                .join(".switchboard-worktrees")
+                .join("untitled-2")
+        );
     }
 }

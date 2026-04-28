@@ -421,6 +421,26 @@ export function moveTabBetweenLeaves(
   return updateLeaf(result, toLeafId, { tabIds: nextToTabIds, activeTabId: tabId });
 }
 
+export function reorderTabInLeaf(
+  root: PaneNode,
+  leafId: string,
+  tabId: string,
+  targetTabId: string,
+): PaneNode {
+  const leaf = findLeaf(root, leafId);
+  if (!leaf || tabId === targetTabId) return root;
+
+  const fromIndex = leaf.tabIds.indexOf(tabId);
+  const toIndex = leaf.tabIds.indexOf(targetTabId);
+  if (fromIndex === -1 || toIndex === -1) return root;
+
+  const nextTabIds = [...leaf.tabIds];
+  const [movedTabId] = nextTabIds.splice(fromIndex, 1);
+  nextTabIds.splice(toIndex, 0, movedTabId);
+
+  return updateLeaf(root, leafId, { tabIds: nextTabIds, activeTabId: tabId });
+}
+
 export function splitLeafWithExternalTab(
   root: PaneNode,
   targetLeafId: string,

@@ -1,12 +1,13 @@
-import { File } from "@phosphor-icons/react";
-import { FolderTree } from "lucide-react";
+import { FolderTree, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
+import { GitHistory } from "../git/GitHistory";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 import type { Session } from "@/state/types";
+import type { StashEntry } from "@/lib/tauri-commands";
 
-export type WorkspaceTab = "files" | "changes";
+export type WorkspaceTab = "files" | "changes" | "history";
 
 export interface WorkspaceContext {
   sessionId?: string | null;
@@ -27,7 +28,12 @@ interface WorkspacePanelProps {
   git: GitState & GitActions;
   branchSessions?: Session[];
   githubToken?: string | null;
+  onCreateBranch?: (branchName?: string) => void;
+  onCreateWorktree?: (label?: string) => void;
+  onSelectWorktree?: (path: string) => void;
+  onCreatePr?: () => void;
   onFileSelect?: (filePath: string) => void;
+  onOpenStashDiff?: (stash: StashEntry) => void | Promise<void>;
   onTabChange: (tab: WorkspaceTab) => void;
 }
 
@@ -58,7 +64,12 @@ export function WorkspacePanel({
   git,
   branchSessions = [],
   githubToken,
+  onCreateBranch,
+  onCreateWorktree,
+  onSelectWorktree,
+  onCreatePr,
   onFileSelect,
+  onOpenStashDiff,
   onTabChange,
 }: WorkspacePanelProps) {
   const renderUnavailableState = (currentContext: WorkspaceContext, tab: WorkspaceTab) => {
@@ -111,10 +122,16 @@ export function WorkspacePanel({
       <WorkspacePanel
         activeTab={activeTab}
         context={projectContext}
+        projectPath={projectPath}
         git={git}
         branchSessions={branchSessions}
         githubToken={githubToken}
+        onCreateBranch={onCreateBranch}
+        onCreateWorktree={onCreateWorktree}
+        onSelectWorktree={onSelectWorktree}
+        onCreatePr={onCreatePr}
         onFileSelect={onFileSelect}
+        onOpenStashDiff={onOpenStashDiff}
         onTabChange={onTabChange}
       />
     );
@@ -123,40 +140,36 @@ export function WorkspacePanel({
   const unavailableState = renderUnavailableState(context, activeTab);
   const changedFileCount = git.files.length;
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
-      <div>
-        <div className="flex items-center justify-between px-2 py-2">
-          <div className="flex items-center gap-1">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card font-sans">
+      <div className="border-b">
+        <div className="flex items-start justify-between gap-2 px-2 py-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {([
-              { key: "changes" as const, label: "Changes" },
               { key: "files" as const, label: "Files" },
+              { key: "changes" as const, label: "Changes" },
+              { key: "history" as const, label: "History" },
             ]).map((tab) => (
               <button
                 key={tab.key}
                 type="button"
                 onClick={() => onTabChange(tab.key)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                  "inline-flex min-w-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
                   activeTab === tab.key
-                    ? "border-border bg-background text-foreground shadow-sm"
-                    : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground",
+                    ? "border-border bg-background/80 text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:bg-background/60 hover:text-foreground",
                 )}
               >
                 {tab.label}
                 {tab.key === "changes" && changedFileCount > 0 && (
-                  <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground">
-                    <File className="size-3" />
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
                     {changedFileCount}
                   </span>
                 )}
-                {tab.key === "changes" && (git.stats.additions > 0 || git.stats.deletions > 0) && (
-                  <span className="flex items-center gap-0.5 font-mono text-[10px]">
-                    {git.stats.additions > 0 && (
-                      <span className="text-[var(--sb-diff-add-fg)]">+{git.stats.additions}</span>
-                    )}
-                    {git.stats.deletions > 0 && (
-                      <span className="text-[var(--sb-diff-del-fg)]">-{git.stats.deletions}</span>
-                    )}
+                {tab.key === "history" && git.log.length > 0 && (
+                  <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground">
+                    <History className="size-3" />
+                    {git.log.length}
                   </span>
                 )}
               </button>
@@ -183,7 +196,21 @@ export function WorkspacePanel({
                 cwd={context.rootPath!}
                 git={git}
                 sessions={branchSessions}
+                projectPath={projectPath ?? context.rootPath}
+                githubToken={githubToken ?? null}
+                onCreateBranch={onCreateBranch}
+                onCreateWorktree={onCreateWorktree}
+                onSelectWorktree={onSelectWorktree}
+                onCreatePr={onCreatePr}
+                onFileSelect={onFileSelect}
+                onOpenStashDiff={onOpenStashDiff}
               />
+            ) : null}
+
+            {activeTab === "history" ? (
+              <div className="h-full overflow-y-auto">
+                <GitHistory cwd={context.rootPath!} git={git} />
+              </div>
             ) : null}
           </>
         )}

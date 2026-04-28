@@ -10,7 +10,6 @@ pub fn run() {
 
     // Bind hook server port synchronously so state is always available
     let (hook_state, hook_listener) = hook_server::init_hook_server();
-    let hook_token = hook_state.token.clone();
 
     tauri::Builder::default()
         .manage(SessionRegistry::new())
@@ -34,7 +33,7 @@ pub fn run() {
             }
 
             // Spawn the async HTTP server now that the runtime is available
-            hook_server::spawn_hook_server(app.handle().clone(), hook_listener, hook_token);
+            hook_server::spawn_hook_server(app.handle().clone(), hook_listener);
 
             Ok(())
         })
@@ -86,8 +85,10 @@ pub fn run() {
             commands::git::git_push_delete_remote,
             commands::git::git_stash,
             commands::git::git_stash_list,
+            commands::git::git_stash_apply,
             commands::git::git_stash_pop,
             commands::git::git_stash_drop,
+            commands::git::git_stash_show,
             commands::git::cleanup_worktree,
             commands::git::git_show_commit,
             commands::session::load_sessions,

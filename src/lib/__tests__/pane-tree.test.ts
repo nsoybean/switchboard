@@ -12,6 +12,7 @@ import {
   normalizeNode,
   paneLayoutEqual,
   paneNodeEqual,
+  reorderTabInLeaf,
   setLeafActiveTab,
   splitLeaf,
   splitLeafWithExternalTab,
@@ -186,6 +187,23 @@ describe("setLeafActiveTab", () => {
   it("returns same reference when tab not in leaf", () => {
     const l = leaf(["a"]);
     expect(setLeafActiveTab(l, l.id, "z")).toBe(l);
+  });
+});
+
+// ── reorderTabInLeaf ───────────────────────────────────────────────────────
+
+describe("reorderTabInLeaf", () => {
+  it("moves a tab before the target tab in the same leaf", () => {
+    const l = leaf(["a", "b", "c"], "a");
+    const result = reorderTabInLeaf(l, l.id, "c", "b") as PaneLeafNode;
+    expect(result.tabIds).toEqual(["a", "c", "b"]);
+    expect(result.activeTabId).toBe("c");
+  });
+
+  it("returns the same tree when either tab is missing", () => {
+    const l = leaf(["a", "b"], "a");
+    expect(reorderTabInLeaf(l, l.id, "x", "b")).toBe(l);
+    expect(reorderTabInLeaf(l, l.id, "a", "x")).toBe(l);
   });
 });
 

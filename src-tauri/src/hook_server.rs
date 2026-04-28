@@ -19,7 +19,6 @@ pub struct HookServerState {
 
 /// Internal state for the axum handler.
 struct HandlerState {
-    token: String,
     app_handle: AppHandle,
 }
 
@@ -61,13 +60,12 @@ pub fn init_hook_server() -> (HookServerState, std::net::TcpListener) {
 pub fn spawn_hook_server(
     app_handle: AppHandle,
     std_listener: std::net::TcpListener,
-    token: String,
 ) {
     tauri::async_runtime::spawn(async move {
         let listener = tokio::net::TcpListener::from_std(std_listener)
             .expect("failed to convert listener to tokio");
 
-        let handler_state = Arc::new(HandlerState { token, app_handle });
+        let handler_state = Arc::new(HandlerState { app_handle });
 
         let app = Router::new()
             .route("/claude-hooks", post(handle_hook))

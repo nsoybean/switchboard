@@ -57,8 +57,8 @@ function FileTreeNode({ entry, depth, selectedPath, onFileSelect }: FileTreeNode
           event.dataTransfer.setData("text/plain", entry.path);
         }}
         className={cn(
-          "flex items-center gap-1.5 w-full text-left py-1 pr-2 text-xs hover:bg-accent/50 transition-colors cursor-pointer",
-          !entry.is_dir && selectedPath === entry.path && "bg-accent text-accent-foreground",
+          "flex w-full cursor-pointer items-center gap-1.5 rounded-none py-1.5 pr-2 text-left text-xs transition-colors hover:bg-muted/55",
+          !entry.is_dir && selectedPath === entry.path && "bg-accent/80 text-accent-foreground",
         )}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
@@ -77,7 +77,9 @@ function FileTreeNode({ entry, depth, selectedPath, onFileSelect }: FileTreeNode
         ) : (
           <File className="size-3.5 shrink-0 text-muted-foreground" />
         )}
-        <span className="truncate font-mono">{entry.name}</span>
+        <span className={cn("truncate", entry.is_dir ? "font-sans font-medium" : "font-mono")}>
+          {entry.name}
+        </span>
         {!entry.is_dir && entry.size !== null && (
           <span className="ml-auto text-[10px] text-muted-foreground/50 shrink-0">
             {formatSize(entry.size)}
@@ -175,7 +177,7 @@ export function FileTree({ rootPath, selectedPath, onFileSelect }: FileTreeProps
   }
 
   return (
-    <div className="py-1">
+    <div className="py-1 font-sans">
       {entries.map((entry) => (
         <FileTreeNode
           key={entry.path}

@@ -36,7 +36,22 @@ import { CommitDialog } from "@/components/git/CommitDialog";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 
 type GitWithActions = GitState &
-  Pick<GitActions, "switchBranch" | "createBranch" | "commit" | "stageAll" | "pull" | "push" | "fetch" | "refresh">;
+  Pick<
+    GitActions,
+    | "switchBranch"
+    | "createBranch"
+    | "commit"
+    | "stageAll"
+    | "pull"
+    | "push"
+    | "fetch"
+    | "refresh"
+    | "refreshStashes"
+    | "stashApply"
+    | "stashPop"
+    | "stashDrop"
+    | "stashShow"
+  >;
 
 interface TitlebarProps {
   sidebarOpen: boolean;
@@ -159,7 +174,7 @@ export function Titlebar({
   return (
     <div
       data-tauri-drag-region
-      className="flex items-center h-[52px] border-b bg-background select-none shrink-0"
+      className="flex h-10 shrink-0 select-none items-center border-b bg-background font-sans text-xs"
     >
       {/* Left section — width matches sidebar so branch selector aligns with middle pane */}
       <div
@@ -172,17 +187,17 @@ export function Titlebar({
           <div className="flex items-center gap-1.5 pl-3 pr-2">
             <button
               onClick={() => appWindow.close()}
-              className="size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
+              className="sb-window-control sb-window-control-close size-3 rounded-full bg-[#ff5f57] hover:brightness-90 transition-all"
               aria-label="Close"
             />
             <button
               onClick={() => appWindow.minimize()}
-              className="size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
+              className="sb-window-control sb-window-control-minimize size-3 rounded-full bg-[#febc2e] hover:brightness-90 transition-all"
               aria-label="Minimize"
             />
             <button
               onClick={handleMaximize}
-              className="size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
+              className="sb-window-control sb-window-control-fullscreen size-3 rounded-full bg-[#28c840] hover:brightness-90 transition-all"
               aria-label="Fullscreen"
             />
           </div>
@@ -210,16 +225,23 @@ export function Titlebar({
 
       {/* Branch + git actions — show when project is open OR active session has git state */}
       {(projectPath || (hasActiveSession && git?.branch)) && git?.branch && (
-        <div data-tauri-drag-region className="flex items-center gap-2 text-[11px]">
+        <div data-tauri-drag-region className="flex items-center gap-2 text-xs">
           <BranchPicker
             branches={git.branches}
             loading={git.branchesLoading && git.branches.length === 0}
             value={git.branch}
             disabled={git.branchActionPending}
-            triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium shadow-none hover:bg-accent/50"
+            triggerClassName="h-6 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium shadow-none hover:bg-muted/55"
             createLabel="Create branch..."
             onSelect={(branchName) => void git.switchBranch(branchName)}
             onCreateBranch={onCreateBranch}
+            stashes={git.stashes}
+            stashesLoading={git.stashesLoading}
+            onStashTabOpen={() => void git.refreshStashes()}
+            onStashApply={(index) => git.stashApply(index)}
+            onStashPop={(index) => git.stashPop(index)}
+            onStashDrop={(index) => git.stashDrop(index)}
+            onStashView={(index) => git.stashShow(index)}
           />
 
 
@@ -360,7 +382,7 @@ export function Titlebar({
               <Button
                 variant={workspaceShellMode === "pane" ? "secondary" : "ghost"}
                 size="sm"
-                className="h-6 gap-1.5 px-2 text-[11px]"
+                className="h-6 gap-1.5 px-2 text-xs"
                 onClick={() => onWorkspaceShellModeChange?.("pane")}
               >
                 <PanelTop className="size-3.5" />
@@ -369,7 +391,7 @@ export function Titlebar({
               <Button
                 variant={workspaceShellMode === "canvas" ? "secondary" : "ghost"}
                 size="sm"
-                className="h-6 gap-1.5 px-2 text-[11px]"
+                className="h-6 gap-1.5 px-2 text-xs"
                 onClick={() => onWorkspaceShellModeChange?.("canvas")}
               >
                 <LayoutGrid className="size-3.5" />

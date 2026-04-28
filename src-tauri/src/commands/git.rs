@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -9,6 +9,8 @@ pub struct ChangedFile {
     pub path: String,
     pub status: String, // "M", "A", "D", "??"
     pub staged: bool,
+    pub additions: Option<u32>,
+    pub deletions: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -70,6 +72,63 @@ fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+fn file_numstat(cwd: &str, staged: bool) -> HashMap<String, (Option<u32>, Option<u32>)> {
+    let args: Vec<&str> = if staged {
+        vec!["diff", "--cached", "--numstat"]
+    } else {
+        vec!["diff", "--numstat"]
+    };
+
+    let output = run_git(cwd, &args).unwrap_or_default();
+    parse_numstat(&output)
+}
+
+fn parse_numstat(output: &str) -> HashMap<String, (Option<u32>, Option<u32>)> {
+    let mut stats = HashMap::new();
+
+    for line in output.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let additions = parts[0].parse::<u32>().ok();
+        let deletions = parts[1].parse::<u32>().ok();
+        let path = parts[2..].join("\t");
+        let normalized_path = normalize_numstat_path(&path);
+
+        stats.insert(normalized_path, (additions, deletions));
+    }
+
+    stats
+}
+
+fn normalize_numstat_path(path: &str) -> String {
+    if let Some((prefix, suffix)) = path.split_once(" => ") {
+        if let (Some(open), Some(close)) = (prefix.rfind('{'), suffix.find('}')) {
+            let before = &prefix[..open];
+            let after = &suffix[close + 1..];
+            let new_name = &suffix[..close];
+            return format!("{}{}{}", before, new_name, after);
+        }
+    }
+
+    path.to_string()
+}
+
+fn untracked_file_stats(cwd: &str, path: &str) -> (Option<u32>, Option<u32>) {
+    let Ok(root) = validate_directory(cwd) else {
+        return (None, None);
+    };
+    let file_path = root.join(path);
+    let Ok(contents) = fs::read_to_string(file_path) else {
+        return (None, None);
+    };
+
+    let additions = contents.lines().count() as u32;
+    (Some(additions), Some(0))
+}
+
 fn push_branch(
     branches: &mut Vec<GitBranchInfo>,
     seen: &mut HashSet<String>,
@@ -105,6 +164,8 @@ pub fn git_status(cwd: String) -> Result<GitStatusResult, String> {
 
     // Get status
     let status_output = run_git(&cwd, &["status", "--porcelain=v1", "--untracked-files=all"])?;
+    let staged_numstat = file_numstat(&cwd, true);
+    let unstaged_numstat = file_numstat(&cwd, false);
     let mut files = Vec::new();
 
     for line in status_output.lines() {
@@ -122,19 +183,35 @@ pub fn git_status(cwd: String) -> Result<GitStatusResult, String> {
             (' ', w) if w != ' ' => (w.to_string(), false),
             (i, w) => {
                 // Both staged and unstaged changes — show as two entries
+                let (additions, deletions) = staged_numstat
+                    .get(&path)
+                    .copied()
+                    .unwrap_or((None, None));
                 files.push(ChangedFile {
                     path: path.clone(),
                     status: i.to_string(),
                     staged: true,
+                    additions,
+                    deletions,
                 });
                 (w.to_string(), false)
             }
+        };
+
+        let (additions, deletions) = if status == "??" && !staged {
+            untracked_file_stats(&cwd, &path)
+        } else if staged {
+            staged_numstat.get(&path).copied().unwrap_or((None, None))
+        } else {
+            unstaged_numstat.get(&path).copied().unwrap_or((None, None))
         };
 
         files.push(ChangedFile {
             path,
             status,
             staged,
+            additions,
+            deletions,
         });
     }
 
@@ -673,7 +750,7 @@ pub fn git_push_delete_remote(cwd: String, branch: String) -> Result<(), String>
 /// Stash current changes
 #[tauri::command]
 pub fn git_stash(cwd: String, message: Option<String>) -> Result<(), String> {
-    let mut args = vec!["stash", "push"];
+    let mut args = vec!["stash", "push", "--include-untracked"];
     let msg_owned;
     if let Some(ref msg) = message {
         args.push("-m");
@@ -710,6 +787,14 @@ pub fn git_stash_list(cwd: String) -> Result<Vec<StashEntry>, String> {
     Ok(entries)
 }
 
+/// Apply a stash without dropping it
+#[tauri::command]
+pub fn git_stash_apply(cwd: String, index: u32) -> Result<(), String> {
+    let ref_str = format!("stash@{{{}}}", index);
+    run_git(&cwd, &["stash", "apply", &ref_str])?;
+    Ok(())
+}
+
 /// Pop a stash (default: most recent)
 #[tauri::command]
 pub fn git_stash_pop(cwd: String, index: Option<u32>) -> Result<(), String> {
@@ -730,6 +815,16 @@ pub fn git_stash_drop(cwd: String, index: u32) -> Result<(), String> {
     let ref_str = format!("stash@{{{}}}", index);
     run_git(&cwd, &["stash", "drop", &ref_str])?;
     Ok(())
+}
+
+/// Show the patch stored in a stash entry
+#[tauri::command]
+pub fn git_stash_show(cwd: String, index: u32) -> Result<String, String> {
+    let ref_str = format!("stash@{{{}}}", index);
+    run_git(
+        &cwd,
+        &["stash", "show", "--patch", "--find-renames", &ref_str],
+    )
 }
 
 /// Show the diff introduced by a specific commit
