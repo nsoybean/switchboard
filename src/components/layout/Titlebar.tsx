@@ -36,7 +36,22 @@ import { CommitDialog } from "@/components/git/CommitDialog";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 
 type GitWithActions = GitState &
-  Pick<GitActions, "switchBranch" | "createBranch" | "commit" | "stageAll" | "pull" | "push" | "fetch" | "refresh">;
+  Pick<
+    GitActions,
+    | "switchBranch"
+    | "createBranch"
+    | "commit"
+    | "stageAll"
+    | "pull"
+    | "push"
+    | "fetch"
+    | "refresh"
+    | "refreshStashes"
+    | "stashApply"
+    | "stashPop"
+    | "stashDrop"
+    | "stashShow"
+  >;
 
 interface TitlebarProps {
   sidebarOpen: boolean;
@@ -220,6 +235,13 @@ export function Titlebar({
             createLabel="Create branch..."
             onSelect={(branchName) => void git.switchBranch(branchName)}
             onCreateBranch={onCreateBranch}
+            stashes={git.stashes}
+            stashesLoading={git.stashesLoading}
+            onStashTabOpen={() => void git.refreshStashes()}
+            onStashApply={(index) => git.stashApply(index)}
+            onStashPop={(index) => git.stashPop(index)}
+            onStashDrop={(index) => git.stashDrop(index)}
+            onStashView={(index) => git.stashShow(index)}
           />
 
 

@@ -750,7 +750,7 @@ pub fn git_push_delete_remote(cwd: String, branch: String) -> Result<(), String>
 /// Stash current changes
 #[tauri::command]
 pub fn git_stash(cwd: String, message: Option<String>) -> Result<(), String> {
-    let mut args = vec!["stash", "push"];
+    let mut args = vec!["stash", "push", "--include-untracked"];
     let msg_owned;
     if let Some(ref msg) = message {
         args.push("-m");
@@ -787,6 +787,14 @@ pub fn git_stash_list(cwd: String) -> Result<Vec<StashEntry>, String> {
     Ok(entries)
 }
 
+/// Apply a stash without dropping it
+#[tauri::command]
+pub fn git_stash_apply(cwd: String, index: u32) -> Result<(), String> {
+    let ref_str = format!("stash@{{{}}}", index);
+    run_git(&cwd, &["stash", "apply", &ref_str])?;
+    Ok(())
+}
+
 /// Pop a stash (default: most recent)
 #[tauri::command]
 pub fn git_stash_pop(cwd: String, index: Option<u32>) -> Result<(), String> {
@@ -807,6 +815,16 @@ pub fn git_stash_drop(cwd: String, index: u32) -> Result<(), String> {
     let ref_str = format!("stash@{{{}}}", index);
     run_git(&cwd, &["stash", "drop", &ref_str])?;
     Ok(())
+}
+
+/// Show the patch stored in a stash entry
+#[tauri::command]
+pub fn git_stash_show(cwd: String, index: u32) -> Result<String, String> {
+    let ref_str = format!("stash@{{{}}}", index);
+    run_git(
+        &cwd,
+        &["stash", "show", "--patch", "--find-renames", &ref_str],
+    )
 }
 
 /// Show the diff introduced by a specific commit

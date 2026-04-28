@@ -393,7 +393,7 @@ export const GitPanel = memo(function GitPanel({
           onClick={() => toggleFile(file)}
           style={{ paddingLeft: `${12 + depth * 16}px` }}
           className={cn(
-            "group/file grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto_auto_1.25rem_1.25rem_auto] items-center gap-1.5 py-1.5 pr-3 text-xs transition-colors",
+            "group/file relative grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 py-1.5 pr-3 text-xs transition-colors",
             isExpanded ? "bg-accent/55" : "hover:bg-muted/35",
           )}
         >
@@ -443,45 +443,47 @@ export const GitPanel = memo(function GitPanel({
               </>
             ) : null}
           </span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/file:opacity-100 group-focus-within/file:opacity-100"
-                disabled={!onFileSelect || file.status === "D"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleOpenFile(file);
-                }}
-              >
-                <FileText />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {file.status === "D" ? "Deleted file cannot be opened" : "Open file"}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/file:opacity-100 group-focus-within/file:opacity-100"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleDiscardFile(file);
-                }}
-              >
-                {file.status === "??" ? <Trash2 /> : <Undo2 />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {file.status === "??" ? "Delete file" : "Revert file"}
-            </TooltipContent>
-          </Tooltip>
+          <div className="pointer-events-none absolute right-7 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-background/95 opacity-0 shadow-sm transition-opacity group-hover/file:pointer-events-auto group-hover/file:opacity-100 group-focus-within/file:pointer-events-auto group-focus-within/file:opacity-100">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-5 text-muted-foreground hover:text-foreground"
+                  disabled={!onFileSelect || file.status === "D"}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleOpenFile(file);
+                  }}
+                >
+                  <FileText />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {file.status === "D" ? "Deleted file cannot be opened" : "Open file"}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-5 text-muted-foreground hover:text-foreground"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleDiscardFile(file);
+                  }}
+                >
+                  {file.status === "??" ? <Trash2 /> : <Undo2 />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {file.status === "??" ? "Delete file" : "Revert file"}
+              </TooltipContent>
+            </Tooltip>
+          </div>
           <ChevronRight
             className={cn(
               "size-3 shrink-0 text-muted-foreground transition-transform",
@@ -728,6 +730,10 @@ export const GitPanel = memo(function GitPanel({
               stashes={git.stashes}
               stashesLoading={git.stashesLoading}
               onStashTabOpen={() => void git.refreshStashes()}
+              onStashApply={(index) => git.stashApply(index)}
+              onStashPop={(index) => git.stashPop(index)}
+              onStashDrop={(index) => git.stashDrop(index)}
+              onStashView={(index) => git.stashShow(index)}
               compact
             />
             <DropdownMenu onOpenChange={(open) => open && void git.refreshStashes()}>

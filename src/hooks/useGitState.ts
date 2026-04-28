@@ -48,8 +48,10 @@ export interface GitActions {
   deleteBranch: (branch: string, force: boolean) => Promise<void>;
   pushDeleteRemote: (branch: string) => Promise<void>;
   stash: (message?: string) => Promise<void>;
+  stashApply: (index: number) => Promise<void>;
   stashPop: (index?: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
+  stashShow: (index: number) => Promise<string>;
   cleanupWorktree: (worktreePath: string, branch: string, deleteRemote: boolean) => Promise<void>;
 }
 
@@ -420,6 +422,20 @@ export function useGitState({
     );
   }, [cwd, refresh, refreshStashes]);
 
+  const stashApply = useCallback(async (index: number) => {
+    await toast.promise(
+      (async () => {
+        await gitCommands.stashApply(cwd, index);
+        await refresh();
+      })(),
+      {
+        loading: "Applying stash...",
+        success: "Stash applied",
+        error: (err) => `Failed to apply stash: ${String(err)}`,
+      },
+    );
+  }, [cwd, refresh]);
+
   const stashDrop = useCallback(async (index: number) => {
     await toast.promise(
       (async () => {
@@ -433,6 +449,10 @@ export function useGitState({
       },
     );
   }, [cwd, refreshStashes]);
+
+  const stashShow = useCallback(async (index: number) => {
+    return gitCommands.stashShow(cwd, index);
+  }, [cwd]);
 
   const cleanupWorktree = useCallback(async (
     worktreePath: string,
@@ -484,8 +504,10 @@ export function useGitState({
     deleteBranch,
     pushDeleteRemote,
     stash,
+    stashApply,
     stashPop,
     stashDrop,
+    stashShow,
     cleanupWorktree,
   };
 }

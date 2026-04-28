@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { Archive, Check, GitBranch, PlusIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { Archive, Check, CornerDownLeft, Eye, GitBranch, PlusIcon, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { DiffView } from "./DiffView";
 import type { GitBranchInfo, StashEntry } from "../../lib/tauri-commands";
 
 interface BranchPickerProps {
@@ -33,6 +40,10 @@ interface BranchPickerProps {
   stashes?: StashEntry[];
   stashesLoading?: boolean;
   onStashTabOpen?: () => void;
+  onStashApply?: (index: number) => Promise<void> | void;
+  onStashPop?: (index: number) => Promise<void> | void;
+  onStashDrop?: (index: number) => Promise<void> | void;
+  onStashView?: (index: number) => Promise<string>;
   compact?: boolean;
 }
 
@@ -52,24 +63,40 @@ export function BranchPicker({
   stashes = [],
   stashesLoading = false,
   onStashTabOpen,
+  onStashApply,
+  onStashPop,
+  onStashDrop,
+  onStashView,
   compact = false,
 }: BranchPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"branches" | "stash">("branches");
+  const [expandedStash, setExpandedStash] = useState<number | null>(null);
+  const [stashDiff, setStashDiff] = useState("");
+  const [stashDiffLoading, setStashDiffLoading] = useState(false);
+  const onStashTabOpenRef = useRef(onStashTabOpen);
+  const onStashViewRef = useRef(onStashView);
+
+  useEffect(() => {
+    onStashTabOpenRef.current = onStashTabOpen;
+    onStashViewRef.current = onStashView;
+  }, [onStashTabOpen, onStashView]);
 
   useEffect(() => {
     if (!open) {
       setQuery("");
       setTab("branches");
+      setExpandedStash(null);
+      setStashDiff("");
     }
   }, [open]);
 
   useEffect(() => {
     if (open && tab === "stash") {
-      onStashTabOpen?.();
+      onStashTabOpenRef.current?.();
     }
-  }, [onStashTabOpen, open, tab]);
+  }, [open, tab]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const trimmedQuery = query.trim();
@@ -82,6 +109,16 @@ export function BranchPicker({
       ),
     [branches, normalizedQuery],
   );
+  const filteredStashes = useMemo(
+    () =>
+      stashes.filter(
+        (stash) =>
+          normalizedQuery.length === 0 ||
+          stash.message.toLowerCase().includes(normalizedQuery) ||
+          stash.ref_name.toLowerCase().includes(normalizedQuery),
+      ),
+    [normalizedQuery, stashes],
+  );
   const selectedBranch = branches.find((branch) => branch.name === value);
   const hasExactBranchMatch = branches.some(
     (branch) => branch.name.toLowerCase() === normalizedQuery,
@@ -91,6 +128,34 @@ export function BranchPicker({
     tab === "branches" &&
     trimmedQuery.length > 0 &&
     !hasExactBranchMatch;
+
+  useEffect(() => {
+    const loadStashView = onStashViewRef.current;
+    if (!open || tab !== "stash" || expandedStash === null || !loadStashView) {
+      setStashDiff("");
+      setStashDiffLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setStashDiff("");
+    setStashDiffLoading(true);
+
+    loadStashView(expandedStash)
+      .then((diff) => {
+        if (!cancelled) setStashDiff(diff);
+      })
+      .catch((err) => {
+        if (!cancelled) setStashDiff(`Unable to load stash diff: ${String(err)}`);
+      })
+      .finally(() => {
+        if (!cancelled) setStashDiffLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedStash, open, tab]);
 
   if (loading) {
     return (
@@ -149,14 +214,25 @@ export function BranchPicker({
           compact && "w-[min(24rem,calc(100vw-2rem))]",
         )}
       >
-        <div className="border-b bg-card px-2 pt-1.5">
+        <div className="border-b bg-card p-2">
           <Tabs value={tab} onValueChange={(value) => setTab(value as "branches" | "stash")}>
-            <TabsList className="h-7 rounded-md bg-muted/70 p-0.5">
-              <TabsTrigger value="branches" className="h-6 px-2.5 text-xs">
+            <TabsList className="grid h-8 w-full grid-cols-2 rounded-md bg-muted/70 p-0.5">
+              <TabsTrigger
+                value="branches"
+                className="h-7 justify-center px-2.5 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
                 Branches
               </TabsTrigger>
-              <TabsTrigger value="stash" className="h-6 px-2.5 text-xs">
+              <TabsTrigger
+                value="stash"
+                className="h-7 justify-center gap-1.5 px-2.5 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
                 Stash
+                {stashes.length > 0 ? (
+                  <Badge variant="secondary" className="h-4 px-1 text-[10px]">
+                    {stashes.length}
+                  </Badge>
+                ) : null}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -235,30 +311,101 @@ export function BranchPicker({
               </div>
             ) : stashesLoading ? (
               <div className="px-2 py-3 text-xs text-muted-foreground">Loading stashes...</div>
-            ) : stashes.length > 0 ? (
+            ) : filteredStashes.length > 0 ? (
               <div className="flex flex-col">
-                {stashes
-                  .filter((stash) => normalizedQuery.length === 0 || stash.message.toLowerCase().includes(normalizedQuery))
-                  .map((stash) => (
-                    <DropdownMenuItem
-                      key={stash.ref_name}
-                      className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-xs"
-                      onSelect={(event) => event.preventDefault()}
-                    >
-                      <Archive className="size-3.5 text-muted-foreground" />
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">#{stash.index}: {stash.message}</span>
-                        <span className="block truncate text-[11px] text-muted-foreground">{stash.date}</span>
-                      </span>
-                    </DropdownMenuItem>
-                  ))}
+                {filteredStashes.map((stash) => {
+                  const isExpanded = expandedStash === stash.index;
+
+                  return (
+                    <div key={stash.ref_name} className="rounded-md">
+                      <div
+                        role="menuitem"
+                        tabIndex={0}
+                        className={cn(
+                          "grid cursor-default grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                          isExpanded && "bg-accent/70 text-foreground",
+                        )}
+                        onClick={() => {
+                          if (!onStashView) return;
+                          setExpandedStash((current) =>
+                            current === stash.index ? null : stash.index,
+                          );
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          if (!onStashView) return;
+                          setExpandedStash((current) =>
+                            current === stash.index ? null : stash.index,
+                          );
+                        }}
+                      >
+                        <Archive className="size-3.5 text-muted-foreground" />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">#{stash.index}: {stash.message}</span>
+                          <span className="block truncate text-[11px] text-muted-foreground">{stash.date}</span>
+                        </span>
+                        <span className="flex items-center gap-0.5">
+                          {onStashView ? (
+                            <StashActionButton
+                              label={isExpanded ? "Hide stash diff" : "View stash diff"}
+                              onClick={() =>
+                                setExpandedStash((current) =>
+                                  current === stash.index ? null : stash.index,
+                                )
+                              }
+                            >
+                              <Eye className="size-3" />
+                            </StashActionButton>
+                          ) : null}
+                          {onStashApply ? (
+                            <StashActionButton
+                              label="Apply stash"
+                              onClick={() => void onStashApply(stash.index)}
+                            >
+                              <CornerDownLeft className="size-3" />
+                            </StashActionButton>
+                          ) : null}
+                          {onStashPop ? (
+                            <StashActionButton
+                              label="Pop stash"
+                              onClick={() => void onStashPop(stash.index)}
+                            >
+                              <RotateCcw className="size-3" />
+                            </StashActionButton>
+                          ) : null}
+                          {onStashDrop ? (
+                            <StashActionButton
+                              label="Discard stash"
+                              destructive
+                              onClick={() => void onStashDrop(stash.index)}
+                            >
+                              <Trash2 className="size-3" />
+                            </StashActionButton>
+                          ) : null}
+                        </span>
+                      </div>
+                      {isExpanded ? (
+                        <div className="mx-1 mb-1 max-h-52 overflow-auto rounded-md border bg-background">
+                          {stashDiffLoading ? (
+                            <div className="p-3 text-xs text-muted-foreground">Loading diff...</div>
+                          ) : (
+                            <DiffView diff={stashDiff} />
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
-              <div className="px-2 py-3 text-xs text-muted-foreground">No stashes.</div>
+              <div className="px-2 py-3 text-xs text-muted-foreground">
+                {stashes.length === 0 ? "No stashes." : "No matching stashes."}
+              </div>
             )}
           </div>
         </ScrollArea>
-        {onCreateBranch ? (
+        {onCreateBranch && tab === "branches" ? (
           <>
             <DropdownMenuSeparator className="my-0" />
             <div className="p-1">
@@ -277,5 +424,43 @@ export function BranchPicker({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+interface StashActionButtonProps {
+  label: string;
+  destructive?: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}
+
+function StashActionButton({
+  label,
+  destructive = false,
+  children,
+  onClick,
+}: StashActionButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className={cn(
+            "size-6 border-border/70 bg-background/85 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
+            destructive && "hover:text-destructive",
+          )}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick();
+          }}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
