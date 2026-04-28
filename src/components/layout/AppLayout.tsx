@@ -17,6 +17,7 @@ import {
 } from "../workspace/WorkspacePanel";
 import { CreateBranchDialog } from "../git/CreateBranchDialog";
 import { CreatePrDialog } from "../git/CreatePrDialog";
+import type { StashDiffDocumentData } from "../git/StashDiffDocument";
 import { useAppUpdater } from "../../hooks/useAppUpdater";
 import { useAgentHooks } from "../../hooks/useClaudeHooks";
 import { useGitState } from "../../hooks/useGitState";
@@ -30,6 +31,7 @@ import {
   projectCommands,
   quitCommands,
   worktreeCommands,
+  type StashEntry,
 } from "../../lib/tauri-commands";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -172,6 +174,7 @@ export function AppLayout() {
   const [workspaceShellMode, setWorkspaceShellMode] = useState<"pane" | "canvas">("pane");
   const [viewingSession, setViewingSession] = useState<Session | null>(null);
   const [openTabSessionIds, setOpenTabSessionIds] = useState<string[]>([]);
+  const [stashDiffTabs, setStashDiffTabs] = useState<StashDiffDocumentData[]>([]);
   const [paneRevealRequest, setPaneRevealRequest] = useState<{
     tabId: string;
     nonce: number;
@@ -1405,6 +1408,36 @@ export function AppLayout() {
     onSessionBranchChange: handleSessionBranchChange,
   });
 
+  const handleOpenStashDiff = useCallback(async (stash: StashEntry) => {
+    if (!hasWorkspaceRoot || !workspaceContext?.rootPath) return;
+
+    try {
+      const diff = await git.stashShow(stash.index);
+      const id = `stash:${encodeURIComponent(`${workspaceContext.rootPath}:${stash.ref_name}`)}`;
+      setStashDiffTabs((current) => {
+        const nextTab: StashDiffDocumentData = {
+          id,
+          refName: stash.ref_name,
+          message: stash.message,
+          date: stash.date,
+          diff,
+        };
+        const existingIndex = current.findIndex((tab) => tab.id === id);
+        if (existingIndex === -1) return [...current, nextTab];
+
+        const next = [...current];
+        next[existingIndex] = nextTab;
+        return next;
+      });
+      setWorkspaceShellMode("pane");
+      requestPaneReveal(id);
+    } catch (err) {
+      toast.error("Failed to open stash diff", {
+        description: String(err),
+      });
+    }
+  }, [git, hasWorkspaceRoot, requestPaneReveal, workspaceContext?.rootPath]);
+
   const handleSelectWorktree = useCallback((path: string) => {
     const matchingSession = liveSessions.find((session) =>
       session.worktreePath === path ||
@@ -1478,6 +1511,7 @@ export function AppLayout() {
       onSelectWorktree={handleSelectWorktree}
       onCreatePr={() => setCreatePrOpen(true)}
       onFileSelect={setOpenFilePath}
+      onOpenStashDiff={handleOpenStashDiff}
       onTabChange={setWorkspaceTab}
     />
   ) : null;
@@ -1550,6 +1584,7 @@ export function AppLayout() {
       useWorktree: true,
     }),
     onSelectWorktree: handleSelectWorktree,
+    onOpenStashDiff: handleOpenStashDiff,
     onOpenProjectFolder: state.projectPath
       ? () => void handleOpenProject(state.projectPath!)
       : undefined,
@@ -1824,6 +1859,7 @@ export function AppLayout() {
               liveSessions={liveSessions}
               transcriptSession={resolvedViewingSession}
               openFilePath={openFilePath}
+              stashDiffs={stashDiffTabs}
               revealRequest={paneRevealRequest}
               projectPath={state.projectPath}
               projectPaths={state.projects}
@@ -1836,6 +1872,9 @@ export function AppLayout() {
               onCloseTranscript={() => setViewingSession(null)}
               onCloseFile={(filePath) =>
                 setOpenFilePath((current) => (current === filePath ? null : current))
+              }
+              onCloseStashDiff={(id) =>
+                setStashDiffTabs((current) => current.filter((tab) => tab.id !== id))
               }
               onResumeTranscript={
                 resolvedViewingSession

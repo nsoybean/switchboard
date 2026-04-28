@@ -17,7 +17,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fileCommands, gitCommands, type ChangedFile } from "../../lib/tauri-commands";
+import { fileCommands, gitCommands, type ChangedFile, type StashEntry } from "../../lib/tauri-commands";
 import { BranchPicker } from "./BranchPicker";
 import { DiffView } from "./DiffView";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,7 @@ interface GitPanelProps {
   onCreatePr?: () => void;
   onFileSelect?: (filePath: string) => void;
   onOpenDiff?: (diff: { path: string; staged: boolean; status: string }) => void;
+  onOpenStashDiff?: (stash: StashEntry) => void | Promise<void>;
   activeDiffPath?: string | null;
   activeDiffStaged?: boolean | null;
 }
@@ -116,6 +117,7 @@ export const GitPanel = memo(function GitPanel({
   onCreateBranch,
   onCreatePr,
   onFileSelect,
+  onOpenStashDiff,
 }: GitPanelProps) {
   const [expandedFileKey, setExpandedFileKey] = useState<string | null>(null);
   const [fileDiff, setFileDiff] = useState("");
@@ -733,6 +735,7 @@ export const GitPanel = memo(function GitPanel({
               onStashApply={(index) => git.stashApply(index)}
               onStashPop={(index) => git.stashPop(index)}
               onStashDrop={(index) => git.stashDrop(index)}
+              onStashOpen={onOpenStashDiff}
               onStashView={(index) => git.stashShow(index)}
               compact
             />

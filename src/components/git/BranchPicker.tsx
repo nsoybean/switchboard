@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Archive, Check, CornerDownLeft, Eye, GitBranch, PlusIcon, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, Check, CornerDownLeft, Eye, FileText, GitBranch, PlusIcon, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +43,7 @@ interface BranchPickerProps {
   onStashApply?: (index: number) => Promise<void> | void;
   onStashPop?: (index: number) => Promise<void> | void;
   onStashDrop?: (index: number) => Promise<void> | void;
+  onStashOpen?: (stash: StashEntry) => Promise<void> | void;
   onStashView?: (index: number) => Promise<string>;
   compact?: boolean;
 }
@@ -66,6 +67,7 @@ export function BranchPicker({
   onStashApply,
   onStashPop,
   onStashDrop,
+  onStashOpen,
   onStashView,
   compact = false,
 }: BranchPickerProps) {
@@ -326,6 +328,11 @@ export function BranchPicker({
                           isExpanded && "bg-accent/70 text-foreground",
                         )}
                         onClick={() => {
+                          if (onStashOpen) {
+                            void onStashOpen(stash);
+                            setOpen(false);
+                            return;
+                          }
                           if (!onStashView) return;
                           setExpandedStash((current) =>
                             current === stash.index ? null : stash.index,
@@ -334,6 +341,11 @@ export function BranchPicker({
                         onKeyDown={(event) => {
                           if (event.key !== "Enter" && event.key !== " ") return;
                           event.preventDefault();
+                          if (onStashOpen) {
+                            void onStashOpen(stash);
+                            setOpen(false);
+                            return;
+                          }
                           if (!onStashView) return;
                           setExpandedStash((current) =>
                             current === stash.index ? null : stash.index,
@@ -346,14 +358,20 @@ export function BranchPicker({
                           <span className="block truncate text-[11px] text-muted-foreground">{stash.date}</span>
                         </span>
                         <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-background/95 opacity-0 shadow-sm transition-opacity group-hover/stash:pointer-events-auto group-hover/stash:opacity-100 group-focus-within/stash:pointer-events-auto group-focus-within/stash:opacity-100">
-                          {onStashView ? (
+                          {onStashView || onStashOpen ? (
                             <StashActionButton
-                              label={isExpanded ? "Hide stash diff" : "View stash diff"}
-                              onClick={() =>
+                              label={onStashOpen ? "Open stash diff" : isExpanded ? "Hide stash diff" : "View stash diff"}
+                              onClick={() => {
+                                if (onStashOpen) {
+                                  void onStashOpen(stash);
+                                  setOpen(false);
+                                  return;
+                                }
+
                                 setExpandedStash((current) =>
                                   current === stash.index ? null : stash.index,
-                                )
-                              }
+                                );
+                              }}
                             >
                               <Eye className="size-3" />
                             </StashActionButton>
@@ -390,7 +408,7 @@ export function BranchPicker({
                           {stashDiffLoading ? (
                             <div className="p-3 text-xs text-muted-foreground">Loading diff...</div>
                           ) : (
-                            <DiffView diff={stashDiff} />
+                            <StashDiffView diff={stashDiff} />
                           )}
                         </div>
                       ) : null}
@@ -463,4 +481,106 @@ function StashActionButton({
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
+}
+
+interface StashDiffFile {
+  key: string;
+  name: string;
+  directory: string;
+  additions: number;
+  deletions: number;
+  diff: string;
+}
+
+function StashDiffView({ diff }: { diff: string }) {
+  const files = useMemo(() => parseStashDiff(diff), [diff]);
+
+  if (!diff.trim()) {
+    return <div className="p-3 text-xs text-muted-foreground">No diff to show</div>;
+  }
+
+  if (files.length === 0) {
+    return <DiffView diff={diff} />;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 p-2">
+      {files.map((file) => (
+        <div key={file.key} className="overflow-hidden rounded-md border bg-background">
+          <div className="flex min-w-0 items-center gap-2 border-b bg-card px-2 py-1.5 text-xs">
+            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 truncate font-mono font-medium text-foreground" title={file.key}>
+              {file.name}
+            </span>
+            {file.directory ? (
+              <span className="min-w-0 truncate font-mono text-muted-foreground">
+                {file.directory}
+              </span>
+            ) : null}
+            <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10px] tabular-nums">
+              {file.additions > 0 ? (
+                <span className="text-[var(--sb-diff-add-fg)]">+{file.additions}</span>
+              ) : null}
+              {file.deletions > 0 ? (
+                <span className="text-[var(--sb-diff-del-fg)]">-{file.deletions}</span>
+              ) : null}
+            </span>
+          </div>
+          <DiffView diff={file.diff} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function parseStashDiff(diff: string): StashDiffFile[] {
+  const lines = diff.split("\n");
+  const sections: string[][] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("diff --git ")) {
+      if (current.length > 0) {
+        sections.push(current);
+      }
+      current = [line];
+      continue;
+    }
+    if (current.length > 0) {
+      current.push(line);
+    }
+  }
+
+  if (current.length > 0) {
+    sections.push(current);
+  }
+
+  return sections.map((section, index) => {
+    const key = getDiffPath(section[0]) ?? `File ${index + 1}`;
+    const slashIndex = key.lastIndexOf("/");
+    const name = slashIndex >= 0 ? key.slice(slashIndex + 1) : key;
+    const directory = slashIndex >= 0 ? key.slice(0, slashIndex + 1) : "";
+    let additions = 0;
+    let deletions = 0;
+
+    for (const line of section) {
+      if (line.startsWith("+") && !line.startsWith("+++")) additions += 1;
+      if (line.startsWith("-") && !line.startsWith("---")) deletions += 1;
+    }
+
+    return {
+      key,
+      name,
+      directory,
+      additions,
+      deletions,
+      diff: section.join("\n"),
+    };
+  });
+}
+
+function getDiffPath(header: string) {
+  const match = /^diff --git a\/(.+) b\/(.+)$/.exec(header);
+  if (!match) return null;
+  return match[2] || match[1] || null;
 }

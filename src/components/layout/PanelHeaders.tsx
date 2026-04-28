@@ -23,6 +23,7 @@ import {
 import { BranchPicker } from "@/components/git/BranchPicker";
 import { WorktreePicker } from "@/components/git/WorktreePicker";
 import type { GitState, GitActions } from "@/hooks/useGitState";
+import type { StashEntry } from "@/lib/tauri-commands";
 
 type GitWithActions = GitState &
   Pick<
@@ -140,6 +141,7 @@ interface CenterPanelHeaderProps {
   onCreateBranch?: (branchName?: string) => void;
   onCreateWorktree?: (label?: string) => void;
   onSelectWorktree?: (path: string) => void;
+  onOpenStashDiff?: (stash: StashEntry) => void | Promise<void>;
   onOpenProjectFolder?: () => void;
   updateVersion?: string | null;
   checkingForUpdates?: boolean;
@@ -166,6 +168,7 @@ export function CenterPanelHeader({
   onCreateBranch,
   onCreateWorktree,
   onSelectWorktree,
+  onOpenStashDiff,
   onOpenProjectFolder,
   updateVersion = null,
   checkingForUpdates = false,
@@ -254,6 +257,7 @@ export function CenterPanelHeader({
                 onStashApply={(index) => git.stashApply(index)}
                 onStashPop={(index) => git.stashPop(index)}
                 onStashDrop={(index) => git.stashDrop(index)}
+                onStashOpen={onOpenStashDiff}
                 onStashView={(index) => git.stashShow(index)}
                 compact
               />

@@ -5,6 +5,7 @@ import { GitPanel } from "../git/GitPanel";
 import { GitHistory } from "../git/GitHistory";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 import type { Session } from "@/state/types";
+import type { StashEntry } from "@/lib/tauri-commands";
 
 export type WorkspaceTab = "files" | "changes" | "history";
 
@@ -32,6 +33,7 @@ interface WorkspacePanelProps {
   onSelectWorktree?: (path: string) => void;
   onCreatePr?: () => void;
   onFileSelect?: (filePath: string) => void;
+  onOpenStashDiff?: (stash: StashEntry) => void | Promise<void>;
   onTabChange: (tab: WorkspaceTab) => void;
 }
 
@@ -67,6 +69,7 @@ export function WorkspacePanel({
   onSelectWorktree,
   onCreatePr,
   onFileSelect,
+  onOpenStashDiff,
   onTabChange,
 }: WorkspacePanelProps) {
   const renderUnavailableState = (currentContext: WorkspaceContext, tab: WorkspaceTab) => {
@@ -128,6 +131,7 @@ export function WorkspacePanel({
         onSelectWorktree={onSelectWorktree}
         onCreatePr={onCreatePr}
         onFileSelect={onFileSelect}
+        onOpenStashDiff={onOpenStashDiff}
         onTabChange={onTabChange}
       />
     );
@@ -199,6 +203,7 @@ export function WorkspacePanel({
                 onSelectWorktree={onSelectWorktree}
                 onCreatePr={onCreatePr}
                 onFileSelect={onFileSelect}
+                onOpenStashDiff={onOpenStashDiff}
               />
             ) : null}
 
