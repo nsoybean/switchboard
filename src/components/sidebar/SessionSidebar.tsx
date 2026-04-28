@@ -812,34 +812,39 @@ export function SessionSidebar({
       </div>
 
       {/* Footer: History · Settings · Theme */}
-      <div className="flex items-center justify-between border-t bg-card/80 px-2 py-1.5">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setHistoryOpen(true)}
-            >
-              <History className="size-[18px]" />
-              History
-              {totalHistoryCount > 0 && (
-                <span className="tabular-nums">{totalHistoryCount}</span>
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Session history</TooltipContent>
-        </Tooltip>
-        <div className="flex items-center">
+      <div className="flex items-center justify-between border-t bg-background/95 px-2 py-1.5">
+        <div className="inline-flex items-center rounded-md bg-card/70 p-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <History className="size-3.5" />
+                History
+                {totalHistoryCount > 0 && (
+                  <span className="rounded bg-muted px-1 font-mono text-[10px] tabular-nums text-muted-foreground">
+                    {totalHistoryCount}
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Session history</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <div className="inline-flex items-center rounded-md bg-card/70 p-0.5">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
+                className="size-7 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 onClick={() => setShortcutsOpen(true)}
               >
-                <Keyboard className="size-[18px]" />
+                <Keyboard className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Keyboard shortcuts</TooltipContent>
@@ -849,10 +854,10 @@ export function SessionSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
+                className="size-7 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 onClick={onOpenSettings}
               >
-                <Settings className="size-[18px]" />
+                <Settings className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Settings</TooltipContent>
@@ -862,13 +867,13 @@ export function SessionSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
+                className="size-7 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               >
                 {theme === "dark" ? (
-                  <Sun className="size-[18px]" />
+                  <Sun className="size-3.5" />
                 ) : (
-                  <Moon className="size-[18px]" />
+                  <Moon className="size-3.5" />
                 )}
               </Button>
             </TooltipTrigger>
