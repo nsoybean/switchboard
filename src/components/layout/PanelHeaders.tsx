@@ -1,19 +1,11 @@
-import { useState } from "react";
-import { flushSync } from "react-dom";
 import {
   ArrowDownToLine,
-  ArrowUp,
-  ArrowDown,
-  ChevronDown,
   FolderOpen,
-  GitCommit,
-  GitPullRequest,
   LayoutGrid,
   Loader2,
   PanelLeft,
   PanelRight,
   PanelTop,
-  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -25,15 +17,11 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Spinner } from "@/components/ui/spinner";
 import { BranchPicker } from "@/components/git/BranchPicker";
 import { WorktreePicker } from "@/components/git/WorktreePicker";
-import { CommitDialog } from "@/components/git/CommitDialog";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 
 type GitWithActions = GitState &
@@ -327,264 +315,34 @@ export function CenterPanelHeader({
 // ── Right Panel Header ───────────────────────────────────────────────────────
 
 interface RightPanelHeaderProps {
-  git?: GitWithActions;
-  githubToken?: string | null;
-  projectPath?: string | null;
-  cwd?: string | null;
-  onCreateBranch?: (branchName?: string) => void;
-  onCreateWorktree?: (label?: string) => void;
-  onSelectWorktree?: (path: string) => void;
-  onCreatePr?: () => void;
   onToggleInspector: () => void;
 }
 
 export function RightPanelHeader({
-  git,
-  githubToken,
-  projectPath,
-  cwd,
-  onCreateBranch,
-  onCreateWorktree,
-  onSelectWorktree,
-  onCreatePr,
   onToggleInspector,
 }: RightPanelHeaderProps) {
-  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
-  const [pullPending, setPullPending] = useState(false);
-  const [pushPending, setPushPending] = useState(false);
-  const [fetchPending, setFetchPending] = useState(false);
-
-  const hasChanges = (git?.files.length ?? 0) > 0;
-  const canPush = (git?.aheadBehind.ahead ?? 0) > 0;
-  const canPull = (git?.aheadBehind.behind ?? 0) > 0;
-  const anyGitPending =
-    git?.branchActionPending || pullPending || pushPending || fetchPending;
-
-  const handlePull = () => {
-    if (!git?.pull || pullPending || anyGitPending) return;
-    window.setTimeout(async () => {
-      flushSync(() => setPullPending(true));
-      try {
-        await git.pull();
-      } finally {
-        setPullPending(false);
-      }
-    }, 0);
-  };
-
-  const handlePush = () => {
-    if (!git?.push || pushPending || anyGitPending) return;
-    window.setTimeout(async () => {
-      flushSync(() => setPushPending(true));
-      try {
-        await git.push();
-      } finally {
-        setPushPending(false);
-      }
-    }, 0);
-  };
-
-  const handleFetch = () => {
-    if (!git?.fetch || fetchPending) return;
-    window.setTimeout(async () => {
-      setFetchPending(true);
-      try {
-        await git.fetch();
-      } finally {
-        setFetchPending(false);
-      }
-    }, 0);
-  };
-
   return (
-    <>
-      <div
-        data-tauri-drag-region
-        className="flex h-10 shrink-0 select-none items-center gap-2 border-b bg-card/95 px-2 font-sans text-xs"
-      >
-        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-hidden">
-          {git?.branch && (
-            <>
-            <WorktreePicker
-              projectPath={projectPath ?? null}
-              currentPath={cwd ?? projectPath ?? null}
-              currentBranch={git.branch}
-              onCreateWorktree={onCreateWorktree}
-              onSelectPath={onSelectWorktree}
-              triggerClassName="h-6 min-w-0 flex-1 basis-0 shrink px-1.5 text-xs"
-              compact
-            />
-            <BranchPicker
-              branches={git.branches}
-              loading={git.branchesLoading && git.branches.length === 0}
-              value={git.branch}
-              disabled={git.branchActionPending}
-              triggerClassName="h-6 min-w-0 flex-1 basis-0 shrink gap-1 border border-transparent bg-transparent px-1.5 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-card hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-card data-[state=open]:text-foreground"
-              createLabel="Create branch..."
-              onSelect={(branchName) => void git.switchBranch(branchName)}
-              onCreateBranch={onCreateBranch}
-              stashes={git.stashes}
-              stashesLoading={git.stashesLoading}
-              onStashTabOpen={() => void git.refreshStashes()}
-              compact
-            />
-
-            {/* Split commit button */}
-            <div className="flex shrink-0 items-center">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 max-w-[86px] gap-1.5 rounded-r-none border-r-0 px-2 text-xs font-medium"
-                    disabled={!hasChanges || !!anyGitPending}
-                    onClick={() => setCommitDialogOpen(true)}
-                  >
-                    {anyGitPending ? (
-                      <Spinner className="size-3" />
-                    ) : (
-                      <GitCommit className="size-3.5" />
-                    )}
-                    <span className="truncate">
-                      {pullPending
-                        ? "Pulling..."
-                        : pushPending
-                          ? "Pushing..."
-                          : fetchPending
-                            ? "Fetching..."
-                            : "Commit"}
-                    </span>
-                  </Button>
-                </TooltipTrigger>
-                {!hasChanges && (
-                  <TooltipContent>No changes to commit</TooltipContent>
-                )}
-              </Tooltip>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 rounded-l-none px-1.5 text-xs"
-                    disabled={!!anyGitPending}
-                  >
-                    <ChevronDown className="size-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-44">
-                  <DropdownMenuGroup>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <DropdownMenuItem
-                            disabled={!hasChanges}
-                            onSelect={() => setCommitDialogOpen(true)}
-                          >
-                            <GitCommit className="mr-2 size-3.5" />
-                            Commit
-                          </DropdownMenuItem>
-                        </span>
-                      </TooltipTrigger>
-                      {!hasChanges && (
-                        <TooltipContent side="right">No changes to commit</TooltipContent>
-                      )}
-                    </Tooltip>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <DropdownMenuItem disabled={!canPush} onSelect={handlePush}>
-                            <ArrowUp className="mr-2 size-3.5" />
-                            Push
-                          </DropdownMenuItem>
-                        </span>
-                      </TooltipTrigger>
-                      {!canPush && (
-                        <TooltipContent side="right">Nothing to push</TooltipContent>
-                      )}
-                    </Tooltip>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <DropdownMenuItem disabled={!canPull} onSelect={handlePull}>
-                            <ArrowDown className="mr-2 size-3.5" />
-                            Pull
-                          </DropdownMenuItem>
-                        </span>
-                      </TooltipTrigger>
-                      {!canPull && (
-                        <TooltipContent side="right">Already up to date</TooltipContent>
-                      )}
-                    </Tooltip>
-
-                    <DropdownMenuItem onSelect={handleFetch}>
-                      <RefreshCw className="mr-2 size-3.5" />
-                      Fetch
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-
-                  <DropdownMenuSeparator />
-
-                  <DropdownMenuGroup>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <DropdownMenuItem
-                            disabled={!githubToken}
-                            onSelect={() => { if (githubToken) onCreatePr?.(); }}
-                          >
-                            <GitPullRequest className="mr-2 size-3.5" />
-                            Create PR
-                          </DropdownMenuItem>
-                        </span>
-                      </TooltipTrigger>
-                      {!githubToken && (
-                        <TooltipContent side="right">
-                          Add a GitHub token in Settings to create PRs
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            </>
-          )}
-        </div>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0"
-              onClick={onToggleInspector}
-            >
-              <PanelRight className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Hide Inspector (⌘G)</TooltipContent>
-        </Tooltip>
+    <div
+      data-tauri-drag-region
+      className="flex h-10 shrink-0 select-none items-center gap-2 border-b bg-card/95 px-2 font-sans text-xs"
+    >
+      <div className="min-w-0 flex-1 truncate px-1 text-xs font-medium text-muted-foreground">
+        Inspector
       </div>
 
-      {git && cwd && (
-        <CommitDialog
-          open={commitDialogOpen}
-          onClose={() => setCommitDialogOpen(false)}
-          branch={git.branch}
-          files={git.files}
-          additions={git.stats.additions}
-          deletions={git.stats.deletions}
-          cwd={cwd}
-          githubToken={githubToken ?? null}
-          branchActionPending={git.branchActionPending}
-          onCommit={git.commit}
-          onStageAll={git.stageAll}
-          onPush={git.push}
-        />
-      )}
-    </>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0"
+            onClick={onToggleInspector}
+          >
+            <PanelRight className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Hide Inspector (⌘G)</TooltipContent>
+      </Tooltip>
+    </div>
   );
 }

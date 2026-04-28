@@ -4,6 +4,8 @@ export interface ChangedFile {
   path: string;
   status: string;
   staged: boolean;
+  additions?: number | null;
+  deletions?: number | null;
 }
 
 export interface DiffStats {

@@ -1463,6 +1463,20 @@ export function AppLayout() {
       git={git}
       branchSessions={branchRelevantSessions}
       githubToken={state.githubToken}
+      projectPath={state.projectPath}
+      onCreateBranch={(branchName?: string) => {
+        if (branchName && hasWorkspaceRoot) {
+          void git.createBranch(branchName);
+        } else {
+          setCreateBranchOpen(true);
+        }
+      }}
+      onCreateWorktree={(label?: string) => openNewSessionDialog(undefined, {
+        label,
+        useWorktree: true,
+      })}
+      onSelectWorktree={handleSelectWorktree}
+      onCreatePr={() => setCreatePrOpen(true)}
       onFileSelect={setOpenFilePath}
       onTabChange={setWorkspaceTab}
     />
@@ -1688,23 +1702,6 @@ export function AppLayout() {
               <div className="w-px shrink-0 bg-border" />
               <div className="shrink-0 bg-card" style={{ width: inspectorWidth }}>
                 <RightPanelHeader
-                  git={hasWorkspaceRoot ? git : undefined}
-                  githubToken={state.githubToken}
-                  projectPath={state.projectPath}
-                  cwd={workspaceContext?.rootPath}
-                  onCreateBranch={(branchName?: string) => {
-                    if (branchName && hasWorkspaceRoot) {
-                      void git.createBranch(branchName);
-                    } else {
-                      setCreateBranchOpen(true);
-                    }
-                  }}
-                  onCreateWorktree={(label?: string) => openNewSessionDialog(undefined, {
-                    label,
-                    useWorktree: true,
-                  })}
-                  onSelectWorktree={handleSelectWorktree}
-                  onCreatePr={() => setCreatePrOpen(true)}
                   onToggleInspector={() => setInspectorOpen(false)}
                 />
               </div>
@@ -1876,23 +1873,6 @@ export function AppLayout() {
           style={{ width: inspectorWidth }}
         >
           <RightPanelHeader
-            git={hasWorkspaceRoot ? git : undefined}
-            githubToken={state.githubToken}
-            projectPath={state.projectPath}
-            cwd={workspaceContext?.rootPath}
-            onCreateBranch={(branchName?: string) => {
-              if (branchName && hasWorkspaceRoot) {
-                void git.createBranch(branchName);
-              } else {
-                setCreateBranchOpen(true);
-              }
-            }}
-            onCreateWorktree={(label?: string) => openNewSessionDialog(undefined, {
-              label,
-              useWorktree: true,
-            })}
-            onSelectWorktree={handleSelectWorktree}
-            onCreatePr={() => setCreatePrOpen(true)}
             onToggleInspector={() => setInspectorOpen(false)}
           />
           <div className="flex-1 min-h-0 overflow-hidden">

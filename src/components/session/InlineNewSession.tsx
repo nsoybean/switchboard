@@ -291,7 +291,7 @@ export function InlineNewSession({ projectPath, projectPaths, onProjectSelect, o
   const activeBranchSummary = useWorktree ? worktreeBranchSummary : liveBranchSummary;
 
   return (
-    <div className="flex h-full items-center justify-center bg-background">
+    <div className="flex h-full items-center justify-center bg-background font-sans">
       <div className="w-full max-w-[640px] px-6">
         {/* Badge-style options bar */}
         <div className="mb-3 flex flex-wrap items-center gap-1.5">

@@ -136,7 +136,7 @@ export function BranchPicker({
             triggerClassName,
           )}
         >
-          <span className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2 overflow-hidden">
             {showIcon && <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />}
             <span className="truncate">{selectedBranch?.name ?? value}</span>
           </span>

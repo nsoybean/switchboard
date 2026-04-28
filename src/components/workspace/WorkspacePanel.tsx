@@ -1,12 +1,13 @@
 import { File } from "@phosphor-icons/react";
-import { FolderTree } from "lucide-react";
+import { FolderTree, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
+import { GitHistory } from "../git/GitHistory";
 import type { GitState, GitActions } from "@/hooks/useGitState";
 import type { Session } from "@/state/types";
 
-export type WorkspaceTab = "files" | "changes";
+export type WorkspaceTab = "files" | "changes" | "history";
 
 export interface WorkspaceContext {
   sessionId?: string | null;
@@ -27,6 +28,10 @@ interface WorkspacePanelProps {
   git: GitState & GitActions;
   branchSessions?: Session[];
   githubToken?: string | null;
+  onCreateBranch?: (branchName?: string) => void;
+  onCreateWorktree?: (label?: string) => void;
+  onSelectWorktree?: (path: string) => void;
+  onCreatePr?: () => void;
   onFileSelect?: (filePath: string) => void;
   onTabChange: (tab: WorkspaceTab) => void;
 }
@@ -58,6 +63,10 @@ export function WorkspacePanel({
   git,
   branchSessions = [],
   githubToken,
+  onCreateBranch,
+  onCreateWorktree,
+  onSelectWorktree,
+  onCreatePr,
   onFileSelect,
   onTabChange,
 }: WorkspacePanelProps) {
@@ -111,9 +120,14 @@ export function WorkspacePanel({
       <WorkspacePanel
         activeTab={activeTab}
         context={projectContext}
+        projectPath={projectPath}
         git={git}
         branchSessions={branchSessions}
         githubToken={githubToken}
+        onCreateBranch={onCreateBranch}
+        onCreateWorktree={onCreateWorktree}
+        onSelectWorktree={onSelectWorktree}
+        onCreatePr={onCreatePr}
         onFileSelect={onFileSelect}
         onTabChange={onTabChange}
       />
@@ -128,8 +142,9 @@ export function WorkspacePanel({
         <div className="flex items-start justify-between gap-2 px-2 py-1.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {([
-              { key: "changes" as const, label: "Changes" },
               { key: "files" as const, label: "Files" },
+              { key: "changes" as const, label: "Changes" },
+              { key: "history" as const, label: "History" },
             ]).map((tab) => (
               <button
                 key={tab.key}
@@ -147,6 +162,12 @@ export function WorkspacePanel({
                   <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground">
                     <File className="size-3" />
                     {changedFileCount}
+                  </span>
+                )}
+                {tab.key === "history" && git.log.length > 0 && (
+                  <span className="flex items-center gap-0.5 text-[10px] tabular-nums text-muted-foreground">
+                    <History className="size-3" />
+                    {git.log.length}
                   </span>
                 )}
                 {tab.key === "changes" && (git.stats.additions > 0 || git.stats.deletions > 0) && (
@@ -183,7 +204,17 @@ export function WorkspacePanel({
                 cwd={context.rootPath!}
                 git={git}
                 sessions={branchSessions}
+                projectPath={projectPath ?? context.rootPath}
+                githubToken={githubToken ?? null}
+                onCreateBranch={onCreateBranch}
+                onCreateWorktree={onCreateWorktree}
+                onSelectWorktree={onSelectWorktree}
+                onCreatePr={onCreatePr}
               />
+            ) : null}
+
+            {activeTab === "history" ? (
+              <GitHistory cwd={context.rootPath!} git={git} />
             ) : null}
           </>
         )}
