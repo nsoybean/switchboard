@@ -123,9 +123,9 @@ export function WorkspacePanel({
   const unavailableState = renderUnavailableState(context, activeTab);
   const changedFileCount = git.files.length;
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card">
-      <div>
-        <div className="flex items-start justify-between gap-2 px-2 py-2">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-card font-sans">
+      <div className="border-b">
+        <div className="flex items-start justify-between gap-2 px-2 py-1.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {([
               { key: "changes" as const, label: "Changes" },
@@ -138,8 +138,8 @@ export function WorkspacePanel({
                 className={cn(
                   "inline-flex min-w-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
                   activeTab === tab.key
-                    ? "border-border bg-background text-foreground shadow-sm"
-                    : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground",
+                    ? "border-border bg-background/80 text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:bg-background/60 hover:text-foreground",
                 )}
               >
                 {tab.label}

@@ -89,7 +89,7 @@ export function SessionCard({
     return (
       <div
         ref={dragRef}
-        className="inline-flex max-w-[240px] items-center rounded bg-card px-1.5 py-0.5 shadow-sm ring-1 ring-border"
+        className="inline-flex max-w-[240px] items-center rounded-md bg-card px-2 py-1 shadow-sm ring-1 ring-border"
       >
         <span className="truncate text-[12px] font-medium">
           {session.label || "New session"}
@@ -102,16 +102,16 @@ export function SessionCard({
     <div
       ref={dragRef}
       className={cn(
-        "group/session flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors overflow-hidden cursor-pointer",
+        "group/session flex w-full min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md px-2 py-1.5 font-sans text-sm transition-colors",
         isActive
-          ? "bg-accent text-accent-foreground"
+          ? "bg-accent/80 text-accent-foreground"
           : suppressHover
             ? isOpenInTab
-              ? "bg-muted/60 text-foreground"
+              ? "bg-muted/55 text-foreground"
               : "text-foreground"
           : isOpenInTab
-            ? "bg-muted/60 hover:bg-accent/50 text-foreground"
-            : "hover:bg-accent/50 text-foreground",
+            ? "bg-muted/55 text-foreground hover:bg-accent/55"
+            : "text-foreground hover:bg-muted/55",
       )}
       onClick={onClick}
     >
@@ -123,7 +123,7 @@ export function SessionCard({
 
       {/* Label — truncates to keep single row */}
       <span className={cn(
-        "min-w-0 flex-1 truncate text-[13px] font-medium",
+        "min-w-0 flex-1 truncate text-[13px] font-medium leading-5",
         !session.label && "italic text-muted-foreground",
       )}>
         {session.label || "New session"}
@@ -134,7 +134,7 @@ export function SessionCard({
         {/* Timestamp — hidden when hover actions visible */}
         <span
           className={cn(
-            "absolute right-0 text-[11px] text-muted-foreground tabular-nums transition-opacity",
+            "absolute right-0 text-[11px] text-muted-foreground/80 tabular-nums transition-opacity",
             showHoverActions &&
               "group-hover/session:opacity-0 group-focus-within/session:opacity-0",
           )}
@@ -145,7 +145,7 @@ export function SessionCard({
 
         <div
           className={cn(
-            "absolute right-0 z-10 flex items-center gap-0.5 rounded-md bg-accent/95 px-0.5 transition-opacity",
+            "absolute right-0 z-10 flex items-center gap-0.5 rounded-md bg-card/95 px-0.5 shadow-sm ring-1 ring-border/70 transition-opacity",
             showHoverActions
               ? "pointer-events-none opacity-0 group-hover/session:pointer-events-auto group-hover/session:opacity-100 group-focus-within/session:pointer-events-auto group-focus-within/session:opacity-100"
               : "pointer-events-none opacity-0",

@@ -1631,7 +1631,7 @@ export function AppLayout() {
       <div className="flex h-full flex-col overflow-hidden bg-background">
         <div
           data-tauri-drag-region
-          className="flex h-[46px] shrink-0 select-none items-center"
+          className="flex h-10 shrink-0 select-none items-center border-b bg-card/95"
         >
           {!isFullscreen && (
             <div className="flex items-center gap-1.5 pl-3 pr-2">
@@ -1732,7 +1732,7 @@ export function AppLayout() {
           {sidebarOpen ? (
             <div className="pointer-events-none absolute inset-y-0 left-0 z-20 flex max-w-[calc(100vw-2rem)]">
               <div
-                className="pointer-events-auto h-full shrink-0 overflow-hidden bg-card"
+                className="pointer-events-auto h-full shrink-0 overflow-hidden border-r bg-card"
                 style={{ width: sidebarWidth }}
               >
                 {sidebarContent}
@@ -1757,7 +1757,7 @@ export function AppLayout() {
                 onPointerDown={(event) => startPanelResize("inspector", event)}
               />
               <div
-                className="pointer-events-auto h-full shrink-0 overflow-hidden bg-card"
+                className="pointer-events-auto h-full shrink-0 overflow-hidden border-l bg-card"
                 style={{ width: inspectorWidth }}
               >
                 {inspectorContent}

@@ -125,8 +125,8 @@ export function BranchManagerPanel({
             <div
               key={branch.name}
               className={cn(
-                "group border-t px-3 py-2 text-xs",
-                isCurrent ? "bg-accent/30" : "hover:bg-accent/20",
+                "group border-t px-3 py-2 text-xs transition-colors",
+                isCurrent ? "bg-accent/55" : "hover:bg-muted/45",
               )}
             >
               <div className="flex items-start gap-2">

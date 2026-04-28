@@ -352,10 +352,10 @@ function DraggableTab({
         }
       }}
       className={cn(
-        "group/pane-tab relative flex max-w-[260px] shrink-0 cursor-pointer items-center gap-1.5 pl-1.5 pr-3 py-2 text-left text-xs transition-colors active:cursor-grabbing",
+        "group/pane-tab relative flex max-w-[260px] shrink-0 cursor-pointer items-center gap-1.5 py-1.5 pl-1.5 pr-3 text-left font-sans text-xs transition-colors active:cursor-grabbing",
         isActive
           ? "text-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
         isOver && !isDragging && "bg-accent/70 text-foreground",
         isDragging && "opacity-40",
       )}
@@ -398,7 +398,7 @@ function DraggableTab({
         </span>
       ) : null}
       {isActive && (
-        <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-foreground" />
+        <span className="absolute bottom-0 left-2 right-2 h-px rounded-full bg-foreground" />
       )}
     </button>
   );
@@ -500,7 +500,7 @@ function PaneLeafView({
       onMouseDown={() => onFocusPane(leaf.id)}
     >
       {/* Tab bar */}
-      <div className="relative shrink-0 bg-muted/50">
+      <div className="relative shrink-0 bg-card/80">
         <div className="flex items-center">
           <div className="flex min-w-0 flex-1 items-end gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {leaf.tabIds.map((tabId) => {
@@ -580,7 +580,7 @@ function PaneLeafView({
               <button
                 type="button"
                 onClick={() => onClosePane(leaf.id)}
-                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title="Close pane"
                 aria-label="Close pane"
               >
@@ -589,7 +589,7 @@ function PaneLeafView({
             ) : null}
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-border" />
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-border/80" />
       </div>
 
       <div
@@ -615,7 +615,7 @@ function PaneLeafView({
             <div key={tabId} className={cn(
               "h-full min-h-0",
               isActive ? "block" : "hidden",
-              surface.kind !== "live-session" && "p-1",
+              surface.kind !== "live-session" && "p-1.5",
             )}>
               {surface.kind === "live-session" ? (
                 <XTermContainer

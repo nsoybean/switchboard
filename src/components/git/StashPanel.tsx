@@ -95,7 +95,7 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
                       setShowInput((v) => !v);
                     }
                   }}
-                  className="flex items-center rounded p-0.5 opacity-0 transition-opacity hover:bg-accent/60 group-hover/stash:opacity-100 group-focus-within/stash:opacity-100"
+                  className="flex items-center rounded p-0.5 opacity-0 transition-opacity hover:bg-muted/60 group-hover/stash:opacity-100 group-focus-within/stash:opacity-100"
                 >
                   <Plus className="size-3.5" />
                 </span>
@@ -151,7 +151,7 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
           {stashes.map((entry) => (
             <div
               key={entry.ref_name}
-              className="group flex items-start gap-2 px-3 py-1.5 text-xs hover:bg-accent/40"
+              className="group flex items-start gap-2 border-t px-3 py-1.5 text-xs transition-colors hover:bg-muted/45"
             >
               <div className="min-w-0 flex-1 overflow-hidden">
                 <span className="truncate font-mono text-[10px] text-muted-foreground" title={entry.ref_name}>

@@ -609,9 +609,9 @@ function XTermContainerComponent({
   }, [isVisible, tileId]);
 
   return (
-    <div className="relative h-full w-full min-h-0 min-w-0 overflow-hidden px-3 py-2">
+    <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden px-3 py-2">
       {searchVisible && (
-        <div className="absolute top-1 right-2 z-10 flex items-center gap-1 rounded border border-border bg-background px-2 py-1 shadow-sm">
+        <div className="absolute right-2 top-1 z-10 flex items-center gap-1 rounded-md border border-border bg-background/95 px-2 py-1 shadow-sm">
           <input
             ref={searchInputRef}
             type="text"

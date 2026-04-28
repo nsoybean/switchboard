@@ -258,7 +258,7 @@ function NextStepItem({
         bordered && "border-t",
         selected
           ? "bg-accent/60 text-foreground"
-          : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
         disabled && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground",
       )}
     >

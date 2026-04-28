@@ -103,7 +103,7 @@ function CommitRow({ commit, isExpanded, diff, diffLoading, onToggle }: CommitRo
         onClick={onToggle}
         className={cn(
           "flex min-w-0 cursor-pointer items-start gap-2 border-b px-3 py-2 text-xs transition-colors",
-          isExpanded ? "bg-accent/60" : "hover:bg-accent/40",
+          isExpanded ? "bg-accent/60" : "hover:bg-muted/45",
         )}
       >
         <GitCommitIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />

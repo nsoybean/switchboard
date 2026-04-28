@@ -153,9 +153,9 @@ export function FilePreview({
   }, [content, language, shikiTheme]);
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex h-full flex-col bg-background font-sans">
       {showHeader ? (
-        <div className="flex items-center gap-2 px-4 py-2 border-b bg-card shrink-0">
+        <div className="flex shrink-0 items-center gap-2 border-b bg-card/85 px-3 py-1.5">
           <File className="size-3.5 text-muted-foreground" />
           <span className="text-xs font-medium truncate flex-1 font-mono">
             {fileName}

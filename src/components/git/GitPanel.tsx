@@ -61,7 +61,7 @@ function GitSection({
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground"
+          className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground"
         >
           {open ? (
             <ChevronDown className="size-3.5 shrink-0" />
@@ -189,7 +189,7 @@ export const GitPanel = memo(function GitPanel({
       git.error.includes("needed a single revision"));
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden font-sans">
       <div className="min-h-0 flex-1 overflow-y-auto">
         <GitSection
           icon={<Files className="size-3.5" />}
@@ -261,7 +261,7 @@ export const GitPanel = memo(function GitPanel({
             </>
           }
         >
-          <div className="flex border-t">
+          <div className="flex border-t bg-background/35">
             <button
               type="button"
               onClick={() => {
@@ -271,8 +271,8 @@ export const GitPanel = memo(function GitPanel({
               className={cn(
                 "flex flex-1 items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors",
                 changesTab === "unstaged"
-                  ? "border-b-2 border-primary text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "border-b border-primary text-foreground"
+                  : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
               )}
             >
               Unstaged
@@ -289,8 +289,8 @@ export const GitPanel = memo(function GitPanel({
               className={cn(
                 "flex flex-1 items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors",
                 changesTab === "staged"
-                  ? "border-b-2 border-primary text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "border-b border-primary text-foreground"
+                  : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
               )}
             >
               Staged
@@ -343,10 +343,10 @@ export const GitPanel = memo(function GitPanel({
                       toggleFile(file.path);
                     }}
                     className={cn(
-                      "group/file grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 overflow-hidden border-t px-2 py-1.5 text-xs",
+                      "group/file grid min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5 overflow-hidden border-t px-2 py-1.5 text-xs transition-colors",
                       isExpanded || isSelectedDocument
-                        ? "bg-accent/60"
-                        : "hover:bg-accent/50",
+                        ? "bg-accent/70"
+                        : "hover:bg-muted/55",
                     )}
                   >
                     <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
@@ -369,7 +369,7 @@ export const GitPanel = memo(function GitPanel({
                         {file.status}
                       </Badge>
                       <span
-                        className="min-w-0 flex-1 truncate text-muted-foreground"
+                        className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground"
                         title={file.path}
                       >
                         {file.path}

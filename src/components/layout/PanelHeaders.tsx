@@ -89,7 +89,7 @@ export function LeftPanelHeader({
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[46px] shrink-0 select-none items-center font-sans text-xs"
+      className="flex h-10 shrink-0 select-none items-center border-b bg-card/95 font-sans text-xs"
     >
       <WindowControls
         isFullscreen={isFullscreen}
@@ -104,7 +104,7 @@ export function LeftPanelHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="size-9"
+              className="size-7"
               onClick={onToggleSidebar}
             >
               <PanelLeft className="size-4" />
@@ -173,7 +173,7 @@ export function CenterPanelHeader({
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[46px] shrink-0 select-none items-center gap-1 bg-card px-2 font-sans text-xs"
+      className="flex h-10 shrink-0 select-none items-center gap-1 border-b bg-background px-2 font-sans text-xs"
     >
       {/* Window controls + sidebar toggle appear here when sidebar is hidden */}
       {!sidebarOpen && (
@@ -190,7 +190,7 @@ export function CenterPanelHeader({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-9"
+                className="size-7"
                 onClick={onToggleSidebar}
               >
                 <PanelLeft className="size-4 opacity-40" />
@@ -209,7 +209,7 @@ export function CenterPanelHeader({
               <Button
                 type="button"
                 variant="ghost"
-                className="h-7 max-w-[160px] justify-start rounded-md border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-background hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-background data-[state=open]:text-foreground"
+                className="h-6 max-w-[160px] justify-start rounded-md border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-card hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-card data-[state=open]:text-foreground"
               >
                 <span className="truncate">{projectPathLabel}</span>
               </Button>
@@ -241,7 +241,7 @@ export function CenterPanelHeader({
                 loading={git.branchesLoading && git.branches.length === 0}
                 value={git.branch}
                 disabled={git.branchActionPending}
-                triggerClassName="h-7 w-auto max-w-[190px] gap-1.5 border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-background hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-background data-[state=open]:text-foreground"
+                triggerClassName="h-6 w-auto max-w-[190px] gap-1.5 border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-card hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-card data-[state=open]:text-foreground"
                 createLabel="Create branch..."
                 onSelect={(branchName) => void git.switchBranch(branchName)}
                 onCreateBranch={onCreateBranch}
@@ -259,7 +259,7 @@ export function CenterPanelHeader({
 
       {projectPathLabel && (
         <>
-          <div className="inline-flex items-center rounded-md border bg-background/80 p-0.5">
+          <div className="inline-flex items-center rounded-md border bg-card/70 p-0.5">
             <Button
               variant={workspaceShellMode === "pane" ? "secondary" : "ghost"}
               size="sm"
@@ -288,7 +288,7 @@ export function CenterPanelHeader({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 gap-1.5 px-3 text-xs"
+            className="h-6 gap-1.5 px-2.5 text-xs"
             onClick={onInstallUpdate}
             disabled={checkingForUpdates || installingUpdate}
           >
@@ -311,7 +311,7 @@ export function CenterPanelHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="size-9"
+              className="size-7"
               onClick={onToggleInspector}
             >
               <PanelRight className="size-4 opacity-40" />
@@ -400,7 +400,7 @@ export function RightPanelHeader({
     <>
       <div
         data-tauri-drag-region
-        className="flex h-[46px] shrink-0 select-none items-center gap-2 px-2 font-sans text-xs"
+        className="flex h-10 shrink-0 select-none items-center gap-2 border-b bg-card/95 px-2 font-sans text-xs"
       >
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           {git?.branch && (
@@ -411,7 +411,7 @@ export function RightPanelHeader({
               currentBranch={git.branch}
               onCreateWorktree={onCreateWorktree}
               onSelectPath={onSelectWorktree}
-              triggerClassName="h-7 max-w-[150px] px-2 text-xs"
+              triggerClassName="h-6 max-w-[150px] px-2 text-xs"
               compact
             />
             <BranchPicker
@@ -419,7 +419,7 @@ export function RightPanelHeader({
               loading={git.branchesLoading && git.branches.length === 0}
               value={git.branch}
               disabled={git.branchActionPending}
-              triggerClassName="h-7 w-auto max-w-[150px] gap-1.5 border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-background hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-background data-[state=open]:text-foreground"
+              triggerClassName="h-6 w-auto max-w-[150px] gap-1.5 border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-card hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-card data-[state=open]:text-foreground"
               createLabel="Create branch..."
               onSelect={(branchName) => void git.switchBranch(branchName)}
               onCreateBranch={onCreateBranch}
@@ -436,7 +436,7 @@ export function RightPanelHeader({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 gap-1.5 rounded-r-none border-r-0 px-2.5 text-xs font-medium"
+                    className="h-6 gap-1.5 rounded-r-none border-r-0 px-2.5 text-xs font-medium"
                     disabled={!hasChanges || !!anyGitPending}
                     onClick={() => setCommitDialogOpen(true)}
                   >
@@ -464,7 +464,7 @@ export function RightPanelHeader({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 rounded-l-none px-1.5 text-xs"
+                    className="h-6 rounded-l-none px-1.5 text-xs"
                     disabled={!!anyGitPending}
                   >
                     <ChevronDown className="size-3" />
@@ -557,7 +557,7 @@ export function RightPanelHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="size-9 shrink-0"
+              className="size-7 shrink-0"
               onClick={onToggleInspector}
             >
               <PanelRight className="size-4" />

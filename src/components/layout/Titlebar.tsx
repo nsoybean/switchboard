@@ -159,7 +159,7 @@ export function Titlebar({
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[52px] shrink-0 select-none items-center border-b bg-background font-sans text-xs"
+      className="flex h-10 shrink-0 select-none items-center border-b bg-background font-sans text-xs"
     >
       {/* Left section — width matches sidebar so branch selector aligns with middle pane */}
       <div
@@ -216,7 +216,7 @@ export function Titlebar({
             loading={git.branchesLoading && git.branches.length === 0}
             value={git.branch}
             disabled={git.branchActionPending}
-            triggerClassName="h-7 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium shadow-none hover:bg-accent/50"
+            triggerClassName="h-6 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium shadow-none hover:bg-muted/55"
             createLabel="Create branch..."
             onSelect={(branchName) => void git.switchBranch(branchName)}
             onCreateBranch={onCreateBranch}
