@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   CalendarDays,
+  ChevronRight,
   FileText,
   GitCommit as GitCommitIcon,
   Mail,
@@ -33,7 +34,7 @@ const HEADER_HEIGHT = 28;
 const LANE_WIDTH = 15;
 const GRAPH_PADDING = 15;
 const GRAPH_STROKE_WIDTH = 2.2;
-const DESCRIPTION_WIDTH = 720;
+const DESCRIPTION_WIDTH = 600;
 const DATE_WIDTH = 148;
 const AUTHOR_WIDTH = 128;
 const COMMIT_WIDTH = 88;
@@ -66,6 +67,16 @@ interface VirtualRows {
   rows: GraphRow[];
   topPadding: number;
   totalHeight: number;
+}
+
+interface CommitDiffFile {
+  key: string;
+  path: string;
+  name: string;
+  directory: string;
+  additions: number;
+  deletions: number;
+  diff: string;
 }
 
 export function buildGraphRows(commits: GitGraphCommit[]): GraphRow[] {
@@ -226,6 +237,54 @@ function getVirtualRows(rows: GraphRow[], scrollTop: number, viewportHeight: num
   };
 }
 
+function parseCommitDiff(diff: string): CommitDiffFile[] {
+  const lines = diff.split("\n");
+  const sections: string[][] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("diff --git ")) {
+      if (current.length > 0) sections.push(current);
+      current = [line];
+      continue;
+    }
+
+    if (current.length > 0) current.push(line);
+  }
+
+  if (current.length > 0) sections.push(current);
+
+  return sections.map((section, index) => {
+    const path = getDiffPath(section[0]) ?? `File ${index + 1}`;
+    const slashIndex = path.lastIndexOf("/");
+    const name = slashIndex >= 0 ? path.slice(slashIndex + 1) : path;
+    const directory = slashIndex >= 0 ? `${path.slice(0, slashIndex)}/` : "";
+    let additions = 0;
+    let deletions = 0;
+
+    for (const line of section) {
+      if (line.startsWith("+") && !line.startsWith("+++")) additions += 1;
+      if (line.startsWith("-") && !line.startsWith("---")) deletions += 1;
+    }
+
+    return {
+      key: path,
+      path,
+      name,
+      directory,
+      additions,
+      deletions,
+      diff: section.join("\n"),
+    };
+  });
+}
+
+function getDiffPath(header: string) {
+  const match = /^diff --git a\/(.+) b\/(.+)$/.exec(header);
+  if (!match) return null;
+  return match[2] || match[1] || null;
+}
+
 export const GitGraphDocument = memo(function GitGraphDocument({
   cwd,
 }: GitGraphDocumentProps) {
@@ -311,6 +370,12 @@ export const GitGraphDocument = memo(function GitGraphDocument({
   const graphWidth = GRAPH_PADDING * 2 + maxLaneCount * LANE_WIDTH;
   const gridTemplateColumns = getGridTemplate(graphWidth);
   const tableWidth = graphWidth + DESCRIPTION_WIDTH + DATE_WIDTH + AUTHOR_WIDTH + COMMIT_WIDTH;
+  const columnDividerOffsets = [
+    graphWidth,
+    graphWidth + DESCRIPTION_WIDTH,
+    graphWidth + DESCRIPTION_WIDTH + DATE_WIDTH,
+    graphWidth + DESCRIPTION_WIDTH + DATE_WIDTH + AUTHOR_WIDTH,
+  ];
   const virtualRows = useMemo(
     () => getVirtualRows(filteredRows, scrollTop, Math.max(0, listSize.height - HEADER_HEIGHT)),
     [filteredRows, listSize.height, scrollTop],
@@ -387,15 +452,24 @@ export const GitGraphDocument = memo(function GitGraphDocument({
             ) : filteredRows.length === 0 ? (
               <div className="p-4 text-muted-foreground">No matching commits.</div>
             ) : (
-              <div style={{ minWidth: tableWidth }}>
+              <div className="relative" style={{ minWidth: tableWidth }}>
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-20">
+                  {columnDividerOffsets.map((offset) => (
+                    <div
+                      key={offset}
+                      className="absolute top-0 bottom-0 w-px bg-border"
+                      style={{ left: offset }}
+                    />
+                  ))}
+                </div>
                 <div
                   className="sticky top-0 z-10 grid h-7 items-center border-b bg-muted/55 px-0 text-[11px] font-medium text-muted-foreground/90 shadow-[0_1px_0_var(--border)] backdrop-blur"
                   style={{ gridTemplateColumns } as CSSProperties}
                 >
-                  <div className="border-r px-3">Graph</div>
-                  <div className="border-r px-2">Description</div>
-                  <div className="border-r px-2">Date</div>
-                  <div className="border-r px-2">Author</div>
+                  <div className="px-3">Graph</div>
+                  <div className="px-2">Description</div>
+                  <div className="px-2">Date</div>
+                  <div className="px-2">Author</div>
                   <div className="px-2">Commit</div>
                 </div>
                 <div className="relative" style={{ height: virtualRows.totalHeight }}>
@@ -469,7 +543,7 @@ function CommitGraphRow({
       } as CSSProperties}
     >
       <GraphCell row={row} width={graphWidth} />
-      <div className="flex min-w-0 items-center gap-2 overflow-hidden border-l border-r px-2 whitespace-nowrap">
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden px-2 whitespace-nowrap">
         <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-hidden">
           {commit.refs.slice(0, 3).map((reference, index) => (
             <Badge
@@ -493,8 +567,8 @@ function CommitGraphRow({
         </div>
         <span className="min-w-0 flex-1 truncate text-[13px]">{commit.subject}</span>
       </div>
-      <div className="truncate border-r px-2 font-mono text-[11px] whitespace-nowrap">{commit.date}</div>
-      <div className="truncate border-r px-2 whitespace-nowrap">{commit.author}</div>
+      <div className="truncate px-2 font-mono text-[11px] whitespace-nowrap">{commit.date}</div>
+      <div className="truncate px-2 whitespace-nowrap">{commit.author}</div>
       <div className="truncate px-2 font-mono text-muted-foreground whitespace-nowrap">{commit.short_hash}</div>
     </button>
   );
@@ -583,6 +657,32 @@ function CommitDetail({
   deletions: number;
   onClose: () => void;
 }) {
+  const [expandedFileKeys, setExpandedFileKeys] = useState<Set<string>>(() => new Set());
+  const diffFiles = useMemo(() => parseCommitDiff(diff), [diff]);
+  const diffFilesByPath = useMemo(() => {
+    const next = new Map<string, CommitDiffFile>();
+    for (const file of diffFiles) {
+      next.set(file.path, file);
+    }
+    return next;
+  }, [diffFiles]);
+
+  useEffect(() => {
+    setExpandedFileKeys(new Set());
+  }, [commit.hash]);
+
+  const toggleFile = (key: string) => {
+    setExpandedFileKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
   const initials = commit.author
     .split(/\s+/)
     .filter(Boolean)
@@ -638,7 +738,7 @@ function CommitDetail({
         ) : null}
       </div>
 
-      <div className="border-b p-4">
+      <div className="min-h-0 flex-1 p-4">
         <div className="mb-3 flex items-center gap-2">
           <span className="font-medium text-foreground">
             {files.length} {files.length === 1 ? "Changed File" : "Changed Files"}
@@ -654,33 +754,79 @@ function CommitDetail({
             <Spinner className="size-3.5" />
             Loading files
           </div>
-        ) : files.length === 0 ? (
+        ) : files.length === 0 && diffFiles.length === 0 ? (
           <div className="text-muted-foreground">No changed files.</div>
         ) : (
           <div className="space-y-1.5">
-            {files.slice(0, 12).map((file) => (
-              <div key={`${file.status}:${file.path}`} className="flex min-w-0 items-center gap-2 rounded-md border bg-background px-2 py-1.5">
-                <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px]" title={file.path}>
-                  {file.path}
-                </span>
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{file.status}</span>
-              </div>
-            ))}
-            {files.length > 12 ? (
-              <div className="px-1 text-[11px] text-muted-foreground">+{files.length - 12} more files</div>
-            ) : null}
-          </div>
-        )}
-      </div>
+            {(files.length > 0
+              ? files
+              : diffFiles.map((file) => ({
+                  path: file.path,
+                  status: "M",
+                  additions: file.additions,
+                  deletions: file.deletions,
+                }))
+            ).map((file) => {
+              const fileDiff = diffFilesByPath.get(file.path);
+              const key = fileDiff?.key ?? `${file.status}:${file.path}`;
+              const isExpanded = expandedFileKeys.has(key);
+              const slashIndex = file.path.lastIndexOf("/");
+              const name = slashIndex >= 0 ? file.path.slice(slashIndex + 1) : file.path;
+              const directory = slashIndex >= 0 ? `${file.path.slice(0, slashIndex)}/` : "";
+              const fileAdditions = file.additions ?? fileDiff?.additions ?? 0;
+              const fileDeletions = file.deletions ?? fileDiff?.deletions ?? 0;
 
-      <div className="min-h-0 flex-1">
-        {loading && !diff ? (
-          <div className="p-4 text-muted-foreground">Loading diff...</div>
-        ) : diff ? (
-          <DiffView diff={diff} />
-        ) : (
-          <div className="p-4 text-muted-foreground">No diff available.</div>
+              return (
+                <div key={`${file.status}:${file.path}`} className="overflow-hidden rounded-md border bg-background">
+                  <button
+                    type="button"
+                    className={cn(
+                      "grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 px-2 py-1.5 text-left transition-colors",
+                      isExpanded ? "bg-accent/55" : "hover:bg-muted/35",
+                    )}
+                    onClick={() => toggleFile(key)}
+                    aria-expanded={isExpanded}
+                  >
+                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="flex min-w-0 items-baseline gap-1.5 font-mono text-[11px]" title={file.path}>
+                      <span className="min-w-0 truncate text-foreground">{name}</span>
+                      {directory ? (
+                        <span className="min-w-0 truncate text-muted-foreground">{directory}</span>
+                      ) : null}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] tabular-nums">
+                      {fileAdditions > 0 ? (
+                        <span className="text-[var(--sb-diff-add-fg)]">+{fileAdditions}</span>
+                      ) : null}
+                      {fileDeletions > 0 ? (
+                        <span className="text-[var(--sb-diff-del-fg)]">-{fileDeletions}</span>
+                      ) : null}
+                      <span className="text-muted-foreground">{file.status}</span>
+                    </span>
+                    <ChevronRight
+                      className={cn(
+                        "size-3 shrink-0 text-muted-foreground transition-transform",
+                        isExpanded && "rotate-90",
+                      )}
+                    />
+                  </button>
+                  {isExpanded ? (
+                    <div className="border-t bg-background/35">
+                      {loading && !fileDiff ? (
+                        <div className="flex items-center justify-center p-4">
+                          <Spinner className="size-3.5" />
+                        </div>
+                      ) : fileDiff ? (
+                        <DiffView diff={fileDiff.diff} />
+                      ) : (
+                        <div className="p-3 text-[11px] text-muted-foreground">No diff available.</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
