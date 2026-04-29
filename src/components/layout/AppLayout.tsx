@@ -182,6 +182,7 @@ export function AppLayout() {
     tabId: string;
     nonce: number;
   } | null>(null);
+  const [closeActivePaneRequestNonce, setCloseActivePaneRequestNonce] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [fileFinderOpen, setFileFinderOpen] = useState(false);
   const [quitDialogOpen, setQuitDialogOpen] = useState(false);
@@ -1349,7 +1350,12 @@ export function AppLayout() {
       },
       onNewSession: () => openNewSessionDialog(),
       onCloseSession: () => {
-        // Close file tab first if one is open
+        if (workspaceShellMode === "pane" && state.projectPath) {
+          setCloseActivePaneRequestNonce((nonce) => nonce + 1);
+          return;
+        }
+
+        // Canvas mode keeps using the app-level overlay/session close behavior.
         if (openFilePath) {
           setOpenFilePath(null);
           return;
@@ -1412,7 +1418,9 @@ export function AppLayout() {
       openNewSessionDialog,
       sortedSessionIds,
       state.activeSessionId,
+      state.projectPath,
       viewingSession,
+      workspaceShellMode,
     ],
   );
   useKeyboardShortcuts(shortcutHandlers);
@@ -1920,6 +1928,7 @@ export function AppLayout() {
               gitGraphPath={gitGraphPath}
               stashDiffs={stashDiffTabs}
               revealRequest={paneRevealRequest}
+              closeActiveRequestNonce={closeActivePaneRequestNonce}
               projectPath={state.projectPath}
               projectPaths={state.projects}
               onInlineNewSession={handleNewSession}
@@ -1938,6 +1947,7 @@ export function AppLayout() {
               onCloseStashDiff={(id) =>
                 setStashDiffTabs((current) => current.filter((tab) => tab.id !== id))
               }
+              onRenameSession={handleRenameSession}
               onResumeTranscript={
                 resolvedViewingSession
                   ? () => {
