@@ -45,6 +45,7 @@ interface ShortcutHandlers {
   onOpenHistory?: () => void;
   /** Called on Escape. Return true if handled (suppresses default onFocusTerminal). */
   onEscape?: () => boolean;
+  onFileFinder?: () => void;
   onCommandPalette?: () => void;
 }
 
@@ -61,6 +62,8 @@ interface ShortcutHandlers {
  * - Ctrl+G: Toggle workspace inspector
  * - Ctrl+E: Open inspector on Files tab
  * - Ctrl+Shift+H: Open history
+ * - Ctrl+P: Open file finder
+ * - Ctrl+Shift+P: Open command palette
  * - Escape: Focus terminal
  * - Ctrl+=: Zoom in
  * - Ctrl+-: Zoom out
@@ -136,10 +139,14 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         return;
       }
 
-      // Cmd+P / Cmd+Shift+P — command palette
+      // Cmd+P — file finder; Cmd+Shift+P — command palette
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
-        handlers.onCommandPalette?.();
+        if (e.shiftKey) {
+          handlers.onCommandPalette?.();
+        } else {
+          handlers.onFileFinder?.();
+        }
         return;
       }
 

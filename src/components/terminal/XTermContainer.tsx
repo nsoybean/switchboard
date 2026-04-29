@@ -7,6 +7,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { fileCommands } from "@/lib/tauri-commands";
+import { getDroppedFilePath } from "@/lib/file-dnd";
 import { useTheme } from "@/components/theme-provider";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/terminal.css";
@@ -123,6 +124,10 @@ function canMeasureHost(host: HTMLDivElement) {
   return rect.width >= 2 && rect.height >= 2;
 }
 
+function shellEscapePath(path: string) {
+  return `'${path.replace(/'/g, "'\\''")}'`;
+}
+
 // ---------------------------------------------------------------------------
 // Props & memo helpers
 // ---------------------------------------------------------------------------
@@ -180,6 +185,7 @@ function XTermContainerComponent({
 
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [pathDragActive, setPathDragActive] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isDark =
@@ -411,6 +417,51 @@ function XTermContainerComponent({
     };
     host.addEventListener("paste", handlePaste);
 
+    let dragDepth = 0;
+    const canAcceptPathDrop = (event: DragEvent) => Boolean(getDroppedFilePath(event.dataTransfer));
+    const handleDragEnter = (event: DragEvent) => {
+      if (!canAcceptPathDrop(event)) return;
+      dragDepth += 1;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      setPathDragActive(true);
+    };
+    const handleDragOver = (event: DragEvent) => {
+      if (!canAcceptPathDrop(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      setPathDragActive(true);
+    };
+    const handleDragLeave = (event: DragEvent) => {
+      if (!canAcceptPathDrop(event)) return;
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) {
+        setPathDragActive(false);
+      }
+    };
+    const handleDrop = (event: DragEvent) => {
+      const filePath = getDroppedFilePath(event.dataTransfer);
+      if (!filePath) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      dragDepth = 0;
+      setPathDragActive(false);
+
+      const insertedPath = isShellCommand ? shellEscapePath(filePath) : `@${filePath}`;
+      if (sessionActiveRef.current) {
+        void invoke("write_terminal", { tileId, data: insertedPath });
+      }
+      terminal.focus();
+    };
+
+    host.addEventListener("dragenter", handleDragEnter);
+    host.addEventListener("dragover", handleDragOver);
+    host.addEventListener("dragleave", handleDragLeave);
+    host.addEventListener("drop", handleDrop);
+
     // --- 6. Output buffering ---
     //
     // Coalesce rapid PTY writes into a single xterm.write() call.
@@ -559,6 +610,10 @@ function XTermContainerComponent({
       window.clearTimeout(flushTimer);
       observer.disconnect();
       host.removeEventListener("paste", handlePaste);
+      host.removeEventListener("dragenter", handleDragEnter);
+      host.removeEventListener("dragover", handleDragOver);
+      host.removeEventListener("dragleave", handleDragLeave);
+      host.removeEventListener("drop", handleDrop);
       fitAddonRef.current = null;
       searchAddonRef.current = null;
       terminalRef.current = null;
@@ -569,7 +624,7 @@ function XTermContainerComponent({
         void invoke("close_terminal", { tileId }).catch(() => {});
       }
     };
-  }, [args, closeOnUnmount, command, cwd, env, openSearch, tileId]);
+  }, [args, closeOnUnmount, command, cwd, env, isShellCommand, openSearch, tileId]);
 
   // -----------------------------------------------------------------------
   // Theme sync (visual only — no listener re-registration)
@@ -658,6 +713,11 @@ function XTermContainerComponent({
           </button>
         </div>
       )}
+      {pathDragActive ? (
+        <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-md border border-primary/40 bg-background/70 text-xs font-medium text-foreground shadow-inner supports-backdrop-filter:backdrop-blur-sm">
+          Drop to insert path
+        </div>
+      ) : null}
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );

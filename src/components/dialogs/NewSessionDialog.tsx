@@ -26,6 +26,7 @@ interface NewSessionDialogProps {
   projectPaths: string[];
   initialLabel?: string;
   initialUseWorktree?: boolean;
+  initialBaseBranch?: string;
   onClose: () => void;
   onSubmit: (config: {
     projectPath: string;
@@ -50,6 +51,7 @@ export function NewSessionDialog({
   projectPaths,
   initialLabel,
   initialUseWorktree,
+  initialBaseBranch,
   onClose,
   onSubmit,
 }: NewSessionDialogProps) {
@@ -70,6 +72,7 @@ export function NewSessionDialog({
 
     setLabel(initialLabel ?? "");
     setUseWorktree(initialUseWorktree ?? false);
+    setBaseBranch(initialBaseBranch ?? "");
 
     setSelectedProjectPath((current) => {
       if (current && projectPaths.includes(current)) {
@@ -80,7 +83,7 @@ export function NewSessionDialog({
       }
       return projectPaths[0] ?? null;
     });
-  }, [initialLabel, initialUseWorktree, open, projectPath, projectPaths]);
+  }, [initialBaseBranch, initialLabel, initialUseWorktree, open, projectPath, projectPaths]);
 
   useEffect(() => {
     if (!open || !selectedProjectPath) {

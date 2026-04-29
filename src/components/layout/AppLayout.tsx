@@ -50,6 +50,7 @@ import {
   type CanvasViewHandle,
 } from "../canvas/CanvasView";
 import { CommandPalette } from "../palette/CommandPalette";
+import { FileFinder } from "../palette/FileFinder";
 import { QuitConfirmDialog } from "./QuitConfirmDialog";
 
 const MIN_SIDEBAR_WIDTH = 200;
@@ -163,9 +164,11 @@ export function AppLayout() {
   const [dialogProjectPath, setDialogProjectPath] = useState<string | null>(null);
   const [dialogInitialLabel, setDialogInitialLabel] = useState<string | undefined>();
   const [dialogInitialUseWorktree, setDialogInitialUseWorktree] = useState<boolean | undefined>();
+  const [dialogInitialBaseBranch, setDialogInitialBaseBranch] = useState<string | undefined>();
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
+  const [gitGraphPath, setGitGraphPath] = useState<string | null>(null);
   const [createBranchOpen, setCreateBranchOpen] = useState(false);
   const [createPrOpen, setCreatePrOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -179,7 +182,9 @@ export function AppLayout() {
     tabId: string;
     nonce: number;
   } | null>(null);
+  const [closeActivePaneRequestNonce, setCloseActivePaneRequestNonce] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [fileFinderOpen, setFileFinderOpen] = useState(false);
   const [quitDialogOpen, setQuitDialogOpen] = useState(false);
   const pendingQuitRef = useRef<(() => void) | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("files");
@@ -317,6 +322,19 @@ export function AppLayout() {
     sessionsRef.current = state.sessions;
   }, [state.sessions]);
 
+  useEffect(() => {
+    if (!state.projectPath) {
+      setGitGraphPath(null);
+      return;
+    }
+
+    setGitGraphPath((current) =>
+      current && (current === state.projectPath || current.startsWith(`${state.projectPath}/`))
+        ? current
+        : null,
+    );
+  }, [state.projectPath]);
+
   useEffect(
     () => () => {
       resizeCleanupRef.current?.();
@@ -341,9 +359,12 @@ export function AppLayout() {
   const handleWindowClose = useCallback(() => void appWindow.close(), [appWindow]);
   const handleWindowMinimize = useCallback(() => void appWindow.minimize(), [appWindow]);
   const handleWindowMaximize = useCallback(async () => {
-    const fs = await appWindow.isFullscreen();
-    await appWindow.setFullscreen(!fs);
-    setIsFullscreen(!fs);
+    const maximized = await appWindow.isMaximized();
+    if (maximized) {
+      await appWindow.unmaximize();
+    } else {
+      await appWindow.maximize();
+    }
   }, [appWindow]);
 
   // Intercept window close to show quit confirmation if sessions are live
@@ -795,11 +816,12 @@ export function AppLayout() {
 
   const openNewSessionDialog = useCallback((
     projectPath?: string,
-    defaults?: { label?: string; useWorktree?: boolean },
+    defaults?: { label?: string; useWorktree?: boolean; baseBranch?: string },
   ) => {
     setDialogProjectPath(projectPath ?? state.projectPath ?? state.projects[0] ?? null);
     setDialogInitialLabel(defaults?.label);
     setDialogInitialUseWorktree(defaults?.useWorktree);
+    setDialogInitialBaseBranch(defaults?.baseBranch);
     setDialogOpen(true);
   }, [state.projectPath, state.projects]);
 
@@ -906,6 +928,14 @@ export function AppLayout() {
     },
     [handleRevealLiveSession, handleViewSession],
   );
+
+  const handleOpenFilePreview = useCallback((filePath: string) => {
+    setOpenFilePath(filePath);
+    setWorkspaceShellMode("pane");
+    window.requestAnimationFrame(() => {
+      requestPaneReveal(`file:${filePath}`);
+    });
+  }, [requestPaneReveal]);
 
   const handleRemoveProject = useCallback(
     async (path: string) => {
@@ -1320,7 +1350,12 @@ export function AppLayout() {
       },
       onNewSession: () => openNewSessionDialog(),
       onCloseSession: () => {
-        // Close file tab first if one is open
+        if (workspaceShellMode === "pane" && state.projectPath) {
+          setCloseActivePaneRequestNonce((nonce) => nonce + 1);
+          return;
+        }
+
+        // Canvas mode keeps using the app-level overlay/session close behavior.
         if (openFilePath) {
           setOpenFilePath(null);
           return;
@@ -1351,12 +1386,17 @@ export function AppLayout() {
         setWorkspaceTab("changes");
       },
       onOpenHistory: () => setHistoryOpen(true),
+      onFileFinder: () => setFileFinderOpen(true),
       onCommandPalette: () => setCommandPaletteOpen(true),
       onFocusTerminal: () => {
         const termEl = document.querySelector(".xterm-helper-textarea");
         if (termEl instanceof HTMLElement) termEl.focus();
       },
       onEscape: () => {
+        if (fileFinderOpen) {
+          setFileFinderOpen(false);
+          return true;
+        }
         if (commandPaletteOpen) {
           setCommandPaletteOpen(false);
           return true;
@@ -1371,11 +1411,16 @@ export function AppLayout() {
     [
       activeSession,
       commandPaletteOpen,
+      fileFinderOpen,
       dispatch,
       handleStopSession,
+      openFilePath,
+      openNewSessionDialog,
       sortedSessionIds,
       state.activeSessionId,
+      state.projectPath,
       viewingSession,
+      workspaceShellMode,
     ],
   );
   useKeyboardShortcuts(shortcutHandlers);
@@ -1437,6 +1482,15 @@ export function AppLayout() {
       });
     }
   }, [git, hasWorkspaceRoot, requestPaneReveal, workspaceContext?.rootPath]);
+
+  const handleOpenGitGraph = useCallback(() => {
+    if (!hasWorkspaceRoot || !workspaceContext?.rootPath) return;
+
+    const tabId = `git-graph:${workspaceContext.rootPath}`;
+    setGitGraphPath(workspaceContext.rootPath);
+    setWorkspaceShellMode("pane");
+    requestPaneReveal(tabId);
+  }, [hasWorkspaceRoot, requestPaneReveal, workspaceContext?.rootPath]);
 
   const handleSelectWorktree = useCallback((path: string) => {
     const matchingSession = liveSessions.find((session) =>
@@ -1507,11 +1561,13 @@ export function AppLayout() {
       onCreateWorktree={(label?: string) => openNewSessionDialog(undefined, {
         label,
         useWorktree: true,
+        baseBranch: label,
       })}
       onSelectWorktree={handleSelectWorktree}
       onCreatePr={() => setCreatePrOpen(true)}
-      onFileSelect={setOpenFilePath}
+      onFileSelect={handleOpenFilePreview}
       onOpenStashDiff={handleOpenStashDiff}
+      onOpenGitGraph={handleOpenGitGraph}
       onTabChange={setWorkspaceTab}
     />
   ) : null;
@@ -1582,6 +1638,7 @@ export function AppLayout() {
     onCreateWorktree: (label?: string) => openNewSessionDialog(undefined, {
       label,
       useWorktree: true,
+      baseBranch: label,
     }),
     onSelectWorktree: handleSelectWorktree,
     onOpenStashDiff: handleOpenStashDiff,
@@ -1603,11 +1660,13 @@ export function AppLayout() {
         projectPaths={state.projects}
         initialLabel={dialogInitialLabel}
         initialUseWorktree={dialogInitialUseWorktree}
+        initialBaseBranch={dialogInitialBaseBranch}
         onClose={() => {
           setDialogOpen(false);
           setDialogProjectPath(null);
           setDialogInitialLabel(undefined);
           setDialogInitialUseWorktree(undefined);
+          setDialogInitialBaseBranch(undefined);
         }}
         onSubmit={handleNewSession}
       />
@@ -1657,6 +1716,13 @@ export function AppLayout() {
         onNewSessionInProject={(projectPath) => {
           openNewSessionDialog(projectPath);
         }}
+      />
+
+      <FileFinder
+        open={fileFinderOpen}
+        root={hasWorkspaceRoot ? workspaceContext!.rootPath! : state.projectPath}
+        onClose={() => setFileFinderOpen(false)}
+        onOpenFile={handleOpenFilePreview}
       />
 
       <ProjectPickerDialog
@@ -1859,8 +1925,10 @@ export function AppLayout() {
               liveSessions={liveSessions}
               transcriptSession={resolvedViewingSession}
               openFilePath={openFilePath}
+              gitGraphPath={gitGraphPath}
               stashDiffs={stashDiffTabs}
               revealRequest={paneRevealRequest}
+              closeActiveRequestNonce={closeActivePaneRequestNonce}
               projectPath={state.projectPath}
               projectPaths={state.projects}
               onInlineNewSession={handleNewSession}
@@ -1873,9 +1941,13 @@ export function AppLayout() {
               onCloseFile={(filePath) =>
                 setOpenFilePath((current) => (current === filePath ? null : current))
               }
+              onCloseGitGraph={(cwd) =>
+                setGitGraphPath((current) => (current === cwd ? null : current))
+              }
               onCloseStashDiff={(id) =>
                 setStashDiffTabs((current) => current.filter((tab) => tab.id !== id))
               }
+              onRenameSession={handleRenameSession}
               onResumeTranscript={
                 resolvedViewingSession
                   ? () => {

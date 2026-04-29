@@ -17,6 +17,7 @@ export interface GitState {
   currentBranchUpstreamStatus: "none" | "tracking" | "gone";
   branchesLoading: boolean;
   branchActionPending: boolean;
+  pendingAction: string | null;
   files: ChangedFile[];
   stats: DiffStats;
   loading: boolean;
@@ -103,6 +104,7 @@ export function useGitState({
   const [error, setError] = useState<string | null>(null);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [branchActionPending, setBranchActionPending] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [aheadBehind, setAheadBehind] = useState<GitAheadBehind>(emptyAheadBehind);
   const [log, setLog] = useState<GitCommit[]>([]);
   const [logLoading, setLogLoading] = useState(false);
@@ -122,6 +124,8 @@ export function useGitState({
     setError(null);
     setBranchesLoading(true);
     setLoading(true);
+    setPendingAction(null);
+    setBranchActionPending(false);
     setAheadBehind(emptyAheadBehind);
     setLog([]);
     setStashes([]);
@@ -205,8 +209,9 @@ export function useGitState({
   }, [visible, refresh]);
 
   const switchBranch = useCallback(async (branchName: string) => {
-    if (branchName === branch || branchActionPending) return;
+    if (branchName === branch || branchActionPending || pendingAction) return;
 
+    setPendingAction(`checkout:${branchName}`);
     setBranchActionPending(true);
     try {
       await toast.promise(
@@ -225,12 +230,14 @@ export function useGitState({
       );
     } finally {
       setBranchActionPending(false);
+      setPendingAction(null);
     }
-  }, [branch, branchActionPending, cwd, refresh, sessionId, onSessionBranchChange]);
+  }, [branch, branchActionPending, cwd, pendingAction, refresh, sessionId, onSessionBranchChange]);
 
   const createBranch = useCallback(async (branchName: string) => {
-    if (branchActionPending) return;
+    if (branchActionPending || pendingAction) return;
 
+    setPendingAction(`checkout:${branchName}`);
     setBranchActionPending(true);
     try {
       await toast.promise(
@@ -260,194 +267,280 @@ export function useGitState({
       );
     } finally {
       setBranchActionPending(false);
+      setPendingAction(null);
     }
-  }, [branchActionPending, branches, cwd, sessionId, onSessionBranchChange]);
+  }, [branchActionPending, branches, cwd, pendingAction, sessionId, onSessionBranchChange]);
 
   const stageFiles = useCallback(async (paths: string[]) => {
-    await gitCommands.stage(cwd, paths);
-    void refresh();
+    setPendingAction(paths.length === 1 ? `stage:${paths[0]}` : "stage-files");
+    try {
+      await gitCommands.stage(cwd, paths);
+      void refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   const unstageFiles = useCallback(async (paths: string[]) => {
-    await gitCommands.unstage(cwd, paths);
-    void refresh();
+    setPendingAction(paths.length === 1 ? `unstage:${paths[0]}` : "unstage-files");
+    try {
+      await gitCommands.unstage(cwd, paths);
+      void refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   const revertFiles = useCallback(async (paths: string[]) => {
-    await gitCommands.revert(cwd, paths);
-    void refresh();
+    setPendingAction(paths.length === 1 ? `discard:${paths[0]}` : "discard-files");
+    try {
+      await gitCommands.revert(cwd, paths);
+      void refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   const stageAll = useCallback(async () => {
     const unstaged = files.filter((f) => !f.staged).map((f) => f.path);
     if (unstaged.length === 0) return;
-    await gitCommands.stage(cwd, unstaged);
-    void refresh();
+    setPendingAction("stage-all");
+    try {
+      await gitCommands.stage(cwd, unstaged);
+      void refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, files, refresh]);
 
   const unstageAll = useCallback(async () => {
     const staged = files.filter((f) => f.staged).map((f) => f.path);
     if (staged.length === 0) return;
-    await gitCommands.unstage(cwd, staged);
-    void refresh();
+    setPendingAction("unstage-all");
+    try {
+      await gitCommands.unstage(cwd, staged);
+      void refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, files, refresh]);
 
   const revertAll = useCallback(async () => {
     const unstaged = files.filter((f) => !f.staged).map((f) => f.path);
     if (unstaged.length === 0) return;
-    await gitCommands.revert(cwd, unstaged);
-    void refresh();
+    setPendingAction("discard-all");
+    try {
+      await gitCommands.revert(cwd, unstaged);
+      void refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, files, refresh]);
 
   const commit = useCallback(async (message: string) => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.commit(cwd, message);
-        await refresh();
-      })(),
-      {
-        loading: "Committing changes...",
-        success: "Commit created",
-        error: (err) => `Failed to commit: ${String(err)}`,
-      },
-    );
+    setPendingAction("commit");
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.commit(cwd, message);
+          await refresh();
+        })(),
+        {
+          loading: "Committing changes...",
+          success: "Commit created",
+          error: (err) => `Failed to commit: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   const pull = useCallback(async () => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.pull(cwd);
-        await refresh();
-      })(),
-      {
-        loading: `Pulling ${branch || "current branch"}...`,
-        success: `Pulled ${branch || "current branch"}`,
-        error: (err) => `Failed to pull: ${String(err)}`,
-      },
-    );
+    setPendingAction("pull");
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.pull(cwd);
+          await refresh();
+        })(),
+        {
+          loading: `Pulling ${branch || "current branch"}...`,
+          success: `Pulled ${branch || "current branch"}`,
+          error: (err) => `Failed to pull: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, branch, refresh]);
 
   const push = useCallback(async () => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.push(cwd);
-        await refresh();
-      })(),
-      {
-        loading: `Pushing ${branch || "current branch"}...`,
-        success: `Pushed ${branch || "current branch"}`,
-        error: (err) => `Failed to push: ${String(err)}`,
-      },
-    );
+    setPendingAction("push");
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.push(cwd);
+          await refresh();
+        })(),
+        {
+          loading: `Pushing ${branch || "current branch"}...`,
+          success: `Pushed ${branch || "current branch"}`,
+          error: (err) => `Failed to push: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, branch, refresh]);
 
   const fetch = useCallback(async () => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.fetch(cwd);
-        await refresh();
-      })(),
-      {
-        loading: "Fetching from origin...",
-        success: "Fetched from origin",
-        error: (err) => `Failed to fetch: ${String(err)}`,
-      },
-    );
+    setPendingAction("fetch");
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.fetch(cwd);
+          await refresh();
+        })(),
+        {
+          loading: "Fetching from origin...",
+          success: "Fetched from origin",
+          error: (err) => `Failed to fetch: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   const mergeBranch = useCallback(async (targetBranch: string, strategy: MergeStrategy) => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.merge(cwd, targetBranch, strategy);
-        await refresh();
-      })(),
-      {
-        loading: `Merging ${targetBranch}...`,
-        success: `Merged ${targetBranch}`,
-        error: (err) => `Merge failed: ${String(err)}`,
-      },
-    );
+    setPendingAction(`${strategy === "rebase" ? "rebase" : strategy === "squash" ? "squash-merge" : "merge"}:${targetBranch}`);
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.merge(cwd, targetBranch, strategy);
+          await refresh();
+        })(),
+        {
+          loading: `Merging ${targetBranch}...`,
+          success: `Merged ${targetBranch}`,
+          error: (err) => `Merge failed: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   const deleteBranch = useCallback(async (targetBranch: string, force: boolean) => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.deleteBranch(cwd, targetBranch, force);
-        await refresh();
-      })(),
-      {
-        loading: `Deleting branch ${targetBranch}...`,
-        success: `Deleted ${targetBranch}`,
-        error: (err) => `Failed to delete branch: ${String(err)}`,
-      },
-    );
+    setPendingAction(`delete:${targetBranch}`);
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.deleteBranch(cwd, targetBranch, force);
+          await refresh();
+        })(),
+        {
+          loading: `Deleting branch ${targetBranch}...`,
+          success: `Deleted ${targetBranch}`,
+          error: (err) => `Failed to delete branch: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   const pushDeleteRemote = useCallback(async (targetBranch: string) => {
-    await toast.promise(
-      gitCommands.pushDeleteRemote(cwd, targetBranch),
-      {
-        loading: `Deleting remote branch ${targetBranch}...`,
-        success: `Deleted remote ${targetBranch}`,
-        error: (err) => `Failed to delete remote branch: ${String(err)}`,
-      },
-    );
+    setPendingAction(`delete-remote:${targetBranch}`);
+    try {
+      await toast.promise(
+        gitCommands.pushDeleteRemote(cwd, targetBranch),
+        {
+          loading: `Deleting remote branch ${targetBranch}...`,
+          success: `Deleted remote ${targetBranch}`,
+          error: (err) => `Failed to delete remote branch: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd]);
 
   const stash = useCallback(async (message?: string) => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.stash(cwd, message);
-        await Promise.all([refresh(), refreshStashes()]);
-      })(),
-      {
-        loading: "Stashing changes...",
-        success: "Changes stashed",
-        error: (err) => `Failed to stash: ${String(err)}`,
-      },
-    );
+    setPendingAction("stash");
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.stash(cwd, message);
+          await Promise.all([refresh(), refreshStashes()]);
+        })(),
+        {
+          loading: "Stashing changes...",
+          success: "Changes stashed",
+          error: (err) => `Failed to stash: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh, refreshStashes]);
 
   const stashPop = useCallback(async (index?: number) => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.stashPop(cwd, index);
-        await Promise.all([refresh(), refreshStashes()]);
-      })(),
-      {
-        loading: "Popping stash...",
-        success: "Stash applied",
-        error: (err) => `Failed to pop stash: ${String(err)}`,
-      },
-    );
+    setPendingAction(index == null ? "stash-pop" : `stash-pop:${index}`);
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.stashPop(cwd, index);
+          await Promise.all([refresh(), refreshStashes()]);
+        })(),
+        {
+          loading: "Popping stash...",
+          success: "Stash applied",
+          error: (err) => `Failed to pop stash: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh, refreshStashes]);
 
   const stashApply = useCallback(async (index: number) => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.stashApply(cwd, index);
-        await refresh();
-      })(),
-      {
-        loading: "Applying stash...",
-        success: "Stash applied",
-        error: (err) => `Failed to apply stash: ${String(err)}`,
-      },
-    );
+    setPendingAction(`stash-apply:${index}`);
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.stashApply(cwd, index);
+          await refresh();
+        })(),
+        {
+          loading: "Applying stash...",
+          success: "Stash applied",
+          error: (err) => `Failed to apply stash: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   const stashDrop = useCallback(async (index: number) => {
-    await toast.promise(
-      (async () => {
-        await gitCommands.stashDrop(cwd, index);
-        await refreshStashes();
-      })(),
-      {
-        loading: "Dropping stash...",
-        success: "Stash dropped",
-        error: (err) => `Failed to drop stash: ${String(err)}`,
-      },
-    );
+    setPendingAction(`stash-drop:${index}`);
+    try {
+      await toast.promise(
+        (async () => {
+          await gitCommands.stashDrop(cwd, index);
+          await refreshStashes();
+        })(),
+        {
+          loading: "Dropping stash...",
+          success: "Stash dropped",
+          error: (err) => `Failed to drop stash: ${String(err)}`,
+        },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refreshStashes]);
 
   const stashShow = useCallback(async (index: number) => {
@@ -459,15 +552,20 @@ export function useGitState({
     targetBranch: string,
     deleteRemote: boolean,
   ) => {
-    await toast.promise(
-      gitCommands.cleanupWorktree(cwd, worktreePath, targetBranch, deleteRemote),
-      {
-        loading: "Cleaning up worktree...",
-        success: "Worktree removed and branch deleted",
-        error: (err) => `Cleanup failed: ${String(err)}`,
-      },
-    );
-    await refresh();
+    setPendingAction(`cleanup-worktree:${targetBranch}`);
+    try {
+      await toast.promise(
+        gitCommands.cleanupWorktree(cwd, worktreePath, targetBranch, deleteRemote),
+        {
+          loading: "Cleaning up worktree...",
+          success: "Worktree removed and branch deleted",
+          error: (err) => `Cleanup failed: ${String(err)}`,
+        },
+      );
+      await refresh();
+    } finally {
+      setPendingAction(null);
+    }
   }, [cwd, refresh]);
 
   return {
@@ -476,6 +574,7 @@ export function useGitState({
     currentBranchUpstreamStatus,
     branchesLoading,
     branchActionPending,
+    pendingAction,
     files,
     stats,
     loading,

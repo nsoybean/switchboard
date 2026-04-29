@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as Re
 import {
   Archive,
   FileText,
-  GripVertical,
+  GitBranch,
   Plus,
   Play,
   X,
@@ -40,7 +40,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { workspaceLayoutCommands } from "@/lib/tauri-commands";
-import { getSwitchboardFileDragPath } from "@/lib/file-dnd";
+import { getDroppedFilePath } from "@/lib/file-dnd";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/state/types";
 import {
@@ -66,6 +66,7 @@ import {
 import { StatusDot } from "../ui/status-dot";
 import { InlineNewSession, type InlineNewSessionConfig } from "../session/InlineNewSession";
 import { FilePreview } from "../files/FilePreview";
+import { GitGraphDocument } from "../git/GitGraphDocument";
 import { StashDiffDocument, type StashDiffDocumentData } from "../git/StashDiffDocument";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
@@ -75,8 +76,10 @@ interface PaneWorkspaceProps {
   liveSessions: Session[];
   transcriptSession: Session | null;
   openFilePath: string | null;
+  gitGraphPath: string | null;
   stashDiffs: StashDiffDocumentData[];
   revealRequest: { tabId: string; nonce: number } | null;
+  closeActiveRequestNonce?: number;
   projectPath: string | null;
   projectPaths: string[];
   onInlineNewSession: (config: InlineNewSessionConfig) => void;
@@ -85,7 +88,9 @@ interface PaneWorkspaceProps {
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (filePath: string) => void;
+  onCloseGitGraph: (cwd: string) => void;
   onCloseStashDiff: (id: string) => void;
+  onRenameSession: (session: Session, label: string) => void | Promise<void>;
   onResumeTranscript?: () => void;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
@@ -124,7 +129,15 @@ interface StashDiffSurface {
   closable: true;
 }
 
-type PaneSurface = LiveSurface | TranscriptSurface | FileSurface | StashDiffSurface;
+interface GitGraphSurface {
+  id: string;
+  kind: "git-graph";
+  cwd: string;
+  title: string;
+  closable: true;
+}
+
+type PaneSurface = LiveSurface | TranscriptSurface | FileSurface | StashDiffSurface | GitGraphSurface;
 
 type DropZone = "center" | "top" | "right" | "bottom" | "left";
 
@@ -320,26 +333,37 @@ function PaneDropOverlay({
 function DraggableTab({
   tabId,
   leafId,
+  leafTabIds,
   isActive,
   surface,
+  activeDrag,
   onSelectTab,
   onCloseSession,
   onCloseFile,
+  onCloseGitGraph,
   onCloseStashDiff,
   onCloseTranscript,
   onSelectLiveSession,
+  onRenameSession,
 }: {
   tabId: string;
   leafId: string;
+  leafTabIds: string[];
   isActive: boolean;
   surface: PaneSurface;
+  activeDrag: TabDragData | null;
   onSelectTab: () => void;
   onCloseSession: (id: string) => void;
   onCloseFile: (id: string) => void;
+  onCloseGitGraph: (id: string) => void;
   onCloseStashDiff: (id: string) => void;
   onCloseTranscript: () => void;
   onSelectLiveSession: (id: string) => void;
+  onRenameSession: (session: Session, label: string) => void | Promise<void>;
 }) {
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [draftLabel, setDraftLabel] = useState(surface.title);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: makeDragId(tabId, leafId),
     data: { type: "tab", tabId, fromLeafId: leafId } satisfies TabDragData,
@@ -351,6 +375,48 @@ function DraggableTab({
     setNodeRef(node);
     setDropNodeRef(node);
   }, [setDropNodeRef, setNodeRef]);
+  const canRename = surface.kind === "live-session";
+  const insertionSide = useMemo<"left" | "right" | null>(() => {
+    if (!activeDrag || !isOver || isDragging) return null;
+    if (activeDrag.tabId === tabId && activeDrag.fromLeafId === leafId) return null;
+
+    if (activeDrag.fromLeafId !== leafId) {
+      return "left";
+    }
+
+    const sourceIndex = leafTabIds.indexOf(activeDrag.tabId);
+    const targetIndex = leafTabIds.indexOf(tabId);
+    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+      return null;
+    }
+
+    return sourceIndex < targetIndex ? "right" : "left";
+  }, [activeDrag, isDragging, isOver, leafId, leafTabIds, tabId]);
+
+  useEffect(() => {
+    setDraftLabel(surface.title);
+  }, [surface.title]);
+
+  useEffect(() => {
+    if (!editingLabel) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [editingLabel]);
+
+  const commitRename = useCallback(() => {
+    if (!canRename) return;
+    const nextLabel = draftLabel.trim();
+    setEditingLabel(false);
+    setDraftLabel(surface.title);
+    if (nextLabel && nextLabel !== surface.session.label) {
+      void onRenameSession(surface.session, nextLabel);
+    }
+  }, [canRename, draftLabel, onRenameSession, surface]);
+
+  const cancelRename = useCallback(() => {
+    setEditingLabel(false);
+    setDraftLabel(surface.title);
+  }, [surface.title]);
 
   return (
     <button
@@ -366,28 +432,64 @@ function DraggableTab({
         }
       }}
       className={cn(
-        "group/pane-tab relative flex max-w-[260px] shrink-0 cursor-pointer items-center gap-1.5 py-1.5 pl-1.5 pr-3 text-left font-sans text-xs transition-colors active:cursor-grabbing",
+        "group/pane-tab relative -mb-px flex h-9 max-w-[260px] shrink-0 cursor-pointer items-center gap-1.5 border-x border-b border-transparent py-1.5 pl-3 pr-3 text-left font-sans text-xs transition-colors active:cursor-grabbing",
         isActive
-          ? "text-foreground"
-          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+          ? "z-10 border-x-border/70 border-b-background bg-background text-foreground before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-foreground/55 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-background"
+          : "bg-card/40 text-muted-foreground/75 hover:bg-muted/30 hover:text-foreground",
         isOver && !isDragging && "bg-accent/70 text-foreground",
         isDragging && "opacity-40",
       )}
     >
-      <span
-        className="inline-flex size-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity group-hover/pane-tab:opacity-60 active:cursor-grabbing"
-        aria-label="Drag tab"
-      >
-        <GripVertical className="size-3" />
-      </span>
+      {insertionSide ? (
+        <span
+          className={cn(
+            "pointer-events-none absolute top-1 bottom-1 z-30 w-0.5 rounded-full bg-primary shadow-[0_0_0_1px_var(--background)]",
+            insertionSide === "left" ? "-left-px" : "-right-px",
+          )}
+        />
+      ) : null}
       {surface.kind === "file" ? (
         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+      ) : surface.kind === "git-graph" ? (
+        <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
       ) : surface.kind === "stash-diff" ? (
         <Archive className="size-3.5 shrink-0 text-muted-foreground" />
       ) : surface.kind === "live-session" ? (
         <AgentIcon agent={surface.session.agent} className="size-3.5 shrink-0" />
       ) : null}
-      <span className="truncate font-medium">{surface.title}</span>
+      {editingLabel ? (
+        <input
+          ref={inputRef}
+          value={draftLabel}
+          onChange={(event) => setDraftLabel(event.target.value)}
+          onBlur={commitRename}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commitRename();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              cancelRename();
+            }
+          }}
+          className="min-w-24 flex-1 rounded-sm border border-border bg-background px-1 py-0 text-xs font-medium text-foreground shadow-none outline-none focus:border-ring"
+        />
+      ) : (
+        <span
+          className="truncate font-medium"
+          onDoubleClick={(event) => {
+            if (!canRename) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setEditingLabel(true);
+          }}
+        >
+          {surface.title}
+        </span>
+      )}
       {surface.kind === "live-session" && (
         <StatusDot status={surface.session.status} />
       )}
@@ -403,6 +505,8 @@ function DraggableTab({
               onCloseSession(surface.session.id);
             } else if (surface.kind === "file") {
               onCloseFile(surface.id);
+            } else if (surface.kind === "git-graph") {
+              onCloseGitGraph(surface.id);
             } else if (surface.kind === "stash-diff") {
               onCloseStashDiff(surface.id);
             } else {
@@ -415,9 +519,6 @@ function DraggableTab({
           <X className="size-3" />
         </span>
       ) : null}
-      {isActive && (
-        <span className="absolute bottom-0 left-2 right-2 h-px rounded-full bg-foreground" />
-      )}
     </button>
   );
 }
@@ -425,7 +526,9 @@ function DraggableTab({
 function PaneLeafView({
   leaf,
   paneCount,
+  isActivePane,
   surfacesById,
+  activeDrag,
   onFocusPane,
   onSelectTab,
   onSplit,
@@ -433,16 +536,20 @@ function PaneLeafView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseGitGraph,
   onCloseStashDiff,
   onExternalFileDrop,
   onResumeTranscript,
   onSelectLiveSession,
+  onRenameSession,
   onSessionStart,
   onSessionExit,
 }: {
   leaf: PaneLeafNode;
   paneCount: number;
+  isActivePane: boolean;
   surfacesById: Map<string, PaneSurface>;
+  activeDrag: TabDragData | null;
   onFocusPane: (paneId: string) => void;
   onSelectTab: (paneId: string, tabId: string) => void;
   onSplit: (paneId: string, direction: SplitDirection) => void;
@@ -450,10 +557,12 @@ function PaneLeafView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onCloseGitGraph: (surfaceId: string) => void;
   onCloseStashDiff: (id: string) => void;
   onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
+  onRenameSession: (session: Session, label: string) => void | Promise<void>;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
 }) {
@@ -477,7 +586,7 @@ function PaneLeafView({
     Boolean(onResumeTranscript);
 
   const handleBodyDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
-    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    const filePath = getDroppedFilePath(event.dataTransfer);
     if (!filePath) return;
 
     event.preventDefault();
@@ -487,7 +596,7 @@ function PaneLeafView({
   }, []);
 
   const handleBodyDrop = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
-    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    const filePath = getDroppedFilePath(event.dataTransfer);
     if (!filePath) return;
 
     event.preventDefault();
@@ -499,7 +608,7 @@ function PaneLeafView({
   }, [leaf.id, onExternalFileDrop]);
 
   const handleBodyDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
-    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    const filePath = getDroppedFilePath(event.dataTransfer);
     if (!filePath) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
@@ -516,11 +625,23 @@ function PaneLeafView({
 
   return (
     <div
-      className="relative flex h-full min-h-0 min-w-0 flex-col"
+      className={cn(
+        "relative flex h-full min-h-0 min-w-0 flex-col transition-colors",
+        paneCount > 1 &&
+          (isActivePane
+            ? "ring-1 ring-inset ring-ring/55"
+            : "ring-1 ring-inset ring-border/45"),
+      )}
+      data-active-pane={isActivePane ? "true" : "false"}
       onMouseDown={() => onFocusPane(leaf.id)}
     >
       {/* Tab bar */}
-      <div className="relative shrink-0 bg-card/80">
+      <div
+        className={cn(
+          "relative shrink-0 bg-card/80",
+          paneCount > 1 && isActivePane && "bg-card",
+        )}
+      >
         <div className="flex items-center">
           <div className="flex min-w-0 flex-1 items-end gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {leaf.tabIds.map((tabId) => {
@@ -532,14 +653,18 @@ function PaneLeafView({
                   key={tabId}
                   tabId={tabId}
                   leafId={leaf.id}
+                  leafTabIds={leaf.tabIds}
                   isActive={isActive}
                   surface={surface}
+                  activeDrag={activeDrag}
                   onSelectTab={() => onSelectTab(leaf.id, tabId)}
                   onCloseSession={onCloseSession}
                   onCloseFile={onCloseFile}
+                  onCloseGitGraph={onCloseGitGraph}
                   onCloseStashDiff={onCloseStashDiff}
                   onCloseTranscript={onCloseTranscript}
                   onSelectLiveSession={onSelectLiveSession}
+                  onRenameSession={onRenameSession}
                 />
               );
             })}
@@ -636,7 +761,6 @@ function PaneLeafView({
             <div key={tabId} className={cn(
               "h-full min-h-0",
               isActive ? "block" : "hidden",
-              surface.kind !== "live-session" && "p-1.5",
             )}>
               {surface.kind === "live-session" ? (
                 <XTermContainer
@@ -656,6 +780,8 @@ function PaneLeafView({
                   onClose={() => onCloseFile(surface.id)}
                   showHeader={false}
                 />
+              ) : surface.kind === "git-graph" ? (
+                <GitGraphDocument cwd={surface.cwd} title={surface.title} />
               ) : surface.kind === "stash-diff" ? (
                 <StashDiffDocument stash={surface.stash} />
               ) : (
@@ -679,6 +805,7 @@ function PaneTreeView({
   paneCount,
   surfacesById,
   activePaneId,
+  activeDrag,
   sizesByGroupId,
   onFocusPane,
   onSelectTab,
@@ -687,10 +814,12 @@ function PaneTreeView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseGitGraph,
   onCloseStashDiff,
   onExternalFileDrop,
   onResumeTranscript,
   onSelectLiveSession,
+  onRenameSession,
   onSessionStart,
   onSessionExit,
   onSizeChange,
@@ -699,6 +828,7 @@ function PaneTreeView({
   paneCount: number;
   surfacesById: Map<string, PaneSurface>;
   activePaneId: string | null;
+  activeDrag: TabDragData | null;
   sizesByGroupId: Record<string, Record<string, number>>;
   onFocusPane: (paneId: string) => void;
   onSelectTab: (paneId: string, tabId: string) => void;
@@ -707,10 +837,12 @@ function PaneTreeView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onCloseGitGraph: (surfaceId: string) => void;
   onCloseStashDiff: (id: string) => void;
   onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
   onSelectLiveSession: (sessionId: string) => void;
+  onRenameSession: (session: Session, label: string) => void | Promise<void>;
   onSessionStart: (sessionId: string) => void;
   onSessionExit: (sessionId: string) => (code: number | null) => void;
   onSizeChange: (groupId: string, sizes: Record<string, number>) => void;
@@ -721,6 +853,8 @@ function PaneTreeView({
         leaf={node}
         paneCount={paneCount}
         surfacesById={surfacesById}
+        isActivePane={activePaneId === node.id}
+        activeDrag={activeDrag}
         onFocusPane={onFocusPane}
         onSelectTab={onSelectTab}
         onSplit={onSplit}
@@ -728,10 +862,12 @@ function PaneTreeView({
         onCloseSession={onCloseSession}
         onCloseTranscript={onCloseTranscript}
         onCloseFile={onCloseFile}
+        onCloseGitGraph={onCloseGitGraph}
         onCloseStashDiff={onCloseStashDiff}
         onExternalFileDrop={onExternalFileDrop}
         onResumeTranscript={onResumeTranscript}
         onSelectLiveSession={onSelectLiveSession}
+        onRenameSession={onRenameSession}
         onSessionStart={onSessionStart}
         onSessionExit={onSessionExit}
       />
@@ -752,6 +888,7 @@ function PaneTreeView({
               paneCount={paneCount}
               surfacesById={surfacesById}
               activePaneId={activePaneId}
+              activeDrag={activeDrag}
               sizesByGroupId={sizesByGroupId}
               onFocusPane={onFocusPane}
               onSelectTab={onSelectTab}
@@ -760,10 +897,12 @@ function PaneTreeView({
               onCloseSession={onCloseSession}
               onCloseTranscript={onCloseTranscript}
               onCloseFile={onCloseFile}
+              onCloseGitGraph={onCloseGitGraph}
               onCloseStashDiff={onCloseStashDiff}
               onExternalFileDrop={onExternalFileDrop}
               onResumeTranscript={onResumeTranscript}
               onSelectLiveSession={onSelectLiveSession}
+              onRenameSession={onRenameSession}
               onSessionStart={onSessionStart}
               onSessionExit={onSessionExit}
               onSizeChange={onSizeChange}
@@ -783,8 +922,10 @@ export function PaneWorkspace({
   liveSessions,
   transcriptSession,
   openFilePath,
+  gitGraphPath,
   stashDiffs,
   revealRequest,
+  closeActiveRequestNonce = 0,
   projectPath,
   projectPaths,
   onInlineNewSession,
@@ -793,7 +934,9 @@ export function PaneWorkspace({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseGitGraph,
   onCloseStashDiff,
+  onRenameSession,
   onResumeTranscript,
   onSessionStart,
   onSessionExit,
@@ -830,6 +973,17 @@ export function PaneWorkspace({
       });
     }
 
+    if (gitGraphPath) {
+      const label = gitGraphPath.split("/").pop() ?? "Repository";
+      nextSurfaces.push({
+        id: `git-graph:${gitGraphPath}`,
+        kind: "git-graph",
+        cwd: gitGraphPath,
+        title: `${label} graph`,
+        closable: true,
+      });
+    }
+
     for (const stash of stashDiffs) {
       nextSurfaces.push({
         id: stash.id,
@@ -841,7 +995,7 @@ export function PaneWorkspace({
     }
 
     return nextSurfaces;
-  }, [fileSurfacePaths, liveSessions, stashDiffs, transcriptSession]);
+  }, [fileSurfacePaths, gitGraphPath, liveSessions, stashDiffs, transcriptSession]);
 
   const surfacesById = useMemo(
     () => new Map(surfaces.map((surface) => [surface.id, surface])),
@@ -849,7 +1003,9 @@ export function PaneWorkspace({
   );
   const preferredTabId = openFilePath
     ? `file:${openFilePath}`
-    : transcriptSession
+    : gitGraphPath
+      ? `git-graph:${gitGraphPath}`
+      : transcriptSession
       ? `transcript:${transcriptSession.resumeTargetId ?? transcriptSession.id}`
       : activeSession
         ? `live:${activeSession.id}`
@@ -858,10 +1014,12 @@ export function PaneWorkspace({
   const [sizesByGroupId, setSizesByGroupId] = useState<Record<string, Record<string, number>>>({});
   const [hydrated, setHydrated] = useState(false);
   const [dragSurface, setDragSurface] = useState<PaneSurface | null>(null);
+  const [activeDrag, setActiveDrag] = useState<TabDragData | null>(null);
 
   const pendingSaveRef = useRef<{ layout: PaneLayoutState; sizesByGroupId: Record<string, Record<string, number>> } | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handledRevealNonceRef = useRef<number | null>(null);
+  const handledCloseNonceRef = useRef<number>(closeActiveRequestNonce);
 
   useEffect(() => {
     if (!openFilePath) return;
@@ -984,11 +1142,13 @@ export function PaneWorkspace({
   const handleDragStart = (event: DragStartEvent) => {
     const parsed = parseDragId(String(event.active.id));
     if (parsed) {
+      setActiveDrag({ type: "tab", ...parsed });
       setDragSurface(surfacesById.get(parsed.tabId) ?? null);
     }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDrag(null);
     setDragSurface(null);
 
     const { active, over } = event;
@@ -1067,6 +1227,52 @@ export function PaneWorkspace({
     }
   }, [onCloseFile, openFilePath]);
 
+  const handleCloseGitGraphSurface = useCallback((surfaceId: string) => {
+    if (!surfaceId.startsWith("git-graph:")) return;
+    onCloseGitGraph(surfaceId.slice("git-graph:".length));
+  }, [onCloseGitGraph]);
+
+  const closeSurface = useCallback((surface: PaneSurface) => {
+    if (surface.kind === "live-session") {
+      onCloseSession(surface.session.id);
+    } else if (surface.kind === "file") {
+      handleCloseFileSurface(surface.id);
+    } else if (surface.kind === "git-graph") {
+      handleCloseGitGraphSurface(surface.id);
+    } else if (surface.kind === "stash-diff") {
+      onCloseStashDiff(surface.id);
+    } else {
+      onCloseTranscript();
+    }
+  }, [
+    handleCloseFileSurface,
+    handleCloseGitGraphSurface,
+    onCloseSession,
+    onCloseStashDiff,
+    onCloseTranscript,
+  ]);
+
+  useEffect(() => {
+    if (!hydrated || closeActiveRequestNonce === handledCloseNonceRef.current) return;
+    handledCloseNonceRef.current = closeActiveRequestNonce;
+
+    const activeLeaf =
+      findLeaf(layout.root, layout.activePaneId) ??
+      getFirstLeaf(layout.root);
+    const activeTabId = activeLeaf?.activeTabId ?? activeLeaf?.tabIds[0] ?? null;
+    const activeSurface = activeTabId ? surfacesById.get(activeTabId) : null;
+    if (activeSurface) {
+      closeSurface(activeSurface);
+    }
+  }, [
+    closeActiveRequestNonce,
+    closeSurface,
+    hydrated,
+    layout.activePaneId,
+    layout.root,
+    surfacesById,
+  ]);
+
   const handleExternalFileDrop = useCallback((leafId: string, zone: DropZone, filePath: string) => {
     const tabId = tabIdForFilePath(filePath);
 
@@ -1135,13 +1341,22 @@ export function PaneWorkspace({
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => {
+        setActiveDrag(null);
+        setDragSurface(null);
+      }}
+    >
       <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
         <PaneTreeView
           node={layout.root}
           paneCount={paneCount}
           surfacesById={surfacesById}
           activePaneId={layout.activePaneId}
+          activeDrag={activeDrag}
           sizesByGroupId={sizesByGroupId}
           onSizeChange={(groupId, sizes) => setSizesByGroupId((prev) => ({ ...prev, [groupId]: sizes }))}
           onFocusPane={(paneId) => {
@@ -1184,10 +1399,12 @@ export function PaneWorkspace({
           onCloseSession={onCloseSession}
           onCloseTranscript={onCloseTranscript}
           onCloseFile={handleCloseFileSurface}
+          onCloseGitGraph={handleCloseGitGraphSurface}
           onCloseStashDiff={onCloseStashDiff}
           onExternalFileDrop={handleExternalFileDrop}
           onResumeTranscript={onResumeTranscript}
           onSelectLiveSession={onSelectLiveSession}
+          onRenameSession={onRenameSession}
           onSessionStart={onSessionStart}
           onSessionExit={onSessionExit}
         />
@@ -1199,6 +1416,8 @@ export function PaneWorkspace({
           <div className="flex max-w-[360px] min-w-0 items-center gap-2 overflow-hidden rounded-md border border-border bg-background px-3 py-1.5 text-xs shadow-lg">
             {dragSurface.kind === "file" ? (
               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+            ) : dragSurface.kind === "git-graph" ? (
+              <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
             ) : dragSurface.kind === "stash-diff" ? (
               <Archive className="size-3.5 shrink-0 text-muted-foreground" />
             ) : dragSurface.kind === "live-session" ? (

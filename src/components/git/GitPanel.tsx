@@ -112,9 +112,11 @@ function countTreeFiles(node: ChangeTreeNode): number {
 export const GitPanel = memo(function GitPanel({
   cwd,
   git,
+  sessions = [],
   projectPath,
   githubToken = null,
   onCreateBranch,
+  onCreateWorktree,
   onCreatePr,
   onFileSelect,
   onOpenStashDiff,
@@ -270,6 +272,7 @@ export const GitPanel = memo(function GitPanel({
   const canCreatePr = Boolean(githubToken && onCreatePr);
   const anyGitPending =
     git.branchActionPending ||
+    Boolean(git.pendingAction) ||
     pullPending ||
     pushPending ||
     fetchPending ||
@@ -725,6 +728,21 @@ export const GitPanel = memo(function GitPanel({
               loading={git.branchesLoading && git.branches.length === 0}
               value={git.branch}
               disabled={git.branchActionPending}
+              currentBranchUpstreamStatus={git.currentBranchUpstreamStatus}
+              currentAheadBehind={git.aheadBehind}
+              pendingAction={git.pendingAction}
+              sessions={sessions}
+              githubToken={githubToken}
+              onFetch={git.fetch}
+              onPull={git.pull}
+              onPush={git.push}
+              onCreatePr={onCreatePr}
+              onMergeBranch={(branchName) => git.mergeBranch(branchName, "merge")}
+              onSquashMergeBranch={(branchName) => git.mergeBranch(branchName, "squash")}
+              onRebaseBranch={(branchName) => git.mergeBranch(branchName, "rebase")}
+              onCreateWorktree={onCreateWorktree}
+              onDeleteBranch={git.deleteBranch}
+              onDeleteRemoteBranch={git.pushDeleteRemote}
               triggerClassName="h-7 min-w-0 flex-1 border-border/70 bg-card/70 px-2 text-xs font-medium text-foreground hover:bg-muted/55 data-[state=open]:bg-muted"
               createLabel="Create branch..."
               onSelect={(branchName) => void git.switchBranch(branchName)}
@@ -748,7 +766,7 @@ export const GitPanel = memo(function GitPanel({
                   className="h-7 shrink-0 gap-1.5 px-2 text-xs"
                   disabled={anyGitPending}
                 >
-                  {fetchPending ? <Spinner className="size-3" /> : <RefreshCw />}
+                  {git.pendingAction === "fetch" ? <Spinner className="size-3" /> : <RefreshCw />}
                   Fetch
                   <ChevronDown />
                 </Button>
@@ -783,14 +801,14 @@ export const GitPanel = memo(function GitPanel({
                     disabled={!hasChanges}
                     onSelect={() => void handleStash()}
                   >
-                    <Archive />
+                    {git.pendingAction === "stash" ? <Spinner className="size-3.5" /> : <Archive />}
                     Stash Changes
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={git.stashes.length === 0}
                     onSelect={() => void git.stashPop()}
                   >
-                    <RotateCcw />
+                    {git.pendingAction === "stash-pop" ? <Spinner className="size-3.5" /> : <RotateCcw />}
                     Pop Latest Stash
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
@@ -800,14 +818,14 @@ export const GitPanel = memo(function GitPanel({
                     disabled={unstagedCount === 0}
                     onSelect={() => void git.stageAll()}
                   >
-                    <GitCommit />
+                    {git.pendingAction === "stage-all" ? <Spinner className="size-3.5" /> : <GitCommit />}
                     Stage All
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={stagedCount === 0}
                     onSelect={() => void git.unstageAll()}
                   >
-                    <Undo2 />
+                    {git.pendingAction === "unstage-all" ? <Spinner className="size-3.5" /> : <Undo2 />}
                     Unstage All
                   </DropdownMenuItem>
                   <DropdownMenuItem
@@ -815,7 +833,7 @@ export const GitPanel = memo(function GitPanel({
                     variant="destructive"
                     onSelect={() => void git.revertAll()}
                   >
-                    <Undo2 />
+                    {git.pendingAction === "discard-all" ? <Spinner className="size-3.5" /> : <Undo2 />}
                     Discard Unstaged
                   </DropdownMenuItem>
                 </DropdownMenuGroup>

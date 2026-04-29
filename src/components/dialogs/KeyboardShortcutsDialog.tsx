@@ -72,7 +72,8 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
             <ShortcutRow keys={["Cmd", "E"]} label="Open Files tab" />
             <ShortcutRow keys={["Cmd", "⇧", "E"]} label="Open Changes tab" />
             <ShortcutRow keys={["Cmd", "⇧", "H"]} label="Open history" />
-            <ShortcutRow keys={["Cmd", "P"]} label="Command palette" />
+            <ShortcutRow keys={["Cmd", "P"]} label="File finder" />
+            <ShortcutRow keys={["Cmd", "Shift", "P"]} label="Command palette" />
           </ShortcutGroup>
           <ShortcutGroup title="View">
             <ShortcutRow keys={["Cmd", "="]} label="Zoom in" />

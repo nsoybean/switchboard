@@ -61,7 +61,8 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
     }
   };
 
-  const { stashes, stashesLoading } = git;
+  const { stashes, stashesLoading, pendingAction } = git;
+  const stashActionPending = pending || pendingAction?.startsWith("stash");
 
   return (
     <div className="group/stash">
@@ -126,14 +127,14 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
                 }}
                 placeholder="Stash message (optional)..."
                 className="h-7 text-xs"
-                disabled={pending}
+                disabled={stashActionPending}
               />
               <Button
                 size="icon"
                 variant="ghost"
                 className="size-7 shrink-0"
                 onClick={() => void handleStash()}
-                disabled={pending}
+                disabled={stashActionPending}
               >
                 <CornerDownLeft className="size-3.5" />
               </Button>
@@ -170,9 +171,13 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
                       size="icon"
                       className="size-5"
                       onClick={() => void handlePop(entry.index)}
-                      disabled={pending}
+                      disabled={stashActionPending}
                     >
-                      <CornerDownLeft className="size-3" />
+                      {pendingAction === `stash-pop:${entry.index}` ? (
+                        <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+                      ) : (
+                        <CornerDownLeft className="size-3" />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Pop (apply + drop)</TooltipContent>
@@ -184,9 +189,13 @@ export const StashPanel = memo(function StashPanel({ git, cwd }: StashPanelProps
                       size="icon"
                       className="size-5 text-muted-foreground hover:text-destructive"
                       onClick={() => void handleDrop(entry.index)}
-                      disabled={pending}
+                      disabled={stashActionPending}
                     >
-                      <Trash2 className="size-3" />
+                      {pendingAction === `stash-drop:${entry.index}` ? (
+                        <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+                      ) : (
+                        <Trash2 className="size-3" />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Drop stash</TooltipContent>

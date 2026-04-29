@@ -1,6 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Archive, Check, CornerDownLeft, Eye, FileText, GitBranch, PlusIcon, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Copy,
+  CornerDownLeft,
+  Eye,
+  FileText,
+  GitBranch,
+  GitFork,
+  GitMerge,
+  GitPullRequest,
+  MoreHorizontal,
+  PlusIcon,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +40,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DiffView } from "./DiffView";
 import type { GitBranchInfo, StashEntry } from "../../lib/tauri-commands";
+import type { Session } from "@/state/types";
 
 interface BranchPickerProps {
   branches: GitBranchInfo[];
@@ -39,6 +59,21 @@ interface BranchPickerProps {
   showCurrentBadge?: boolean;
   stashes?: StashEntry[];
   stashesLoading?: boolean;
+  currentBranchUpstreamStatus?: "none" | "tracking" | "gone";
+  currentAheadBehind?: { ahead: number; behind: number };
+  pendingAction?: string | null;
+  sessions?: Session[];
+  githubToken?: string | null;
+  onFetch?: () => Promise<void> | void;
+  onPull?: () => Promise<void> | void;
+  onPush?: () => Promise<void> | void;
+  onCreatePr?: () => void;
+  onMergeBranch?: (branchName: string) => Promise<void> | void;
+  onSquashMergeBranch?: (branchName: string) => Promise<void> | void;
+  onRebaseBranch?: (branchName: string) => Promise<void> | void;
+  onCreateWorktree?: (branchName: string) => void;
+  onDeleteBranch?: (branchName: string, force: boolean) => Promise<void> | void;
+  onDeleteRemoteBranch?: (branchName: string) => Promise<void> | void;
   onStashTabOpen?: () => void;
   onStashApply?: (index: number) => Promise<void> | void;
   onStashPop?: (index: number) => Promise<void> | void;
@@ -63,6 +98,21 @@ export function BranchPicker({
   showCurrentBadge = true,
   stashes = [],
   stashesLoading = false,
+  currentBranchUpstreamStatus = "tracking",
+  currentAheadBehind,
+  pendingAction = null,
+  sessions = [],
+  githubToken = null,
+  onFetch,
+  onPull,
+  onPush,
+  onCreatePr,
+  onMergeBranch,
+  onSquashMergeBranch,
+  onRebaseBranch,
+  onCreateWorktree,
+  onDeleteBranch,
+  onDeleteRemoteBranch,
   onStashTabOpen,
   onStashApply,
   onStashPop,
@@ -122,6 +172,7 @@ export function BranchPicker({
     [normalizedQuery, stashes],
   );
   const selectedBranch = branches.find((branch) => branch.name === value);
+  const localBranches = filteredBranches.filter((branch) => !branch.is_remote);
   const hasExactBranchMatch = branches.some(
     (branch) => branch.name.toLowerCase() === normalizedQuery,
   );
@@ -130,6 +181,29 @@ export function BranchPicker({
     tab === "branches" &&
     trimmedQuery.length > 0 &&
     !hasExactBranchMatch;
+  const hasBranchManagement = Boolean(
+    onFetch ||
+      onPull ||
+      onPush ||
+      onCreatePr ||
+      onMergeBranch ||
+      onSquashMergeBranch ||
+      onRebaseBranch ||
+      onCreateWorktree ||
+      onDeleteBranch ||
+      onDeleteRemoteBranch,
+  );
+  const sessionsByBranch = useMemo(() => {
+    const map = new Map<string, Session[]>();
+    sessions.forEach((session) => {
+      const branchName = session.workspace.branchName ?? session.branch;
+      if (!branchName) return;
+      const current = map.get(branchName) ?? [];
+      current.push(session);
+      map.set(branchName, current);
+    });
+    return map;
+  }, [sessions]);
 
   useEffect(() => {
     const loadStashView = onStashViewRef.current;
@@ -271,41 +345,213 @@ export function BranchPicker({
         ) : null}
         <ScrollArea className={cn("h-64", compact && "h-48")}>
           <div className="flex flex-col p-1">
-            {tab === "branches" && filteredBranches.length > 0 ? (
+            {tab === "branches" && localBranches.length > 0 ? (
               <div className="flex flex-col">
-                {filteredBranches.map((branch) => (
-                  <DropdownMenuItem
-                    key={branch.name}
-                    onSelect={() => {
-                      onSelect(branch.name);
-                      setOpen(false);
-                    }}
-                    className={cn(
-                      "grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 text-xs",
-                      value === branch.name && "bg-accent/70 text-foreground",
-                    )}
-                  >
-                    <span className="flex justify-center">
-                      {branch.is_current ? (
-                        <Check className="size-3.5 text-primary" />
-                      ) : (
-                        <GitBranch className="size-3.5 text-muted-foreground" />
+                {localBranches.map((branch) => {
+                  const isCurrent = branch.name === value || branch.is_current;
+                  const branchAhead = isCurrent ? (currentAheadBehind?.ahead ?? branch.ahead ?? 0) : (branch.ahead ?? 0);
+                  const branchBehind = isCurrent ? (currentAheadBehind?.behind ?? branch.behind ?? 0) : (branch.behind ?? 0);
+                  const attachedSessions = sessionsByBranch.get(branch.name) ?? [];
+                  const isPending = pendingAction?.endsWith(`:${branch.name}`) || pendingAction === "push" || pendingAction === "pull" || pendingAction === "fetch";
+                  const canCreatePr = Boolean(githubToken && onCreatePr);
+                  const needsPublish = isCurrent && currentBranchUpstreamStatus !== "tracking";
+
+                  return (
+                    <div
+                      key={branch.name}
+                      role="menuitem"
+                      tabIndex={0}
+                      onClick={() => {
+                        if (isCurrent) return;
+                        onSelect(branch.name);
+                        setOpen(false);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        if (isCurrent) return;
+                        onSelect(branch.name);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "group/branch relative grid cursor-default grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-2 rounded-md px-2 py-1.5 pr-12 text-xs outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                        isCurrent && "bg-accent/70 text-foreground",
                       )}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{branch.name}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {branch.last_commit_date ? `${branch.last_commit_date} · ` : ""}
-                        {branch.last_commit_subject ?? (branch.is_remote ? "Remote branch" : "Local branch")}
+                    >
+                      <span className="mt-0.5 flex justify-center">
+                        {isCurrent ? (
+                          <Check className="size-3.5 text-primary" />
+                        ) : (
+                          <GitBranch className="size-3.5 text-muted-foreground" />
+                        )}
                       </span>
-                    </span>
-                    {showCurrentBadge && branch.is_current ? (
-                      <Badge variant="outline" className="shrink-0 text-[10px]">
-                        current
-                      </Badge>
-                    ) : null}
-                  </DropdownMenuItem>
-                ))}
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate font-medium">{branch.name}</span>
+                          {showCurrentBadge && isCurrent ? (
+                            <Badge variant="outline" className="h-4 shrink-0 px-1 text-[10px]">
+                              current
+                            </Badge>
+                          ) : null}
+                          {branchAhead > 0 ? (
+                            <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--sb-diff-add-fg)]">
+                              <ArrowUp className="size-3" />
+                              {branchAhead}
+                            </span>
+                          ) : null}
+                          {branchBehind > 0 ? (
+                            <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] text-[var(--sb-diff-del-fg)]">
+                              <ArrowDown className="size-3" />
+                              {branchBehind}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="block truncate text-[11px] text-muted-foreground">
+                          {branch.last_commit_date ? `${branch.last_commit_date} · ` : ""}
+                          {branch.last_commit_subject ?? "Local branch"}
+                        </span>
+                        {attachedSessions.length > 0 ? (
+                          <span className="mt-1 flex flex-wrap gap-1">
+                            {attachedSessions.slice(0, 2).map((session) => (
+                              <Badge key={session.id} variant="outline" className="h-4 px-1 text-[10px]">
+                                {session.worktreePath ? "worktree" : "session"}
+                              </Badge>
+                            ))}
+                            {attachedSessions.length > 2 ? (
+                              <Badge variant="outline" className="h-4 px-1 text-[10px]">
+                                +{attachedSessions.length - 2}
+                              </Badge>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span
+                        className="pointer-events-none absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-card/95 px-0.5 opacity-0 shadow-sm ring-1 ring-border/70 transition-opacity group-hover/branch:pointer-events-auto group-hover/branch:opacity-100 group-focus-within/branch:pointer-events-auto group-focus-within/branch:opacity-100"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        {hasBranchManagement && isPending ? <RefreshCw className="mt-0.5 size-3.5 animate-spin text-muted-foreground" /> : null}
+                        {isCurrent && onPush && (branchAhead > 0 || needsPublish) ? (
+                          <BranchActionButton
+                            label={needsPublish ? "Publish branch" : "Push branch"}
+                            disabled={Boolean(pendingAction)}
+                            onClick={() => void onPush()}
+                          >
+                            <Upload className="size-3" />
+                          </BranchActionButton>
+                        ) : null}
+                        {hasBranchManagement ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-6 text-muted-foreground hover:text-foreground data-[state=open]:text-foreground"
+                                disabled={Boolean(pendingAction)}
+                              >
+                                <MoreHorizontal className="size-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 text-xs">
+                              {isCurrent ? (
+                                <>
+                                  <DropdownMenuItem disabled={!onPush} onSelect={() => void onPush?.()}>
+                                    <Upload className="size-3.5" />
+                                    {needsPublish ? "Publish branch" : "Push branch"}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled={!onPull} onSelect={() => void onPull?.()}>
+                                    <ArrowDown className="size-3.5" />
+                                    Pull branch
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled={!onFetch} onSelect={() => void onFetch?.()}>
+                                    <RefreshCw className="size-3.5" />
+                                    Fetch
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled={!canCreatePr} onSelect={() => onCreatePr?.()}>
+                                    <GitPullRequest className="size-3.5" />
+                                    Create PR
+                                  </DropdownMenuItem>
+                                </>
+                              ) : (
+                                <>
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      onSelect(branch.name);
+                                      setOpen(false);
+                                    }}
+                                  >
+                                    <GitBranch className="size-3.5" />
+                                    Checkout
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled={!onMergeBranch} onSelect={() => void onMergeBranch?.(branch.name)}>
+                                    <GitMerge className="size-3.5" />
+                                    Merge into {value}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled={!onSquashMergeBranch} onSelect={() => void onSquashMergeBranch?.(branch.name)}>
+                                    <GitMerge className="size-3.5" />
+                                    Squash merge
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled={!onRebaseBranch} onSelect={() => void onRebaseBranch?.(branch.name)}>
+                                    <ArrowUp className="size-3.5" />
+                                    Rebase current onto branch
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem disabled={!onCreateWorktree} onSelect={() => onCreateWorktree?.(branch.name)}>
+                                    <GitFork className="size-3.5" />
+                                    Create worktree/session
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => void navigator.clipboard?.writeText(branch.name)}
+                              >
+                                <Copy className="size-3.5" />
+                                Copy branch name
+                              </DropdownMenuItem>
+                              {!isCurrent && onDeleteBranch ? (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onSelect={() => void onDeleteBranch?.(branch.name, false)}
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                    Delete local
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive focus:text-destructive"
+                                    onSelect={() => {
+                                      if (window.confirm(`Force delete local branch "${branch.name}"?`)) {
+                                        void onDeleteBranch?.(branch.name, true);
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                    Force delete local
+                                  </DropdownMenuItem>
+                                </>
+                              ) : null}
+                              {!isCurrent && onDeleteRemoteBranch ? (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onSelect={() => {
+                                    if (window.confirm(`Delete remote branch "${branch.name}" from origin?`)) {
+                                      void onDeleteRemoteBranch?.(branch.name);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                  Delete remote
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             ) : tab === "branches" ? (
               <div className="px-2 py-3 text-xs text-muted-foreground">
@@ -357,7 +603,7 @@ export function BranchPicker({
                           <span className="block truncate font-medium">#{stash.index}: {stash.message}</span>
                           <span className="block truncate text-[11px] text-muted-foreground">{stash.date}</span>
                         </span>
-                        <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-background/95 opacity-0 shadow-sm transition-opacity group-hover/stash:pointer-events-auto group-hover/stash:opacity-100 group-focus-within/stash:pointer-events-auto group-focus-within/stash:opacity-100">
+                        <span className="pointer-events-none absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-card/95 px-0.5 opacity-0 shadow-sm ring-1 ring-border/70 transition-opacity group-hover/stash:pointer-events-auto group-hover/stash:opacity-100 group-focus-within/stash:pointer-events-auto group-focus-within/stash:opacity-100">
                           {onStashView || onStashOpen ? (
                             <StashActionButton
                               label={onStashOpen ? "Open stash diff" : isExpanded ? "Hide stash diff" : "View stash diff"}
@@ -450,6 +696,42 @@ interface StashActionButtonProps {
   destructive?: boolean;
   children: ReactNode;
   onClick: () => void;
+}
+
+interface BranchActionButtonProps {
+  label: string;
+  disabled?: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}
+
+function BranchActionButton({
+  label,
+  disabled = false,
+  children,
+  onClick,
+}: BranchActionButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-6 text-muted-foreground hover:bg-background/80 hover:text-foreground"
+          disabled={disabled}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick();
+          }}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function StashActionButton({
