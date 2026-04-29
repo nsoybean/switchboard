@@ -37,6 +37,9 @@ type GitWithActions = GitState &
     | "fetch"
     | "refresh"
     | "refreshStashes"
+    | "mergeBranch"
+    | "deleteBranch"
+    | "pushDeleteRemote"
     | "stashApply"
     | "stashPop"
     | "stashDrop"
@@ -247,6 +250,18 @@ export function CenterPanelHeader({
                 loading={git.branchesLoading && git.branches.length === 0}
                 value={git.branch}
                 disabled={git.branchActionPending}
+                currentBranchUpstreamStatus={git.currentBranchUpstreamStatus}
+                currentAheadBehind={git.aheadBehind}
+                pendingAction={git.pendingAction}
+                onFetch={git.fetch}
+                onPull={git.pull}
+                onPush={git.push}
+                onMergeBranch={(branchName) => git.mergeBranch(branchName, "merge")}
+                onSquashMergeBranch={(branchName) => git.mergeBranch(branchName, "squash")}
+                onRebaseBranch={(branchName) => git.mergeBranch(branchName, "rebase")}
+                onCreateWorktree={onCreateWorktree}
+                onDeleteBranch={git.deleteBranch}
+                onDeleteRemoteBranch={git.pushDeleteRemote}
                 triggerClassName="h-6 w-auto max-w-[190px] gap-1.5 border border-transparent bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:border-border hover:bg-card hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-card data-[state=open]:text-foreground"
                 createLabel="Create branch..."
                 onSelect={(branchName) => void git.switchBranch(branchName)}

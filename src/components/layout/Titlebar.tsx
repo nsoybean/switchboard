@@ -47,6 +47,9 @@ type GitWithActions = GitState &
     | "fetch"
     | "refresh"
     | "refreshStashes"
+    | "mergeBranch"
+    | "deleteBranch"
+    | "pushDeleteRemote"
     | "stashApply"
     | "stashPop"
     | "stashDrop"
@@ -110,7 +113,7 @@ export function Titlebar({
   const canPush = (git?.aheadBehind.ahead ?? 0) > 0;
   const canPull = (git?.aheadBehind.behind ?? 0) > 0;
   const pushLabel = "Push";
-  const anyGitPending = git?.branchActionPending || pullPending || pushPending || fetchPending;
+  const anyGitPending = git?.branchActionPending || Boolean(git?.pendingAction) || pullPending || pushPending || fetchPending;
 
   const handlePull = () => {
     if (!git?.pull || pullPending || anyGitPending) return;
@@ -161,13 +164,11 @@ export function Titlebar({
   }, [isFullscreen]);
 
   const handleMaximize = async () => {
-    const fullscreen = await appWindow.isFullscreen();
-    if (fullscreen) {
-      await appWindow.setFullscreen(false);
-      setIsFullscreen(false);
+    const maximized = await appWindow.isMaximized();
+    if (maximized) {
+      await appWindow.unmaximize();
     } else {
-      await appWindow.setFullscreen(true);
-      setIsFullscreen(true);
+      await appWindow.maximize();
     }
   };
 
@@ -231,6 +232,19 @@ export function Titlebar({
             loading={git.branchesLoading && git.branches.length === 0}
             value={git.branch}
             disabled={git.branchActionPending}
+            currentBranchUpstreamStatus={git.currentBranchUpstreamStatus}
+            currentAheadBehind={git.aheadBehind}
+            pendingAction={git.pendingAction}
+            githubToken={githubToken}
+            onFetch={git.fetch}
+            onPull={git.pull}
+            onPush={git.push}
+            onCreatePr={onCreatePr}
+            onMergeBranch={(branchName) => git.mergeBranch(branchName, "merge")}
+            onSquashMergeBranch={(branchName) => git.mergeBranch(branchName, "squash")}
+            onRebaseBranch={(branchName) => git.mergeBranch(branchName, "rebase")}
+            onDeleteBranch={git.deleteBranch}
+            onDeleteRemoteBranch={git.pushDeleteRemote}
             triggerClassName="h-6 w-auto max-w-[320px] gap-1.5 border-0 bg-transparent px-1 text-xs font-medium shadow-none hover:bg-muted/55"
             createLabel="Create branch..."
             onSelect={(branchName) => void git.switchBranch(branchName)}

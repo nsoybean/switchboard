@@ -1,5 +1,11 @@
-import { FolderTree, History } from "lucide-react";
+import { FolderTree, GitGraph, History } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FilePanel } from "../files/FilePanel";
 import { GitPanel } from "../git/GitPanel";
 import { GitHistory } from "../git/GitHistory";
@@ -34,6 +40,7 @@ interface WorkspacePanelProps {
   onCreatePr?: () => void;
   onFileSelect?: (filePath: string) => void;
   onOpenStashDiff?: (stash: StashEntry) => void | Promise<void>;
+  onOpenGitGraph?: () => void;
   onTabChange: (tab: WorkspaceTab) => void;
 }
 
@@ -70,6 +77,7 @@ export function WorkspacePanel({
   onCreatePr,
   onFileSelect,
   onOpenStashDiff,
+  onOpenGitGraph,
   onTabChange,
 }: WorkspacePanelProps) {
   const renderUnavailableState = (currentContext: WorkspaceContext, tab: WorkspaceTab) => {
@@ -132,6 +140,7 @@ export function WorkspacePanel({
         onCreatePr={onCreatePr}
         onFileSelect={onFileSelect}
         onOpenStashDiff={onOpenStashDiff}
+        onOpenGitGraph={onOpenGitGraph}
         onTabChange={onTabChange}
       />
     );
@@ -175,6 +184,23 @@ export function WorkspacePanel({
               </button>
             ))}
           </div>
+          {activeTab === "history" ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0"
+                  disabled={!onOpenGitGraph}
+                  onClick={() => onOpenGitGraph?.()}
+                >
+                  <GitGraph className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open Git Graph</TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
       </div>
 

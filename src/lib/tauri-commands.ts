@@ -40,6 +40,25 @@ export interface GitCommit {
   is_pushed: boolean;
 }
 
+export interface GitGraphCommit {
+  hash: string;
+  short_hash: string;
+  parents: string[];
+  refs: string[];
+  subject: string;
+  author: string;
+  email: string;
+  relative_date: string;
+  date: string;
+}
+
+export interface GitCommitFile {
+  path: string;
+  status: string;
+  additions?: number | null;
+  deletions?: number | null;
+}
+
 export interface GitAheadBehind {
   ahead: number;
   behind: number;
@@ -121,6 +140,10 @@ export const gitCommands = {
     invoke<GitAheadBehind>("git_ahead_behind", { cwd }),
   log: (cwd: string, limit: number, reference?: string) =>
     invoke<GitCommit[]>("git_log", { cwd, limit, reference }),
+  graphLog: (cwd: string, limit: number) =>
+    invoke<GitGraphCommit[]>("git_graph_log", { cwd, limit }),
+  commitFiles: (cwd: string, hash: string) =>
+    invoke<GitCommitFile[]>("git_commit_files", { cwd, hash }),
   fetch: (cwd: string) =>
     invoke<void>("git_fetch", { cwd }),
   merge: (cwd: string, branch: string, strategy: MergeStrategy) =>
@@ -154,6 +177,15 @@ export interface FileEntry {
   size: number | null;
 }
 
+export interface FileIndexEntry {
+  path: string;
+  relative_path: string;
+  basename: string;
+  directory: string;
+  extension: string;
+  size: number | null;
+}
+
 export interface DirectoryStatus {
   path: string;
   exists: boolean;
@@ -170,6 +202,8 @@ export const fileCommands = {
     invoke<string>("read_file_contents", { path }),
   saveTempImage: (data: number[], extension: string) =>
     invoke<string>("save_temp_image", { data, extension }),
+  indexFiles: (root: string) =>
+    invoke<FileIndexEntry[]>("index_files", { root }),
 };
 
 export const projectCommands = {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as Re
 import {
   Archive,
   FileText,
+  GitBranch,
   GripVertical,
   Plus,
   Play,
@@ -40,7 +41,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { workspaceLayoutCommands } from "@/lib/tauri-commands";
-import { getSwitchboardFileDragPath } from "@/lib/file-dnd";
+import { getDroppedFilePath } from "@/lib/file-dnd";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/state/types";
 import {
@@ -66,6 +67,7 @@ import {
 import { StatusDot } from "../ui/status-dot";
 import { InlineNewSession, type InlineNewSessionConfig } from "../session/InlineNewSession";
 import { FilePreview } from "../files/FilePreview";
+import { GitGraphDocument } from "../git/GitGraphDocument";
 import { StashDiffDocument, type StashDiffDocumentData } from "../git/StashDiffDocument";
 import { SessionTranscriptView } from "../terminal/SessionTranscriptView";
 import { XTermContainer } from "../terminal/XTermContainer";
@@ -75,6 +77,7 @@ interface PaneWorkspaceProps {
   liveSessions: Session[];
   transcriptSession: Session | null;
   openFilePath: string | null;
+  gitGraphPath: string | null;
   stashDiffs: StashDiffDocumentData[];
   revealRequest: { tabId: string; nonce: number } | null;
   projectPath: string | null;
@@ -85,6 +88,7 @@ interface PaneWorkspaceProps {
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (filePath: string) => void;
+  onCloseGitGraph: (cwd: string) => void;
   onCloseStashDiff: (id: string) => void;
   onResumeTranscript?: () => void;
   onSessionStart: (sessionId: string) => void;
@@ -124,7 +128,15 @@ interface StashDiffSurface {
   closable: true;
 }
 
-type PaneSurface = LiveSurface | TranscriptSurface | FileSurface | StashDiffSurface;
+interface GitGraphSurface {
+  id: string;
+  kind: "git-graph";
+  cwd: string;
+  title: string;
+  closable: true;
+}
+
+type PaneSurface = LiveSurface | TranscriptSurface | FileSurface | StashDiffSurface | GitGraphSurface;
 
 type DropZone = "center" | "top" | "right" | "bottom" | "left";
 
@@ -325,6 +337,7 @@ function DraggableTab({
   onSelectTab,
   onCloseSession,
   onCloseFile,
+  onCloseGitGraph,
   onCloseStashDiff,
   onCloseTranscript,
   onSelectLiveSession,
@@ -336,6 +349,7 @@ function DraggableTab({
   onSelectTab: () => void;
   onCloseSession: (id: string) => void;
   onCloseFile: (id: string) => void;
+  onCloseGitGraph: (id: string) => void;
   onCloseStashDiff: (id: string) => void;
   onCloseTranscript: () => void;
   onSelectLiveSession: (id: string) => void;
@@ -382,6 +396,8 @@ function DraggableTab({
       </span>
       {surface.kind === "file" ? (
         <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+      ) : surface.kind === "git-graph" ? (
+        <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
       ) : surface.kind === "stash-diff" ? (
         <Archive className="size-3.5 shrink-0 text-muted-foreground" />
       ) : surface.kind === "live-session" ? (
@@ -403,6 +419,8 @@ function DraggableTab({
               onCloseSession(surface.session.id);
             } else if (surface.kind === "file") {
               onCloseFile(surface.id);
+            } else if (surface.kind === "git-graph") {
+              onCloseGitGraph(surface.id);
             } else if (surface.kind === "stash-diff") {
               onCloseStashDiff(surface.id);
             } else {
@@ -433,6 +451,7 @@ function PaneLeafView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseGitGraph,
   onCloseStashDiff,
   onExternalFileDrop,
   onResumeTranscript,
@@ -450,6 +469,7 @@ function PaneLeafView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onCloseGitGraph: (surfaceId: string) => void;
   onCloseStashDiff: (id: string) => void;
   onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
@@ -477,7 +497,7 @@ function PaneLeafView({
     Boolean(onResumeTranscript);
 
   const handleBodyDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
-    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    const filePath = getDroppedFilePath(event.dataTransfer);
     if (!filePath) return;
 
     event.preventDefault();
@@ -487,7 +507,7 @@ function PaneLeafView({
   }, []);
 
   const handleBodyDrop = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
-    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    const filePath = getDroppedFilePath(event.dataTransfer);
     if (!filePath) return;
 
     event.preventDefault();
@@ -499,7 +519,7 @@ function PaneLeafView({
   }, [leaf.id, onExternalFileDrop]);
 
   const handleBodyDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
-    const filePath = getSwitchboardFileDragPath(event.dataTransfer);
+    const filePath = getDroppedFilePath(event.dataTransfer);
     if (!filePath) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
@@ -537,6 +557,7 @@ function PaneLeafView({
                   onSelectTab={() => onSelectTab(leaf.id, tabId)}
                   onCloseSession={onCloseSession}
                   onCloseFile={onCloseFile}
+                  onCloseGitGraph={onCloseGitGraph}
                   onCloseStashDiff={onCloseStashDiff}
                   onCloseTranscript={onCloseTranscript}
                   onSelectLiveSession={onSelectLiveSession}
@@ -656,6 +677,8 @@ function PaneLeafView({
                   onClose={() => onCloseFile(surface.id)}
                   showHeader={false}
                 />
+              ) : surface.kind === "git-graph" ? (
+                <GitGraphDocument cwd={surface.cwd} title={surface.title} />
               ) : surface.kind === "stash-diff" ? (
                 <StashDiffDocument stash={surface.stash} />
               ) : (
@@ -687,6 +710,7 @@ function PaneTreeView({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseGitGraph,
   onCloseStashDiff,
   onExternalFileDrop,
   onResumeTranscript,
@@ -707,6 +731,7 @@ function PaneTreeView({
   onCloseSession: (sessionId: string) => void;
   onCloseTranscript: () => void;
   onCloseFile: (surfaceId: string) => void;
+  onCloseGitGraph: (surfaceId: string) => void;
   onCloseStashDiff: (id: string) => void;
   onExternalFileDrop: (leafId: string, zone: DropZone, filePath: string) => void;
   onResumeTranscript?: () => void;
@@ -728,6 +753,7 @@ function PaneTreeView({
         onCloseSession={onCloseSession}
         onCloseTranscript={onCloseTranscript}
         onCloseFile={onCloseFile}
+        onCloseGitGraph={onCloseGitGraph}
         onCloseStashDiff={onCloseStashDiff}
         onExternalFileDrop={onExternalFileDrop}
         onResumeTranscript={onResumeTranscript}
@@ -760,6 +786,7 @@ function PaneTreeView({
               onCloseSession={onCloseSession}
               onCloseTranscript={onCloseTranscript}
               onCloseFile={onCloseFile}
+              onCloseGitGraph={onCloseGitGraph}
               onCloseStashDiff={onCloseStashDiff}
               onExternalFileDrop={onExternalFileDrop}
               onResumeTranscript={onResumeTranscript}
@@ -783,6 +810,7 @@ export function PaneWorkspace({
   liveSessions,
   transcriptSession,
   openFilePath,
+  gitGraphPath,
   stashDiffs,
   revealRequest,
   projectPath,
@@ -793,6 +821,7 @@ export function PaneWorkspace({
   onCloseSession,
   onCloseTranscript,
   onCloseFile,
+  onCloseGitGraph,
   onCloseStashDiff,
   onResumeTranscript,
   onSessionStart,
@@ -830,6 +859,17 @@ export function PaneWorkspace({
       });
     }
 
+    if (gitGraphPath) {
+      const label = gitGraphPath.split("/").pop() ?? "Repository";
+      nextSurfaces.push({
+        id: `git-graph:${gitGraphPath}`,
+        kind: "git-graph",
+        cwd: gitGraphPath,
+        title: `${label} graph`,
+        closable: true,
+      });
+    }
+
     for (const stash of stashDiffs) {
       nextSurfaces.push({
         id: stash.id,
@@ -841,7 +881,7 @@ export function PaneWorkspace({
     }
 
     return nextSurfaces;
-  }, [fileSurfacePaths, liveSessions, stashDiffs, transcriptSession]);
+  }, [fileSurfacePaths, gitGraphPath, liveSessions, stashDiffs, transcriptSession]);
 
   const surfacesById = useMemo(
     () => new Map(surfaces.map((surface) => [surface.id, surface])),
@@ -849,7 +889,9 @@ export function PaneWorkspace({
   );
   const preferredTabId = openFilePath
     ? `file:${openFilePath}`
-    : transcriptSession
+    : gitGraphPath
+      ? `git-graph:${gitGraphPath}`
+      : transcriptSession
       ? `transcript:${transcriptSession.resumeTargetId ?? transcriptSession.id}`
       : activeSession
         ? `live:${activeSession.id}`
@@ -1067,6 +1109,11 @@ export function PaneWorkspace({
     }
   }, [onCloseFile, openFilePath]);
 
+  const handleCloseGitGraphSurface = useCallback((surfaceId: string) => {
+    if (!surfaceId.startsWith("git-graph:")) return;
+    onCloseGitGraph(surfaceId.slice("git-graph:".length));
+  }, [onCloseGitGraph]);
+
   const handleExternalFileDrop = useCallback((leafId: string, zone: DropZone, filePath: string) => {
     const tabId = tabIdForFilePath(filePath);
 
@@ -1184,6 +1231,7 @@ export function PaneWorkspace({
           onCloseSession={onCloseSession}
           onCloseTranscript={onCloseTranscript}
           onCloseFile={handleCloseFileSurface}
+          onCloseGitGraph={handleCloseGitGraphSurface}
           onCloseStashDiff={onCloseStashDiff}
           onExternalFileDrop={handleExternalFileDrop}
           onResumeTranscript={onResumeTranscript}
@@ -1199,6 +1247,8 @@ export function PaneWorkspace({
           <div className="flex max-w-[360px] min-w-0 items-center gap-2 overflow-hidden rounded-md border border-border bg-background px-3 py-1.5 text-xs shadow-lg">
             {dragSurface.kind === "file" ? (
               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+            ) : dragSurface.kind === "git-graph" ? (
+              <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
             ) : dragSurface.kind === "stash-diff" ? (
               <Archive className="size-3.5 shrink-0 text-muted-foreground" />
             ) : dragSurface.kind === "live-session" ? (

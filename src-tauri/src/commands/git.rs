@@ -577,6 +577,27 @@ pub struct GitCommit {
 }
 
 #[derive(Debug, Serialize, Clone)]
+pub struct GitGraphCommit {
+    pub hash: String,
+    pub short_hash: String,
+    pub parents: Vec<String>,
+    pub refs: Vec<String>,
+    pub subject: String,
+    pub author: String,
+    pub email: String,
+    pub relative_date: String,
+    pub date: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct GitCommitFile {
+    pub path: String,
+    pub status: String,
+    pub additions: Option<u32>,
+    pub deletions: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Clone)]
 pub struct GitAheadBehind {
     pub ahead: u32,
     pub behind: u32,
@@ -712,6 +733,112 @@ pub fn git_log(cwd: String, limit: u32, reference: Option<String>) -> Result<Vec
     }
 
     Ok(commits)
+}
+
+/// Get a branch-aware commit log for graph rendering.
+#[tauri::command]
+pub fn git_graph_log(cwd: String, limit: u32) -> Result<Vec<GitGraphCommit>, String> {
+    let limit_str = limit.to_string();
+    let output = run_git(
+        &cwd,
+        &[
+            "log",
+            "--all",
+            "--topo-order",
+            "--date=short",
+            &format!("-{}", limit_str),
+            "--format=%H\x1f%h\x1f%P\x1f%D\x1f%s\x1f%an\x1f%ae\x1f%ar\x1f%ad",
+        ],
+    )?;
+
+    let mut commits = Vec::new();
+    for line in output.lines() {
+        let parts: Vec<&str> = line.splitn(9, '\x1f').collect();
+        if parts.len() < 9 {
+            continue;
+        }
+
+        let parents = parts[2]
+            .split_whitespace()
+            .map(|parent| parent.trim().to_string())
+            .filter(|parent| !parent.is_empty())
+            .collect();
+        let refs = parts[3]
+            .split(',')
+            .map(normalize_ref_label)
+            .filter(|reference| !reference.is_empty())
+            .collect();
+
+        commits.push(GitGraphCommit {
+            hash: parts[0].trim().to_string(),
+            short_hash: parts[1].trim().to_string(),
+            parents,
+            refs,
+            subject: parts[4].trim().to_string(),
+            author: parts[5].trim().to_string(),
+            email: parts[6].trim().to_string(),
+            relative_date: parts[7].trim().to_string(),
+            date: parts[8].trim().to_string(),
+        });
+    }
+
+    Ok(commits)
+}
+
+fn normalize_ref_label(raw: &str) -> String {
+    raw.trim()
+        .trim_start_matches("HEAD -> ")
+        .trim_start_matches("tag: ")
+        .trim_start_matches("refs/heads/")
+        .trim_start_matches("refs/remotes/")
+        .trim_start_matches("refs/tags/")
+        .to_string()
+}
+
+/// List changed files for a specific commit.
+#[tauri::command]
+pub fn git_commit_files(cwd: String, hash: String) -> Result<Vec<GitCommitFile>, String> {
+    let numstat_output = run_git(&cwd, &["show", "--format=", "--numstat", &hash])?;
+    let mut stats = HashMap::new();
+
+    for line in numstat_output.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let additions = parts[0].parse::<u32>().ok();
+        let deletions = parts[1].parse::<u32>().ok();
+        let path = normalize_numstat_path(&parts[2..].join("\t"));
+        stats.insert(path, (additions, deletions));
+    }
+
+    let name_output = run_git(&cwd, &["show", "--format=", "--name-status", &hash])?;
+    let mut files = Vec::new();
+
+    for line in name_output.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let status = parts[0].trim().to_string();
+        let path = if status.starts_with('R') || status.starts_with('C') {
+            parts.last().copied().unwrap_or(parts[1]).trim().to_string()
+        } else {
+            parts[1].trim().to_string()
+        };
+        let (additions, deletions) = stats.get(&path).copied().unwrap_or((None, None));
+
+        files.push(GitCommitFile {
+            path,
+            status,
+            additions,
+            deletions,
+        });
+    }
+
+    Ok(files)
 }
 
 /// Fetch from origin
