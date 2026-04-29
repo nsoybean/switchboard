@@ -1,8 +1,15 @@
-import { memo, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   CalendarDays,
   FileText,
-  GitBranch,
   GitCommit as GitCommitIcon,
   Mail,
   RefreshCw,
@@ -21,17 +28,24 @@ import {
 import { DiffView } from "./DiffView";
 
 const GRAPH_LIMIT = 300;
-const ROW_HEIGHT = 38;
-const LANE_WIDTH = 18;
-const GRAPH_PADDING = 18;
+const ROW_HEIGHT = 30;
+const HEADER_HEIGHT = 28;
+const LANE_WIDTH = 15;
+const GRAPH_PADDING = 15;
+const GRAPH_STROKE_WIDTH = 2.2;
+const DESCRIPTION_WIDTH = 720;
+const DATE_WIDTH = 148;
+const AUTHOR_WIDTH = 128;
+const COMMIT_WIDTH = 88;
+const ROW_OVERSCAN = 8;
 const LANE_COLORS = [
-  "var(--sb-status-info)",
-  "var(--sb-status-warning)",
-  "var(--sb-diff-add-fg)",
-  "var(--sb-diff-del-fg)",
-  "oklch(0.68 0.13 310)",
-  "oklch(0.7 0.12 190)",
-  "oklch(0.72 0.14 85)",
+  "oklch(0.62 0.18 252)",
+  "oklch(0.66 0.18 39)",
+  "oklch(0.58 0.15 328)",
+  "oklch(0.64 0.16 156)",
+  "oklch(0.62 0.15 205)",
+  "oklch(0.62 0.15 286)",
+  "oklch(0.7 0.15 92)",
 ];
 
 interface GitGraphDocumentProps {
@@ -47,7 +61,13 @@ interface GraphRow {
   parentLanes: number[];
 }
 
-function buildGraphRows(commits: GitGraphCommit[]): GraphRow[] {
+interface VirtualRows {
+  rows: GraphRow[];
+  topPadding: number;
+  totalHeight: number;
+}
+
+export function buildGraphRows(commits: GitGraphCommit[]): GraphRow[] {
   const lanes: string[] = [];
 
   return commits.map((commit) => {
@@ -59,19 +79,16 @@ function buildGraphRows(commits: GitGraphCommit[]): GraphRow[] {
 
     const lanesBefore = [...lanes];
     const parents = commit.parents.filter(Boolean);
+    const lanesAfter = [...lanesBefore];
 
-    if (parents.length === 0) {
-      lanes.splice(laneIndex, 1);
-    } else {
-      lanes.splice(laneIndex, 1, parents[0]);
-      for (let index = 1; index < parents.length; index += 1) {
-        if (!lanes.includes(parents[index])) {
-          lanes.splice(laneIndex + index, 0, parents[index]);
-        }
+    lanesAfter.splice(laneIndex, 1);
+    parents.forEach((parent, index) => {
+      if (!lanesAfter.includes(parent)) {
+        lanesAfter.splice(Math.min(laneIndex + index, lanesAfter.length), 0, parent);
       }
-    }
+    });
 
-    const lanesAfter = [...lanes];
+    lanes.splice(0, lanes.length, ...lanesAfter);
     const parentLanes = parents.map((parent) => {
       const index = lanesAfter.indexOf(parent);
       return index === -1 ? laneIndex : index;
@@ -89,6 +106,10 @@ function buildGraphRows(commits: GitGraphCommit[]): GraphRow[] {
 
 function laneColor(index: number) {
   return LANE_COLORS[index % LANE_COLORS.length];
+}
+
+function laneTint(index: number, alpha = 0.14) {
+  return `color-mix(in oklch, ${laneColor(index)} ${Math.round(alpha * 100)}%, transparent)`;
 }
 
 function laneX(index: number) {
@@ -110,9 +131,54 @@ function matchesQuery(commit: GitGraphCommit, query: string) {
   return haystack.includes(query);
 }
 
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const updateSize = () => {
+      setSize({
+        width: element.clientWidth,
+        height: element.clientHeight,
+      });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, size] as const;
+}
+
+function getGridTemplate(graphWidth: number) {
+  return `${graphWidth}px ${DESCRIPTION_WIDTH}px ${DATE_WIDTH}px ${AUTHOR_WIDTH}px ${COMMIT_WIDTH}px`;
+}
+
+function getVirtualRows(rows: GraphRow[], scrollTop: number, viewportHeight: number): VirtualRows {
+  const totalHeight = rows.length * ROW_HEIGHT;
+  const visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + ROW_OVERSCAN * 2;
+  const maxStartIndex = Math.max(0, rows.length - visibleCount);
+  const startIndex = Math.min(
+    maxStartIndex,
+    Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - ROW_OVERSCAN),
+  );
+  const endIndex = Math.min(rows.length, startIndex + visibleCount);
+
+  return {
+    rows: rows.slice(startIndex, endIndex),
+    topPadding: startIndex * ROW_HEIGHT,
+    totalHeight,
+  };
+}
+
 export const GitGraphDocument = memo(function GitGraphDocument({
   cwd,
-  title = "Git Graph",
 }: GitGraphDocumentProps) {
   const [commits, setCommits] = useState<GitGraphCommit[]>([]);
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
@@ -122,8 +188,10 @@ export const GitGraphDocument = memo(function GitGraphDocument({
   const [files, setFiles] = useState<GitCommitFile[]>([]);
   const [diff, setDiff] = useState("");
   const [detailLoading, setDetailLoading] = useState(false);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [listRef, listSize] = useElementSize<HTMLDivElement>();
 
-  const loadGraph = async () => {
+  const loadGraph = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -132,7 +200,7 @@ export const GitGraphDocument = memo(function GitGraphDocument({
       setSelectedHash((current) =>
         current && next.some((commit) => commit.hash === current)
           ? current
-          : next[0]?.hash ?? null,
+          : null,
       );
     } catch (err) {
       setError(String(err));
@@ -141,12 +209,11 @@ export const GitGraphDocument = memo(function GitGraphDocument({
     } finally {
       setLoading(false);
     }
-  };
+  }, [cwd]);
 
   useEffect(() => {
     void loadGraph();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cwd]);
+  }, [loadGraph]);
 
   useEffect(() => {
     if (!selectedHash) {
@@ -193,6 +260,12 @@ export const GitGraphDocument = memo(function GitGraphDocument({
     ...graphRows.map((row) => Math.max(row.lanesBefore.length, row.lanesAfter.length)),
   );
   const graphWidth = GRAPH_PADDING * 2 + maxLaneCount * LANE_WIDTH;
+  const gridTemplateColumns = getGridTemplate(graphWidth);
+  const tableWidth = graphWidth + DESCRIPTION_WIDTH + DATE_WIDTH + AUTHOR_WIDTH + COMMIT_WIDTH;
+  const virtualRows = useMemo(
+    () => getVirtualRows(filteredRows, scrollTop, Math.max(0, listSize.height - HEADER_HEIGHT)),
+    [filteredRows, listSize.height, scrollTop],
+  );
   const changedTotals = files.reduce(
     (total, file) => ({
       additions: total.additions + (file.additions ?? 0),
@@ -203,13 +276,8 @@ export const GitGraphDocument = memo(function GitGraphDocument({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background font-sans text-xs">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-card px-3">
-        <GitBranch className="size-4 text-muted-foreground" />
-        <span className="font-medium text-foreground">{title}</span>
-        <Badge variant="outline" className="h-5 px-1.5 font-mono text-[10px]">
-          {commits.length}
-        </Badge>
-        <div className="ml-2 flex h-7 min-w-0 max-w-md flex-1 items-center gap-2 rounded-md border bg-background px-2">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-card/85 px-3 backdrop-blur">
+        <div className="flex h-7 min-w-[180px] flex-1 items-center gap-2 rounded-md border bg-background px-2 shadow-xs sm:max-w-4xl">
           <Search className="size-3.5 shrink-0 text-muted-foreground" />
           <input
             value={query}
@@ -228,8 +296,11 @@ export const GitGraphDocument = memo(function GitGraphDocument({
             </button>
           ) : null}
         </div>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {normalizedQuery ? `${filteredRows.length}/${commits.length}` : `all refs`}
+        <Badge variant="outline" className="hidden h-6 shrink-0 px-2 font-mono text-[10px] sm:inline-flex">
+          {normalizedQuery ? `${filteredRows.length}/${commits.length}` : `${commits.length} commits`}
+        </Badge>
+        <span className="hidden shrink-0 font-mono text-[10px] text-muted-foreground md:inline">
+          all refs
         </span>
         <Button
           type="button"
@@ -243,16 +314,20 @@ export const GitGraphDocument = memo(function GitGraphDocument({
         </Button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] overflow-hidden">
-        <div className="min-w-0 overflow-hidden border-r">
-          <div className="grid h-8 grid-cols-[var(--graph-width)_minmax(320px,1fr)_132px_120px_84px] items-center border-b bg-muted/35 px-0 text-[11px] font-medium text-muted-foreground" style={{ "--graph-width": `${graphWidth}px` } as CSSProperties}>
-            <div className="px-3">Graph</div>
-            <div className="px-2">Description</div>
-            <div className="px-2">Date</div>
-            <div className="px-2">Author</div>
-            <div className="px-2">Commit</div>
-          </div>
-          <div className="h-[calc(100%-2rem)] overflow-auto">
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 overflow-hidden",
+          selectedCommit
+            ? "grid-cols-[minmax(0,1fr)_clamp(340px,34vw,520px)]"
+            : "grid-cols-[minmax(0,1fr)]",
+        )}
+      >
+        <div className="min-w-0 border-r">
+          <div
+            ref={listRef}
+            className="h-full overflow-auto bg-muted/10 contain-strict"
+            onScroll={(event) => setScrollTop(Math.max(0, event.currentTarget.scrollTop - HEADER_HEIGHT))}
+          >
             {loading && commits.length === 0 ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">
                 <Spinner className="mr-2 size-4" />
@@ -263,23 +338,41 @@ export const GitGraphDocument = memo(function GitGraphDocument({
             ) : filteredRows.length === 0 ? (
               <div className="p-4 text-muted-foreground">No matching commits.</div>
             ) : (
-              <div style={{ "--graph-width": `${graphWidth}px` } as CSSProperties}>
-                {filteredRows.map((row) => (
-                  <CommitGraphRow
-                    key={row.commit.hash}
-                    row={row}
-                    graphWidth={graphWidth}
-                    selected={row.commit.hash === selectedHash}
-                    onSelect={() => setSelectedHash(row.commit.hash)}
-                  />
-                ))}
+              <div style={{ minWidth: tableWidth }}>
+                <div
+                  className="sticky top-0 z-10 grid h-7 items-center border-b bg-muted/55 px-0 text-[11px] font-medium text-muted-foreground/90 shadow-[0_1px_0_var(--border)] backdrop-blur"
+                  style={{ gridTemplateColumns } as CSSProperties}
+                >
+                  <div className="border-r px-3">Graph</div>
+                  <div className="border-r px-2">Description</div>
+                  <div className="border-r px-2">Date</div>
+                  <div className="border-r px-2">Author</div>
+                  <div className="px-2">Commit</div>
+                </div>
+                <div className="relative" style={{ height: virtualRows.totalHeight }}>
+                  <div
+                    className="absolute left-0 right-0 top-0"
+                    style={{ transform: `translateY(${virtualRows.topPadding}px)` }}
+                  >
+                    {virtualRows.rows.map((row) => (
+                      <CommitGraphRow
+                        key={row.commit.hash}
+                        row={row}
+                        graphWidth={graphWidth}
+                        gridTemplateColumns={gridTemplateColumns}
+                        selected={row.commit.hash === selectedHash}
+                        onSelect={() => setSelectedHash(row.commit.hash)}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        <aside className="min-w-0 overflow-y-auto bg-card/65">
-          {selectedCommit ? (
+        {selectedCommit ? (
+          <aside className="min-w-0 overflow-y-auto border-l bg-card/75">
             <CommitDetail
               commit={selectedCommit}
               files={files}
@@ -287,11 +380,10 @@ export const GitGraphDocument = memo(function GitGraphDocument({
               loading={detailLoading}
               additions={changedTotals.additions}
               deletions={changedTotals.deletions}
+              onClose={() => setSelectedHash(null)}
             />
-          ) : (
-            <div className="p-4 text-muted-foreground">Select a commit.</div>
-          )}
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
@@ -300,11 +392,13 @@ export const GitGraphDocument = memo(function GitGraphDocument({
 function CommitGraphRow({
   row,
   graphWidth,
+  gridTemplateColumns,
   selected,
   onSelect,
 }: {
   row: GraphRow;
   graphWidth: number;
+  gridTemplateColumns: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -315,37 +409,44 @@ function CommitGraphRow({
       type="button"
       onClick={onSelect}
       className={cn(
-        "grid w-full grid-cols-[var(--graph-width)_minmax(320px,1fr)_132px_120px_84px] items-center border-b text-left transition-colors",
-        selected ? "bg-accent/70 text-foreground" : "hover:bg-muted/45",
+        "grid w-full items-center text-left transition-colors",
+        selected
+          ? "bg-muted/80 text-foreground shadow-[inset_3px_0_0_var(--primary)]"
+          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
       )}
       style={{
-        "--graph-width": `${graphWidth}px`,
-        minHeight: ROW_HEIGHT,
+        gridTemplateColumns,
+        height: ROW_HEIGHT,
       } as CSSProperties}
     >
       <GraphCell row={row} width={graphWidth} />
-      <div className="flex min-w-0 items-center gap-2 px-2">
-        <div className="flex min-w-0 shrink-0 items-center gap-1">
-          {commit.refs.slice(0, 3).map((reference) => (
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden border-l border-r px-2 whitespace-nowrap">
+        <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-hidden">
+          {commit.refs.slice(0, 3).map((reference, index) => (
             <Badge
               key={reference}
               variant={reference.includes("origin/") ? "outline" : "secondary"}
-              className="h-5 max-w-[160px] truncate px-1.5 font-mono text-[10px]"
+              className="h-[20px] max-w-[180px] shrink-0 truncate rounded-[4px] border px-1.5 font-mono text-[10px] font-medium"
+              style={{
+                backgroundColor: laneTint(row.parentLanes[index] ?? row.laneIndex, 0.1),
+                borderColor: laneColor(row.parentLanes[index] ?? row.laneIndex),
+                color: "var(--foreground)",
+              }}
             >
               {reference}
             </Badge>
           ))}
           {commit.refs.length > 3 ? (
-            <Badge variant="outline" className="h-5 px-1.5 font-mono text-[10px]">
+            <Badge variant="outline" className="h-[20px] rounded-[4px] px-1.5 font-mono text-[10px]">
               +{commit.refs.length - 3}
             </Badge>
           ) : null}
         </div>
-        <span className="min-w-0 truncate text-sm text-foreground/90">{commit.subject}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px]">{commit.subject}</span>
       </div>
-      <div className="truncate px-2 text-muted-foreground">{commit.date}</div>
-      <div className="truncate px-2 text-muted-foreground">{commit.author}</div>
-      <div className="truncate px-2 font-mono text-muted-foreground">{commit.short_hash}</div>
+      <div className="truncate border-r px-2 font-mono text-[11px] whitespace-nowrap">{commit.date}</div>
+      <div className="truncate border-r px-2 whitespace-nowrap">{commit.author}</div>
+      <div className="truncate px-2 font-mono text-muted-foreground whitespace-nowrap">{commit.short_hash}</div>
     </button>
   );
 }
@@ -356,41 +457,54 @@ function GraphCell({ row, width }: { row: GraphRow; width: number }) {
   const laneCount = Math.max(row.lanesBefore.length, row.lanesAfter.length);
 
   return (
-    <svg width={width} height={ROW_HEIGHT} className="block">
+    <svg
+      width={width}
+      height={ROW_HEIGHT}
+      className="block overflow-visible"
+      shapeRendering="geometricPrecision"
+    >
       {Array.from({ length: laneCount }).map((_, index) => {
-        const beforeActive = Boolean(row.lanesBefore[index]);
-        const afterActive = Boolean(row.lanesAfter[index]);
+        const beforeHash = row.lanesBefore[index];
+        const afterHash = row.lanesAfter[index];
+        const beforeActive = Boolean(beforeHash);
+        const afterActive = Boolean(afterHash);
+        const continues = beforeHash && beforeHash === afterHash;
         const x = laneX(index);
         return (
-          <g key={index}>
-            {beforeActive ? (
-              <line x1={x} y1={0} x2={x} y2={y - 5} stroke={laneColor(index)} strokeWidth="2" strokeLinecap="round" />
+          <g key={`${index}:${beforeHash ?? ""}:${afterHash ?? ""}`}>
+            {continues ? (
+              <line x1={x} y1={0} x2={x} y2={ROW_HEIGHT} stroke={laneColor(index)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
+            ) : beforeActive ? (
+              <line x1={x} y1={0} x2={x} y2={y} stroke={laneColor(index)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
             ) : null}
-            {afterActive ? (
-              <line x1={x} y1={y + 5} x2={x} y2={ROW_HEIGHT} stroke={laneColor(index)} strokeWidth="2" strokeLinecap="round" />
+            {afterActive && !continues ? (
+              <line x1={x} y1={y} x2={x} y2={ROW_HEIGHT} stroke={laneColor(index)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
             ) : null}
           </g>
         );
       })}
 
       {row.parentLanes.map((parentLane, index) => {
-        if (parentLane === row.laneIndex) return null;
+        if (index === 0 || parentLane === row.laneIndex) return null;
         const targetX = laneX(parentLane);
         const controlOffset = Math.max(8, Math.abs(targetX - currentX) / 2);
         const sweep = targetX > currentX ? controlOffset : -controlOffset;
         return (
           <path
             key={`${parentLane}-${index}`}
-            d={`M ${currentX} ${y} C ${currentX + sweep} ${y}, ${targetX - sweep} ${y + 8}, ${targetX} ${y + 8}`}
+            d={`M ${currentX} ${y} C ${currentX + sweep} ${y}, ${targetX - sweep} ${y}, ${targetX} ${y}`}
             fill="none"
             stroke={laneColor(parentLane)}
-            strokeWidth="2"
+            strokeWidth={GRAPH_STROKE_WIDTH}
             strokeLinecap="round"
+            opacity="0.92"
           />
         );
       })}
 
-      <circle cx={currentX} cy={y} r="4.5" fill={laneColor(row.laneIndex)} stroke="var(--background)" strokeWidth="1.5" />
+      <circle cx={currentX} cy={y} r="4.9" fill="var(--background)" opacity="0.96" />
+      <circle cx={currentX} cy={y} r="3.65" fill={laneColor(row.laneIndex)} stroke="var(--background)" strokeWidth="1.1" />
+      <circle cx={currentX} cy={y} r="1.65" fill="color-mix(in oklch, white 60%, transparent)" opacity="0.48" />
     </svg>
   );
 }
@@ -402,6 +516,7 @@ function CommitDetail({
   loading,
   additions,
   deletions,
+  onClose,
 }: {
   commit: GitGraphCommit;
   files: GitCommitFile[];
@@ -409,6 +524,7 @@ function CommitDetail({
   loading: boolean;
   additions: number;
   deletions: number;
+  onClose: () => void;
 }) {
   const initials = commit.author
     .split(/\s+/)
@@ -419,7 +535,17 @@ function CommitDetail({
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="border-b px-4 py-5 text-center">
+      <div className="relative border-b px-4 py-5 text-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-3 top-3 size-7"
+          onClick={onClose}
+          aria-label="Close commit details"
+        >
+          <X className="size-4" />
+        </Button>
         <div className="mx-auto flex size-14 items-center justify-center rounded-full border bg-background font-medium text-muted-foreground">
           {initials}
         </div>

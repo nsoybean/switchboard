@@ -745,7 +745,7 @@ pub fn git_graph_log(cwd: String, limit: u32) -> Result<Vec<GitGraphCommit>, Str
             "log",
             "--all",
             "--topo-order",
-            "--date=short",
+            "--date=format:%d %b %Y %H:%M",
             &format!("-{}", limit_str),
             "--format=%H\x1f%h\x1f%P\x1f%D\x1f%s\x1f%an\x1f%ae\x1f%ar\x1f%ad",
         ],
