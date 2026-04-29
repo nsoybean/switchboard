@@ -380,6 +380,9 @@ export const GitGraphDocument = memo(function GitGraphDocument({
     () => getVirtualRows(filteredRows, scrollTop, Math.max(0, listSize.height - HEADER_HEIGHT)),
     [filteredRows, listSize.height, scrollTop],
   );
+  const handleSelectHash = useCallback((hash: string) => {
+    setSelectedHash(hash);
+  }, []);
   const changedTotals = files.reduce(
     (total, file) => ({
       additions: total.additions + (file.additions ?? 0),
@@ -484,7 +487,7 @@ export const GitGraphDocument = memo(function GitGraphDocument({
                         graphWidth={graphWidth}
                         gridTemplateColumns={gridTemplateColumns}
                         selected={row.commit.hash === selectedHash}
-                        onSelect={() => setSelectedHash(row.commit.hash)}
+                        onSelectHash={handleSelectHash}
                       />
                     ))}
                   </div>
@@ -512,34 +515,38 @@ export const GitGraphDocument = memo(function GitGraphDocument({
   );
 });
 
-function CommitGraphRow({
+const CommitGraphRow = memo(function CommitGraphRow({
   row,
   graphWidth,
   gridTemplateColumns,
   selected,
-  onSelect,
+  onSelectHash,
 }: {
   row: GraphRow;
   graphWidth: number;
   gridTemplateColumns: string;
   selected: boolean;
-  onSelect: () => void;
+  onSelectHash: (hash: string) => void;
 }) {
   const { commit } = row;
+  const handleSelect = useCallback(() => {
+    onSelectHash(commit.hash);
+  }, [commit.hash, onSelectHash]);
 
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={handleSelect}
       className={cn(
-        "grid w-full items-center text-left transition-colors",
+        "grid w-full items-center text-left",
         selected
           ? "bg-muted/80 text-foreground shadow-[inset_3px_0_0_var(--primary)]"
-          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+          : "text-muted-foreground hover:bg-muted/45",
       )}
       style={{
         gridTemplateColumns,
         height: ROW_HEIGHT,
+        contain: "layout paint style",
       } as CSSProperties}
     >
       <GraphCell row={row} width={graphWidth} />
@@ -572,9 +579,9 @@ function CommitGraphRow({
       <div className="truncate px-2 font-mono text-muted-foreground whitespace-nowrap">{commit.short_hash}</div>
     </button>
   );
-}
+});
 
-function GraphCell({ row, width }: { row: GraphRow; width: number }) {
+const GraphCell = memo(function GraphCell({ row, width }: { row: GraphRow; width: number }) {
   const y = ROW_HEIGHT / 2;
   const currentX = laneX(row.laneIndex);
 
@@ -588,6 +595,7 @@ function GraphCell({ row, width }: { row: GraphRow; width: number }) {
       height={ROW_HEIGHT}
       className="block overflow-visible"
       shapeRendering="geometricPrecision"
+      style={{ contain: "paint" }}
     >
       {/* Pass-through lanes: hashes active before this commit that continue after.
           When a lane shifts position (e.g. left-compaction after a merge), draw an
@@ -638,7 +646,7 @@ function GraphCell({ row, width }: { row: GraphRow; width: number }) {
       <circle cx={currentX} cy={y} r="1.65" fill="color-mix(in oklch, white 60%, transparent)" opacity="0.48" />
     </svg>
   );
-}
+});
 
 function CommitDetail({
   commit,
