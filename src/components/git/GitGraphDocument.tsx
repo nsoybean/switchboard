@@ -59,6 +59,7 @@ interface GraphRow {
   lanesAfter: string[];
   laneIndex: number;
   parentLanes: number[];
+  isNew: boolean;
 }
 
 interface VirtualRows {
@@ -72,7 +73,8 @@ export function buildGraphRows(commits: GitGraphCommit[]): GraphRow[] {
 
   return commits.map((commit) => {
     let laneIndex = lanes.indexOf(commit.hash);
-    if (laneIndex === -1) {
+    const isNew = laneIndex === -1;
+    if (isNew) {
       laneIndex = lanes.length;
       lanes.push(commit.hash);
     }
@@ -81,12 +83,22 @@ export function buildGraphRows(commits: GitGraphCommit[]): GraphRow[] {
     const parents = commit.parents.filter(Boolean);
     const lanesAfter = [...lanesBefore];
 
-    lanesAfter.splice(laneIndex, 1);
-    parents.forEach((parent, index) => {
+    // First parent: replace commit's slot in-place to avoid shifting other lanes.
+    // If first parent is already being tracked elsewhere, just remove the slot (compaction).
+    const firstParent = parents[0];
+    if (firstParent && !lanesAfter.includes(firstParent)) {
+      lanesAfter[laneIndex] = firstParent;
+    } else {
+      lanesAfter.splice(laneIndex, 1);
+    }
+
+    // Additional parents: append to the far right to avoid shifting active lanes.
+    for (let i = 1; i < parents.length; i++) {
+      const parent = parents[i];
       if (!lanesAfter.includes(parent)) {
-        lanesAfter.splice(Math.min(laneIndex + index, lanesAfter.length), 0, parent);
+        lanesAfter.push(parent);
       }
-    });
+    }
 
     lanes.splice(0, lanes.length, ...lanesAfter);
     const parentLanes = parents.map((parent) => {
@@ -100,12 +112,49 @@ export function buildGraphRows(commits: GitGraphCommit[]): GraphRow[] {
       lanesAfter,
       laneIndex,
       parentLanes,
+      isNew,
     };
   });
 }
 
 function laneColor(index: number) {
   return LANE_COLORS[index % LANE_COLORS.length];
+}
+
+function divergenceRowSplitPath(x1: number, y1: number, x2: number, y2: number): string {
+  const midY = ROW_HEIGHT / 2;
+  if (x1 === x2) return `M ${x1} ${y1} L ${x2} ${y2}`;
+  const radius = Math.min(5, Math.abs(x2 - x1) / 2, Math.abs(y2 - midY));
+  const direction = Math.sign(x2 - x1);
+  const turnInX = x2 - direction * radius;
+  const endY = midY + radius;
+
+  return [
+    `M ${x1} ${y1}`,
+    `L ${turnInX} ${midY}`,
+    `Q ${x2} ${midY} ${x2} ${endY}`,
+    `L ${x2} ${y2}`,
+  ].join(" ");
+}
+
+function roundedRowSplitPath(x1: number, y1: number, x2: number, y2: number): string {
+  const midY = ROW_HEIGHT / 2;
+  if (x1 === x2) return `M ${x1} ${y1} L ${x2} ${y2}`;
+  const radius = Math.min(5, Math.abs(x2 - x1) / 2, Math.abs(midY - y1), Math.abs(y2 - midY));
+  const direction = Math.sign(x2 - x1);
+  const startY = midY - radius;
+  const endY = midY + radius;
+  const turnOutX = x1 + direction * radius;
+  const turnInX = x2 - direction * radius;
+
+  return [
+    `M ${x1} ${y1}`,
+    `L ${x1} ${startY}`,
+    `Q ${x1} ${midY} ${turnOutX} ${midY}`,
+    `L ${turnInX} ${midY}`,
+    `Q ${x2} ${midY} ${x2} ${endY}`,
+    `L ${x2} ${y2}`,
+  ].join(" ");
 }
 
 function laneTint(index: number, alpha = 0.14) {
@@ -433,7 +482,7 @@ function CommitGraphRow({
                 color: "var(--foreground)",
               }}
             >
-              {reference}
+              <span className="min-w-0 truncate">{reference}</span>
             </Badge>
           ))}
           {commit.refs.length > 3 ? (
@@ -454,7 +503,10 @@ function CommitGraphRow({
 function GraphCell({ row, width }: { row: GraphRow; width: number }) {
   const y = ROW_HEIGHT / 2;
   const currentX = laneX(row.laneIndex);
-  const laneCount = Math.max(row.lanesBefore.length, row.lanesAfter.length);
+
+  // Build an index map so lane moves can be drawn as one connected edge.
+  const afterMap = new Map<string, number>();
+  row.lanesAfter.forEach((hash, i) => { if (hash) afterMap.set(hash, i); });
 
   return (
     <svg
@@ -463,47 +515,52 @@ function GraphCell({ row, width }: { row: GraphRow; width: number }) {
       className="block overflow-visible"
       shapeRendering="geometricPrecision"
     >
-      {Array.from({ length: laneCount }).map((_, index) => {
-        const beforeHash = row.lanesBefore[index];
-        const afterHash = row.lanesAfter[index];
-        const beforeActive = Boolean(beforeHash);
-        const afterActive = Boolean(afterHash);
-        const continues = beforeHash && beforeHash === afterHash;
-        const x = laneX(index);
+      {/* Pass-through lanes: hashes active before this commit that continue after.
+          When a lane shifts position (e.g. left-compaction after a merge), draw an
+          orthogonal row split so the line stays connected instead of becoming two stubs. */}
+      {row.lanesBefore.map((hash, fromIdx) => {
+        if (!hash || hash === row.commit.hash) return null;
+        const toIdx = afterMap.get(hash);
+        if (toIdx === undefined) return null;
+        const fromX = laneX(fromIdx);
+        const toX = laneX(toIdx);
+        if (fromX === toX) {
+          return (
+            <line key={`pass-${fromIdx}`} x1={fromX} y1={0} x2={toX} y2={ROW_HEIGHT}
+              stroke={laneColor(fromIdx)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
+          );
+        }
         return (
-          <g key={`${index}:${beforeHash ?? ""}:${afterHash ?? ""}`}>
-            {continues ? (
-              <line x1={x} y1={0} x2={x} y2={ROW_HEIGHT} stroke={laneColor(index)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
-            ) : beforeActive ? (
-              <line x1={x} y1={0} x2={x} y2={y} stroke={laneColor(index)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
-            ) : null}
-            {afterActive && !continues ? (
-              <line x1={x} y1={y} x2={x} y2={ROW_HEIGHT} stroke={laneColor(index)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
-            ) : null}
-          </g>
+          <path key={`shift-${fromIdx}`}
+            d={roundedRowSplitPath(fromX, 0, toX, ROW_HEIGHT)}
+            fill="none" stroke={laneColor(fromIdx)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
         );
       })}
 
-      {row.parentLanes.map((parentLane, index) => {
-        if (index === 0 || parentLane === row.laneIndex) return null;
+      {/* Incoming half-line: only when this commit was already being tracked from above */}
+      {!row.isNew && (
+        <line x1={currentX} y1={0} x2={currentX} y2={y}
+          stroke={laneColor(row.laneIndex)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
+      )}
+
+      {/* Outgoing parent lines: straight down for same-lane parents, row split for others */}
+      {row.parentLanes.map((parentLane, idx) => {
         const targetX = laneX(parentLane);
-        const controlOffset = Math.max(8, Math.abs(targetX - currentX) / 2);
-        const sweep = targetX > currentX ? controlOffset : -controlOffset;
+        if (parentLane === row.laneIndex) {
+          return (
+            <line key={`par-${idx}`} x1={currentX} y1={y} x2={currentX} y2={ROW_HEIGHT}
+              stroke={laneColor(row.laneIndex)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" opacity="0.9" />
+          );
+        }
         return (
-          <path
-            key={`${parentLane}-${index}`}
-            d={`M ${currentX} ${y} C ${currentX + sweep} ${y}, ${targetX - sweep} ${y}, ${targetX} ${y}`}
-            fill="none"
-            stroke={laneColor(parentLane)}
-            strokeWidth={GRAPH_STROKE_WIDTH}
-            strokeLinecap="round"
-            opacity="0.92"
-          />
+          <path key={`par-${idx}`}
+            d={divergenceRowSplitPath(currentX, y, targetX, ROW_HEIGHT)}
+            fill="none" stroke={laneColor(parentLane)} strokeWidth={GRAPH_STROKE_WIDTH} strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
         );
       })}
 
-      <circle cx={currentX} cy={y} r="4.9" fill="var(--background)" opacity="0.96" />
-      <circle cx={currentX} cy={y} r="3.65" fill={laneColor(row.laneIndex)} stroke="var(--background)" strokeWidth="1.1" />
+      <circle cx={currentX} cy={y} r="4.15" fill={laneColor(row.laneIndex)} opacity="0.22" />
+      <circle cx={currentX} cy={y} r="3.65" fill={laneColor(row.laneIndex)} stroke="var(--background)" strokeWidth="0.6" />
       <circle cx={currentX} cy={y} r="1.65" fill="color-mix(in oklch, white 60%, transparent)" opacity="0.48" />
     </svg>
   );

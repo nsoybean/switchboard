@@ -36,4 +36,32 @@ describe("buildGraphRows", () => {
     );
     expect(rows[2].lanesAfter).toEqual(["other-parent"]);
   });
+
+  it("keeps a branch parent lane connected across stash pseudo-commits", () => {
+    const rows = buildGraphRows([
+      commit("merge-2466", ["merge-2465", "fix-typing"]),
+      commit("fix-typing", ["script-base"]),
+      commit("merge-2465", ["main-base", "script-base"]),
+      commit("main-base", ["older-main", "bulk-fix"]),
+      commit("stash", ["script-base", "stash-index", "stash-untracked"]),
+      commit("stash-untracked"),
+      commit("stash-index", ["script-base"]),
+      commit("script-base", ["older-main"]),
+    ]);
+
+    const fixTyping = rows[1];
+    const merge2465 = rows[2];
+    const stash = rows[4];
+    const scriptBase = rows[7];
+
+    expect(fixTyping.lanesAfter[fixTyping.parentLanes[0]]).toBe("script-base");
+    expect(merge2465.lanesBefore).toContain("script-base");
+    expect(merge2465.lanesAfter).toContain("script-base");
+    expect(stash.parentLanes.map((lane) => stash.lanesAfter[lane])).toEqual([
+      "script-base",
+      "stash-index",
+      "stash-untracked",
+    ]);
+    expect(scriptBase.isNew).toBe(false);
+  });
 });
