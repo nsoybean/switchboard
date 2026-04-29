@@ -657,7 +657,6 @@ function PaneLeafView({
             <div key={tabId} className={cn(
               "h-full min-h-0",
               isActive ? "block" : "hidden",
-              surface.kind !== "live-session" && "p-1.5",
             )}>
               {surface.kind === "live-session" ? (
                 <XTermContainer
