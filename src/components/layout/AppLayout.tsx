@@ -358,13 +358,9 @@ export function AppLayout() {
 
   const handleWindowClose = useCallback(() => void appWindow.close(), [appWindow]);
   const handleWindowMinimize = useCallback(() => void appWindow.minimize(), [appWindow]);
-  const handleWindowMaximize = useCallback(async () => {
-    const maximized = await appWindow.isMaximized();
-    if (maximized) {
-      await appWindow.unmaximize();
-    } else {
-      await appWindow.maximize();
-    }
+  const handleWindowFullscreen = useCallback(async () => {
+    const fullscreen = await appWindow.isFullscreen();
+    await appWindow.setFullscreen(!fullscreen);
   }, [appWindow]);
 
   // Intercept window close to show quit confirmation if sessions are live
@@ -1624,7 +1620,7 @@ export function AppLayout() {
     workspaceShellMode,
     onClose: handleWindowClose,
     onMinimize: handleWindowMinimize,
-    onMaximize: () => void handleWindowMaximize(),
+    onMaximize: () => void handleWindowFullscreen(),
     onToggleSidebar: () => setSidebarOpen((prev) => !prev),
     onToggleInspector: () => setInspectorOpen((prev) => !prev),
     onWorkspaceShellModeChange: setWorkspaceShellMode,
@@ -1752,7 +1748,7 @@ export function AppLayout() {
             <div className="flex items-center gap-1.5 pl-3 pr-2">
               <button onClick={handleWindowClose} className="sb-window-control sb-window-control-close size-3 rounded-full bg-[#ff5f57] transition-all hover:brightness-90" aria-label="Close" />
               <button onClick={handleWindowMinimize} className="sb-window-control sb-window-control-minimize size-3 rounded-full bg-[#febc2e] transition-all hover:brightness-90" aria-label="Minimize" />
-              <button onClick={() => void handleWindowMaximize()} className="sb-window-control sb-window-control-fullscreen size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90" aria-label="Fullscreen" />
+              <button onClick={() => void handleWindowFullscreen()} className="sb-window-control sb-window-control-fullscreen size-3 rounded-full bg-[#28c840] transition-all hover:brightness-90" aria-label="Fullscreen" />
             </div>
           )}
           <div data-tauri-drag-region className="flex-1" />
@@ -1788,7 +1784,7 @@ export function AppLayout() {
                   isFullscreen={isFullscreen}
                   onClose={handleWindowClose}
                   onMinimize={handleWindowMinimize}
-                  onMaximize={() => void handleWindowMaximize()}
+                  onMaximize={() => void handleWindowFullscreen()}
                   onToggleSidebar={() => setSidebarOpen(false)}
                 />
               </div>
@@ -1895,7 +1891,7 @@ export function AppLayout() {
             isFullscreen={isFullscreen}
             onClose={handleWindowClose}
             onMinimize={handleWindowMinimize}
-            onMaximize={() => void handleWindowMaximize()}
+            onMaximize={() => void handleWindowFullscreen()}
             onToggleSidebar={() => setSidebarOpen(false)}
           />
           <div className="flex-1 min-h-0 overflow-hidden">

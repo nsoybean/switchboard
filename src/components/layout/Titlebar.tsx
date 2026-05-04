@@ -164,12 +164,8 @@ export function Titlebar({
   }, [isFullscreen]);
 
   const handleMaximize = async () => {
-    const maximized = await appWindow.isMaximized();
-    if (maximized) {
-      await appWindow.unmaximize();
-    } else {
-      await appWindow.maximize();
-    }
+    const fullscreen = await appWindow.isFullscreen();
+    await appWindow.setFullscreen(!fullscreen);
   };
 
   return (
