@@ -64,6 +64,10 @@ const LIGHT_THEME = {
   yellow: "#845306",
 };
 
+const TERMINAL_FONT_FAMILY = '"JetBrains Mono", "SF Mono", Menlo, Monaco, monospace';
+const LIGHT_FONT_WEIGHT = "500";
+const DARK_FONT_WEIGHT = "normal";
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -237,9 +241,9 @@ function XTermContainerComponent({
       allowTransparency: true,
       allowProposedApi: true,
       cursorBlink: true,
-      fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
+      fontFamily: TERMINAL_FONT_FAMILY,
       fontSize: 13.5,
-      fontWeight: "normal",
+      fontWeight: isDarkRef.current ? DARK_FONT_WEIGHT : LIGHT_FONT_WEIGHT,
       fontWeightBold: "bold",
       lineHeight: 1.3,
       macOptionIsMeta: true,
@@ -631,6 +635,7 @@ function XTermContainerComponent({
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (terminalRef.current) {
+      terminalRef.current.options.fontWeight = isDark ? DARK_FONT_WEIGHT : LIGHT_FONT_WEIGHT;
       terminalRef.current.options.minimumContrastRatio = isDark ? 1 : 4.5;
       terminalRef.current.options.theme = isDark ? DARK_THEME : LIGHT_THEME;
     }
@@ -689,7 +694,7 @@ function XTermContainerComponent({
             autoCapitalize="off"
             spellCheck={false}
             className="h-6 w-48 border-none bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-            style={{ fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace' }}
+            style={{ fontFamily: TERMINAL_FONT_FAMILY }}
           />
           <button
             onClick={() => doSearch(searchQuery, "prev")}
