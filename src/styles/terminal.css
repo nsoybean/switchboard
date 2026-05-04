@@ -7,6 +7,11 @@
 .xterm {
   height: 100%;
   background: transparent !important;
+  font-family: var(--font-mono);
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .xterm .xterm-viewport,
@@ -19,18 +24,15 @@
   background: transparent !important;
 }
 
+.xterm canvas {
+  display: block;
+}
+
 /* Light mode: override dim/faint text (SGR 2) — xterm.js renders at ~50% opacity
    which is unreadable on white. Set to 1.0 and let color alone convey emphasis,
    matching how Warp handles dim text in light mode. */
 :root:not(.dark) .xterm .xterm-dim {
   opacity: 1 !important;
-}
-
-/* Light mode: subpixel antialiasing makes text appear thicker on macOS.
-   We can't use fontWeight "bold" (breaks column calculations) so this
-   is the next best thing for perceived weight. */
-:root:not(.dark) .xterm canvas {
-  -webkit-font-smoothing: subpixel-antialiased !important;
 }
 
 .xterm-viewport::-webkit-scrollbar {
