@@ -1,6 +1,8 @@
-import { useEffect, useId, useState, useRef } from "react";
+import { useEffect, useId, useState, useRef, type CSSProperties } from "react";
 import { File, X } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -231,7 +233,7 @@ export function FilePreview({
           <div className="p-4 text-xs text-destructive">{error}</div>
         )}
         {content !== null && showingMarkdownPreview ? (
-          <MarkdownPreview content={content} />
+          <MarkdownPreview content={content} filePath={filePath} />
         ) : null}
         {content !== null && !showingMarkdownPreview && highlightedHtml ? (
           <div
@@ -257,11 +259,18 @@ export function FilePreview({
   );
 }
 
-function MarkdownPreview({ content }: { content: string }) {
+function MarkdownPreview({
+  content,
+  filePath,
+}: {
+  content: string;
+  filePath: string;
+}) {
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-5 font-sans text-sm leading-6 text-foreground">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           h1: ({ children }) => (
             <h1 className="mb-4 border-b pb-2 text-2xl font-semibold leading-tight">
@@ -279,8 +288,28 @@ function MarkdownPreview({ content }: { content: string }) {
           h4: ({ children }) => (
             <h4 className="mb-2 mt-4 text-sm font-semibold">{children}</h4>
           ),
-          p: ({ children }) => (
-            <p className="mb-3 whitespace-pre-wrap break-words">{children}</p>
+          p: ({ children, ...props }) => {
+            const htmlProps = props as { align?: unknown };
+            const align =
+              typeof htmlProps.align === "string" ? htmlProps.align : undefined;
+
+            return (
+              <p
+                className="mb-3 whitespace-pre-wrap break-words"
+                style={align ? { textAlign: markdownTextAlign(align) } : undefined}
+              >
+                {children}
+              </p>
+            );
+          },
+          img: ({ src, alt, width, height }) => (
+            <img
+              src={resolveMarkdownImageSrc(src, filePath)}
+              alt={alt ?? ""}
+              width={width}
+              height={height}
+              className="my-3 inline-block max-w-full rounded-md border object-contain"
+            />
           ),
           ul: ({ children }) => (
             <ul className="mb-3 ml-5 list-disc space-y-1">{children}</ul>
@@ -346,4 +375,65 @@ function MarkdownPreview({ content }: { content: string }) {
       </ReactMarkdown>
     </div>
   );
+}
+
+function resolveMarkdownImageSrc(src: string | undefined, filePath: string) {
+  if (!src || isExternalMarkdownSrc(src)) return src;
+
+  const decodedSrc = decodeUriPath(src);
+  const imagePath = isAbsolutePath(decodedSrc)
+    ? decodedSrc
+    : normalizePath(`${dirname(filePath)}/${decodedSrc}`);
+
+  try {
+    return convertFileSrc(imagePath);
+  } catch {
+    return `file://${imagePath}`;
+  }
+}
+
+function isExternalMarkdownSrc(src: string) {
+  return /^(?:[a-z][a-z0-9+.-]*:|#|\/\/)/i.test(src);
+}
+
+function isAbsolutePath(path: string) {
+  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+}
+
+function dirname(path: string) {
+  const normalized = path.replace(/\\/g, "/");
+  const index = normalized.lastIndexOf("/");
+  return index === -1 ? "." : normalized.slice(0, index);
+}
+
+function normalizePath(path: string) {
+  const isAbsolute = path.startsWith("/");
+  const parts = path.replace(/\\/g, "/").split("/");
+  const normalized: string[] = [];
+
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      normalized.pop();
+      continue;
+    }
+    normalized.push(part);
+  }
+
+  return `${isAbsolute ? "/" : ""}${normalized.join("/")}`;
+}
+
+function decodeUriPath(path: string) {
+  try {
+    return decodeURI(path);
+  } catch {
+    return path;
+  }
+}
+
+function markdownTextAlign(align: string): CSSProperties["textAlign"] {
+  if (align === "center" || align === "left" || align === "right") {
+    return align;
+  }
+  return undefined;
 }
