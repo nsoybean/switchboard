@@ -85,7 +85,7 @@ export function WorkspacePanel({
       return (
         <EmptyWorkspaceState
           title="Resolving workspace"
-          description="Switchboard is validating the selected session's workspace root."
+          description="Switchboard is validating the selected agent's workspace root."
         />
       );
     }
@@ -104,7 +104,7 @@ export function WorkspacePanel({
       return (
         <EmptyWorkspaceState
           title="No workspace selected"
-          description="Open a project or select a session to inspect its workspace."
+          description="Open a project or select an agent to inspect its workspace."
           icon
         />
       );

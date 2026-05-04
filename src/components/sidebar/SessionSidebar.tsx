@@ -937,7 +937,7 @@ export function SessionSidebar({
                   void handleRenameSubmit();
                 }
               }}
-              placeholder="Session label"
+              placeholder="Agent label"
             />
           </div>
           <DialogFooter>

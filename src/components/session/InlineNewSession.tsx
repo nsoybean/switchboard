@@ -460,7 +460,7 @@ export function InlineNewSession({ projectPath, projectPaths, onProjectSelect, o
             onClick={handleSubmit}
             disabled={disableSubmit}
             className="absolute bottom-2.5 right-2.5 inline-flex size-7 items-center justify-center rounded-md bg-foreground text-background transition-opacity disabled:opacity-30"
-            aria-label="Start session"
+            aria-label="Start agent"
           >
             <CornerDownLeft className="size-3.5" />
           </button>

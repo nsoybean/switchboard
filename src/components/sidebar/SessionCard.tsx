@@ -95,7 +95,7 @@ export function SessionCard({
         className="inline-flex max-w-[240px] items-center rounded-md bg-card px-2 py-1 shadow-sm ring-1 ring-border"
       >
         <span className="truncate text-[12px] font-medium">
-          {session.label || "New session"}
+          {session.label || "New agent"}
         </span>
       </div>
     );

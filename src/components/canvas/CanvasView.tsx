@@ -201,7 +201,7 @@ function SessionTileComponent({
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => onStopSession(session.id)}
               aria-label={`Stop ${session.label}`}
-              title="Stop session"
+              title="Stop agent"
             >
               <Square className="size-3" />
             </button>

@@ -948,7 +948,7 @@ export function PaneWorkspace({
       id: `live:${session.id}`,
       kind: "live-session",
       session,
-      title: session.label || "New session",
+      title: session.label || "New agent",
       closable: true,
     }));
 

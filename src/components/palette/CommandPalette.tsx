@@ -97,7 +97,7 @@ export function CommandPalette({
             </Command.Empty>
 
             {liveSessions.length > 0 && (
-              <Command.Group heading="Live sessions">
+              <Command.Group heading="Active agents">
                 {liveSessions.map((session) => (
                   <Command.Item
                     key={`live-${session.id}`}
@@ -113,7 +113,7 @@ export function CommandPalette({
                   >
                     <AgentIcon agent={session.agent} className="size-4 shrink-0" />
                     <span className="min-w-0 flex-1 truncate font-medium">
-                      {session.label || "New session"}
+                      {session.label || "New agent"}
                     </span>
                     <span className="shrink-0 text-[11px] text-muted-foreground">
                       Jump to tab
@@ -146,7 +146,7 @@ export function CommandPalette({
                   >
                     <AgentIcon agent={session.agent} className="size-4 shrink-0 opacity-60" />
                     <span className="min-w-0 flex-1 truncate">
-                      {session.label || "New session"}
+                      {session.label || "New agent"}
                     </span>
                     <span className="shrink-0 text-[11px] text-muted-foreground">
                       Open transcript
