@@ -203,9 +203,9 @@ export function NewSessionDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
-          <DialogTitle>New Session</DialogTitle>
+          <DialogTitle>New Agent</DialogTitle>
           <DialogDescription>
-            Launch a new AI coding agent session.
+            Launch a new AI coding agent.
           </DialogDescription>
         </DialogHeader>
 
@@ -247,7 +247,7 @@ export function NewSessionDialog({
           {/* Label */}
           <div className="flex flex-col gap-2">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Session Label (optional)
+              Agent Label (optional)
             </label>
             <Input
               value={label}
@@ -319,7 +319,7 @@ export function NewSessionDialog({
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={disableSubmit}>
-              Start Session
+              Start Agent
             </Button>
           </div>
         </div>

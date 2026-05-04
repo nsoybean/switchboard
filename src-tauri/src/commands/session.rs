@@ -468,3 +468,22 @@ pub fn set_notification_prefs(prefs: serde_json::Value) -> Result<(), String> {
     config["notifications"] = prefs;
     write_config(&config)
 }
+
+// -- UI preferences --
+
+#[tauri::command]
+pub fn get_ui_prefs() -> Result<serde_json::Value, String> {
+    let config = read_config()?;
+    Ok(config.get("ui").cloned().unwrap_or_else(|| {
+        serde_json::json!({
+            "show_agent_branch": true
+        })
+    }))
+}
+
+#[tauri::command]
+pub fn set_ui_prefs(prefs: serde_json::Value) -> Result<(), String> {
+    let mut config = read_config()?;
+    config["ui"] = prefs;
+    write_config(&config)
+}

@@ -40,29 +40,35 @@ const DARK_THEME = {
 
 const LIGHT_THEME = {
   background: "#ffffff",
-  foreground: "#1a1a1a",
-  cursor: "#1a1a1a",
+  foreground: "#111111",
+  cursor: "#111111",
   cursorAccent: "#ffffff",
   selectionBackground: "#0451a5",
   selectionForeground: "#ffffff",
   selectionInactiveBackground: "#0451a580",
-  black: "#1a1a1a",
+  black: "#111111",
   blue: "#0451a5",
-  brightBlack: "#4b4b4b",
+  brightBlack: "#3f4854",
   brightBlue: "#0366d6",
   brightCyan: "#0b7285",
   brightGreen: "#1a7f37",
   brightMagenta: "#7c3aed",
   brightRed: "#cf222e",
-  brightWhite: "#d4d4d4",
+  brightWhite: "#2f343a",
   brightYellow: "#9a6700",
   cyan: "#0b6e6e",
   green: "#116329",
   magenta: "#7c3aed",
   red: "#b31d28",
-  white: "#a0a0a0",
+  white: "#3f4650",
   yellow: "#845306",
 };
+
+const TERMINAL_FONT_FAMILY = '"JetBrains Mono", "SF Mono", Menlo, Monaco, monospace';
+const TERMINAL_FONT_SIZE = 14;
+const TERMINAL_LINE_HEIGHT = 18 / TERMINAL_FONT_SIZE;
+const LIGHT_FONT_WEIGHT = "500";
+const DARK_FONT_WEIGHT = "normal";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -237,13 +243,17 @@ function XTermContainerComponent({
       allowTransparency: true,
       allowProposedApi: true,
       cursorBlink: true,
-      fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace',
-      fontSize: 13.5,
-      fontWeight: "normal",
+      customGlyphs: true,
+      drawBoldTextInBrightColors: false,
+      fontFamily: TERMINAL_FONT_FAMILY,
+      fontSize: TERMINAL_FONT_SIZE,
+      fontWeight: isDarkRef.current ? DARK_FONT_WEIGHT : LIGHT_FONT_WEIGHT,
       fontWeightBold: "bold",
-      lineHeight: 1.3,
+      letterSpacing: 0,
+      lineHeight: TERMINAL_LINE_HEIGHT,
       macOptionIsMeta: true,
-      minimumContrastRatio: 1,
+      minimumContrastRatio: isDarkRef.current ? 1 : 4.5,
+      rescaleOverlappingGlyphs: true,
       scrollback: 200000,
       theme: isDarkRef.current ? DARK_THEME : LIGHT_THEME,
     });
@@ -334,6 +344,28 @@ function XTermContainerComponent({
         return false;
       }
     };
+
+    let fontRefreshCancelled = false;
+    if ("fonts" in document) {
+      void Promise.all([
+        document.fonts.load(`${LIGHT_FONT_WEIGHT} ${TERMINAL_FONT_SIZE}px "JetBrains Mono"`),
+        document.fonts.load(`700 ${TERMINAL_FONT_SIZE}px "JetBrains Mono"`),
+        document.fonts.ready,
+      ]).then(() => {
+        if (fontRefreshCancelled) return;
+        terminal.options.fontFamily = TERMINAL_FONT_FAMILY;
+        terminal.options.fontSize = TERMINAL_FONT_SIZE;
+        terminal.options.lineHeight = TERMINAL_LINE_HEIGHT;
+        fit();
+        if (sessionActiveRef.current) {
+          const { cols, rows } = dims(terminal);
+          void invoke("resize_terminal", { tileId, cols, rows });
+        }
+        terminal.refresh(0, Math.max(terminal.rows - 1, 0));
+      }).catch(() => {
+        // Font loading is best-effort; system monospace fallbacks remain valid.
+      });
+    }
 
     // --- 4. Resize pipeline ---
     //
@@ -605,6 +637,7 @@ function XTermContainerComponent({
     // --- 9. Cleanup ---
     return () => {
       cancelled = true;
+      fontRefreshCancelled = true;
       sessionActiveRef.current = false;
       cancelAnimationFrame(resizeRaf);
       window.clearTimeout(flushTimer);
@@ -631,6 +664,8 @@ function XTermContainerComponent({
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (terminalRef.current) {
+      terminalRef.current.options.fontWeight = isDark ? DARK_FONT_WEIGHT : LIGHT_FONT_WEIGHT;
+      terminalRef.current.options.minimumContrastRatio = isDark ? 1 : 4.5;
       terminalRef.current.options.theme = isDark ? DARK_THEME : LIGHT_THEME;
     }
   }, [isDark]);
@@ -688,7 +723,7 @@ function XTermContainerComponent({
             autoCapitalize="off"
             spellCheck={false}
             className="h-6 w-48 border-none bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-            style={{ fontFamily: '"SF Mono", Menlo, Monaco, "JetBrains Mono", monospace' }}
+            style={{ fontFamily: TERMINAL_FONT_FAMILY }}
           />
           <button
             onClick={() => doSearch(searchQuery, "prev")}

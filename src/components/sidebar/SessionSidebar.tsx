@@ -38,6 +38,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useAppState, useAppDispatch } from "../../state/context";
 import { SessionCard } from "./SessionCard";
+import { AgentStatusFilter, type StatusFilter } from "./AgentStatusFilter";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -46,8 +47,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getSessionRailBucket } from "@/lib/session-attention";
+import { getSessionRailBucket, getAgentState } from "@/lib/session-attention";
 import { formatCompactRelativeTime, formatTimestampTitle } from "@/lib/time";
+import { settingsCommands } from "@/lib/tauri-commands";
 import type { Session } from "../../state/types";
 
 interface SessionSidebarProps {
@@ -119,7 +121,7 @@ function DraggedSessionPreview({ session }: { session: Session }) {
   return (
     <div className="inline-flex max-w-[240px] items-center rounded-md bg-card px-2 py-1 shadow-lg ring-1 ring-border">
       <span className="truncate text-[12px] font-medium">
-        {session.label || "New session"}
+        {session.label || "New agent"}
       </span>
     </div>
   );
@@ -203,7 +205,6 @@ export function SessionSidebar({
   const sessionGitSummaries = useSessionGitSummaries(allSessions);
   const [renameTarget, setRenameTarget] = useState<Session | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
   const [historyOpenInternal, setHistoryOpenInternal] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
@@ -222,8 +223,16 @@ export function SessionSidebar({
   const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
   const [dragOverPinned, setDragOverPinned] = useState(false);
   const [dragActiveId, setDragActiveId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [showBranch, setShowBranch] = useState(true);
   const effectiveSelectedSessionId = selectedSessionId ?? state.activeSessionId;
   const effectiveHistoryOpen = historyOpen ?? historyOpenInternal;
+
+  useEffect(() => {
+    settingsCommands.getUiPrefs()
+      .then((prefs) => setShowBranch(prefs.show_agent_branch))
+      .catch(() => {});
+  }, []);
 
   const setHistoryOpen = useCallback(
     (open: boolean) => {
@@ -256,8 +265,12 @@ export function SessionSidebar({
     () =>
       pinnedIds
         .map((id) => state.sessions[id])
-        .filter((s): s is Session => s != null),
-    [pinnedIds, state.sessions],
+        .filter((s): s is Session => {
+          if (!s) return false;
+          if (statusFilter === "all") return true;
+          return getAgentState(s.status) === statusFilter;
+        }),
+    [pinnedIds, state.sessions, statusFilter],
   );
 
   const projectGroups = useMemo<ProjectSessionGroup[]>(() => {
@@ -415,11 +428,13 @@ export function SessionSidebar({
     closeRenameDialog();
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget || !onDeleteSession) return;
-    await onDeleteSession(deleteTarget);
-    setDeleteTarget(null);
-  };
+  const handleDeleteSession = useCallback(
+    async (session: Session) => {
+      if (!onDeleteSession) return;
+      await onDeleteSession(session);
+    },
+    [onDeleteSession],
+  );
 
   const toggleHistorySelection = useCallback((sessionId: string) => {
     setSelectedHistoryIds((prev) => {
@@ -530,8 +545,8 @@ export function SessionSidebar({
       onDragEnd={handleDragEnd}
     >
     <div className="flex h-full w-full flex-col overflow-hidden bg-card font-sans overscroll-x-none">
-      {/* New session button */}
-      <div className="shrink-0 px-3 pt-2">
+      {/* New agent button */}
+      <div className="shrink-0 px-3 pt-2 pb-0">
         <Button
           variant="outline"
           size="sm"
@@ -539,11 +554,20 @@ export function SessionSidebar({
           onClick={() => onNewSession()}
         >
           <Plus className="size-[18px]" />
-          New Session
+          New Agent
         </Button>
       </div>
 
-      {/* Session list */}
+      {/* Status filter chips */}
+      <div className="shrink-0">
+        <AgentStatusFilter
+          sessions={allSessions}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
+      </div>
+
+      {/* Agent list */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-x-none [touch-action:pan-y]">
         <div className="flex min-w-0 flex-col py-2">
           {/* Pinned section */}
@@ -588,6 +612,7 @@ export function SessionSidebar({
                             isOpenInTab={openTabSet.has(session.id)}
                             suppressHover={suppressSessionHover}
                             isPinned
+                            showBranch={showBranch}
                             gitSummary={sessionGitSummaries.get(session.id) ?? null}
                             timestampLabel={formatCompactRelativeTime(session.createdAt, now)}
                             timestampTitle={formatTimestampTitle(session.createdAt)}
@@ -609,7 +634,11 @@ export function SessionSidebar({
                               setRenameTarget(session);
                               setRenameValue(session.label);
                             }}
-                            onDelete={() => setDeleteTarget(session)}
+                            onDelete={
+                              onDeleteSession
+                                ? () => void handleDeleteSession(session)
+                                : undefined
+                            }
                             onClick={() => {
                               if (isHistorySession) {
                                 void handleViewSession(session);
@@ -628,7 +657,7 @@ export function SessionSidebar({
                     </div>
                   ) : (
                     <div className="px-3 py-2 text-[11px] text-muted-foreground">
-                      Drag sessions here
+                      Drag agents here
                     </div>
                   )}
                 </PinnedDropArea>
@@ -637,7 +666,11 @@ export function SessionSidebar({
 
           {projectGroups.map((group) => {
             const isCollapsed = collapsedProjects[group.path] ?? false;
-            const unpinnedSessions = group.sessions.filter((s) => !pinnedIds.includes(s.id));
+            const unpinnedSessions = group.sessions.filter((s) => {
+              if (pinnedIds.includes(s.id)) return false;
+              if (statusFilter === "all") return true;
+              return getAgentState(s.status) === statusFilter;
+            });
             const visibleSessions = unpinnedSessions.slice(0, PROJECT_SESSION_PREVIEW_LIMIT);
 
             return (
@@ -667,7 +700,7 @@ export function SessionSidebar({
                       size="icon-xs"
                       className="size-6 text-muted-foreground hover:text-foreground"
                       onClick={() => onNewSession(group.path)}
-                      title="New session"
+                      title="New agent"
                     >
                       <Plus className="size-[18px]" />
                     </Button>
@@ -737,6 +770,7 @@ export function SessionSidebar({
                               isOpenInTab={openTabSet.has(session.id)}
                               suppressHover={suppressSessionHover}
                               isPinned={pinnedIds.includes(session.id)}
+                              showBranch={showBranch}
                               gitSummary={sessionGitSummaries.get(session.id) ?? null}
                               timestampLabel={formatCompactRelativeTime(
                                 session.createdAt,
@@ -763,7 +797,11 @@ export function SessionSidebar({
                                 setRenameTarget(session);
                                 setRenameValue(session.label);
                               }}
-                              onDelete={() => setDeleteTarget(session)}
+                              onDelete={
+                                onDeleteSession
+                                  ? () => void handleDeleteSession(session)
+                                  : undefined
+                              }
                               onClick={() => {
                                 if (isHistorySession) {
                                   void handleViewSession(session);
@@ -777,7 +815,7 @@ export function SessionSidebar({
                       </div>
                     ) : (
                       <div className="px-4 py-2 text-[11px] text-muted-foreground">
-                        No sessions yet
+                        {statusFilter === "all" ? "No agents yet" : "No agents in this state"}
                       </div>
                     )}
                   </div>
@@ -908,7 +946,7 @@ export function SessionSidebar({
                   void handleRenameSubmit();
                 }
               }}
-              placeholder="Session label"
+              placeholder="Agent label"
             />
           </div>
           <DialogFooter>
@@ -916,32 +954,6 @@ export function SessionSidebar({
               Cancel
             </Button>
             <Button onClick={() => void handleRenameSubmit()}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete dialog */}
-      <Dialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-      >
-        <DialogContent className="sm:max-w-[360px]">
-          <DialogHeader>
-            <DialogTitle>Delete Session</DialogTitle>
-            <DialogDescription>
-              Remove this Switchboard session from the sidebar history.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void handleDeleteConfirm()}
-            >
-              Delete
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -970,7 +982,7 @@ export function SessionSidebar({
               <Input
                 value={historyQuery}
                 onChange={(event) => setHistoryQuery(event.target.value)}
-                placeholder="Search history by session, branch, agent, or project"
+                placeholder="Search history by agent, branch, or project"
                 className="flex-1"
               />
               {selectedHistoryIds.size > 0 && (
@@ -1036,6 +1048,7 @@ export function SessionSidebar({
                                 <SessionCard
                                   session={session}
                                   isActive={false}
+                                  showBranch={showBranch}
                                   timestampLabel={formatCompactRelativeTime(
                                     session.createdAt,
                                     now,
@@ -1054,7 +1067,14 @@ export function SessionSidebar({
                                     setRenameTarget(session);
                                     setRenameValue(session.label);
                                   }}
-                                  onDelete={() => setDeleteTarget(session)}
+                                  onDelete={
+                                    onDeleteSession
+                                      ? () => {
+                                          setHistoryOpen(false);
+                                          void handleDeleteSession(session);
+                                        }
+                                      : undefined
+                                  }
                                   onClick={() => {
                                     setHistoryOpen(false);
                                     void handleViewSession(session);

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
+  GitBranch,
   GitMerge,
   GitPullRequest,
   MoreHorizontal,
@@ -42,6 +43,7 @@ interface SessionCardProps {
   diffStats?: { additions: number; deletions: number } | null;
   gitSummary?: SessionGitSummary | null;
   isPinned?: boolean;
+  showBranch?: boolean;
   /** Ref from useDraggable — attach to the root element to make it draggable */
   dragRef?: React.Ref<HTMLDivElement>;
   isDragSource?: boolean;
@@ -63,6 +65,7 @@ export function SessionCard({
   session,
   isActive,
   isPinned,
+  showBranch = true,
   dragRef,
   isDragSource,
   isOpenInTab,
@@ -92,17 +95,19 @@ export function SessionCard({
         className="inline-flex max-w-[240px] items-center rounded-md bg-card px-2 py-1 shadow-sm ring-1 ring-border"
       >
         <span className="truncate text-[12px] font-medium">
-          {session.label || "New session"}
+          {session.label || "New agent"}
         </span>
       </div>
     );
   }
 
+  const hasBranch = showBranch && Boolean(session.branch);
+
   return (
     <div
       ref={dragRef}
       className={cn(
-        "group/session flex w-full min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md px-2 py-1.5 font-sans text-sm transition-colors",
+        "group/session flex w-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-md px-2 py-1.5 font-sans text-sm transition-colors",
         isActive
           ? "bg-accent/80 text-accent-foreground"
           : suppressHover
@@ -115,33 +120,35 @@ export function SessionCard({
       )}
       onClick={onClick}
     >
-      {/* Agent icon */}
-      <AgentIcon agent={session.agent} className="size-3.5 shrink-0" />
+      {/* Row 1: icon · dot · label · timestamp/actions */}
+      <div className="flex w-full min-w-0 items-center gap-1.5">
+        {/* Agent icon */}
+        <AgentIcon agent={session.agent} className="size-3.5 shrink-0" />
 
-      {/* Status dot */}
-      <StatusDot status={session.status} />
+        {/* Status dot */}
+        <StatusDot status={session.status} />
 
-      {/* Label — truncates to keep single row */}
-      <span className={cn(
-        "min-w-0 flex-1 truncate text-[13px] font-medium leading-5",
-        !session.label && "italic text-muted-foreground",
-      )}>
-        {session.label || "New session"}
-      </span>
-
-      {/* Right side: keep a stable footprint so hover actions never shift the row */}
-      <div className="relative flex h-5 w-[34px] shrink-0 items-center justify-end">
-        {/* Timestamp — hidden when hover actions visible */}
-        <span
-          className={cn(
-            "absolute right-0 text-[11px] text-muted-foreground/80 tabular-nums transition-opacity",
-            showHoverActions &&
-              "group-hover/session:opacity-0 group-focus-within/session:opacity-0",
-          )}
-          title={timestampTitle}
-        >
-          {timestampLabel}
+        {/* Label — truncates to keep single row */}
+        <span className={cn(
+          "min-w-0 flex-1 truncate text-[13px] font-medium leading-5",
+          !session.label && "italic text-muted-foreground",
+        )}>
+          {session.label || "New agent"}
         </span>
+
+        {/* Right side: keep a stable footprint so hover actions never shift the row */}
+        <div className="relative flex h-5 w-[34px] shrink-0 items-center justify-end">
+          {/* Timestamp — hidden when hover actions visible */}
+          <span
+            className={cn(
+              "absolute right-0 text-[11px] text-muted-foreground/80 tabular-nums transition-opacity",
+              showHoverActions &&
+                "group-hover/session:opacity-0 group-focus-within/session:opacity-0",
+            )}
+            title={timestampTitle}
+          >
+            {timestampLabel}
+          </span>
 
         <div
           className={cn(
@@ -317,7 +324,18 @@ export function SessionCard({
             </Tooltip>
           )}
         </div>
+        </div>
       </div>
+
+      {/* Row 2: branch name */}
+      {hasBranch && (
+        <div className="flex min-w-0 items-center gap-1 pl-[19px] pt-0.5">
+          <GitBranch className="size-2.5 shrink-0 text-muted-foreground/60" />
+          <span className="truncate text-[11px] text-muted-foreground/70 font-mono">
+            {session.branch}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

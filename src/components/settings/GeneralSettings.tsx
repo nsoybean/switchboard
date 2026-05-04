@@ -1,17 +1,40 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FolderOpen, Trash2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
 import { useAppState } from "../../state/context";
+import { settingsCommands } from "@/lib/tauri-commands";
+import { toast } from "sonner";
 
 export function GeneralSettings() {
   const state = useAppState();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showBranch, setShowBranch] = useState(true);
+  const [uiPrefsLoaded, setUiPrefsLoaded] = useState(false);
+
+  useEffect(() => {
+    settingsCommands.getUiPrefs()
+      .then((prefs) => {
+        setShowBranch(prefs.show_agent_branch);
+        setUiPrefsLoaded(true);
+      })
+      .catch(() => setUiPrefsLoaded(true));
+  }, []);
+
+  const updateShowBranch = async (value: boolean) => {
+    setShowBranch(value);
+    try {
+      await settingsCommands.setUiPrefs({ show_agent_branch: value });
+    } catch {
+      toast.error("Failed to save preference");
+    }
+  };
 
   return (
     <>
@@ -42,6 +65,27 @@ export function GeneralSettings() {
             Projects added: {state.projects.length}
           </p>
         </div>
+      </section>
+
+      <section className="mt-8 border-t pt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="text-sm font-semibold">Agent List</h2>
+        </div>
+
+        {uiPrefsLoaded && (
+          <div className="flex items-center justify-between rounded-md border bg-card px-3 py-3">
+            <div>
+              <p className="text-sm font-medium">Show branch on agent cards</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Display the active branch or worktree on each agent in the sidebar.
+              </p>
+            </div>
+            <Switch
+              checked={showBranch}
+              onCheckedChange={(v) => void updateShowBranch(v)}
+            />
+          </div>
+        )}
       </section>
 
       <section className="mt-8 border-t pt-6">

@@ -121,6 +121,8 @@ pub fn run() {
             commands::files::index_files,
             commands::session::get_notification_prefs,
             commands::session::set_notification_prefs,
+            commands::session::get_ui_prefs,
+            commands::session::set_ui_prefs,
             commands::hooks::write_claude_hook_config,
             commands::hooks::write_codex_hook_config,
             hook_server::get_hook_port,

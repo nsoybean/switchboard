@@ -226,11 +226,17 @@ export const settingsCommands = {
   getNotificationPrefs: () => invoke<NotificationPrefs>("get_notification_prefs"),
   setNotificationPrefs: (prefs: NotificationPrefs) =>
     invoke<void>("set_notification_prefs", { prefs }),
+  getUiPrefs: () => invoke<UiPrefs>("get_ui_prefs"),
+  setUiPrefs: (prefs: UiPrefs) => invoke<void>("set_ui_prefs", { prefs }),
 };
 
 export interface NotificationPrefs {
   enabled: boolean;
   sound_enabled: boolean;
+}
+
+export interface UiPrefs {
+  show_agent_branch: boolean;
 }
 
 export const hookCommands = {

@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { getCurrentWindow, type CursorIcon } from "@tauri-apps/api/window";
 import { cn } from "@/lib/utils";
 import { AppProvider } from "./state/context";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -8,65 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 // TODO: dock bounce + badge when session needs attention (idle/needs-input) while unfocused
 // import { useDockAttention } from "./hooks/useNotchNotifications";
-
-type ResizeDirection =
-  | "East"
-  | "North"
-  | "NorthEast"
-  | "NorthWest"
-  | "South"
-  | "SouthEast"
-  | "SouthWest"
-  | "West";
-
-type ResizeHandle = {
-  direction: ResizeDirection;
-  cursor: CursorIcon;
-  className: string;
-};
-
-const RESIZE_HANDLES: ResizeHandle[] = [
-  {
-    direction: "North",
-    cursor: "nsResize",
-    className: "top-0 left-5 right-5 h-4 cursor-row-resize z-20",
-  },
-  {
-    direction: "South",
-    cursor: "nsResize",
-    className: "bottom-0 left-5 right-5 h-4 cursor-row-resize z-20",
-  },
-  {
-    direction: "East",
-    cursor: "ewResize",
-    className: "top-5 right-0 bottom-5 w-4 cursor-col-resize z-20",
-  },
-  {
-    direction: "West",
-    cursor: "ewResize",
-    className: "top-5 left-0 bottom-5 w-4 cursor-col-resize z-20",
-  },
-  {
-    direction: "NorthEast",
-    cursor: "neswResize",
-    className: "top-0 right-0 h-6 w-6 cursor-nesw-resize z-30",
-  },
-  {
-    direction: "NorthWest",
-    cursor: "nwseResize",
-    className: "top-0 left-0 h-3 w-6 cursor-nwse-resize z-30",
-  },
-  {
-    direction: "SouthEast",
-    cursor: "nwseResize",
-    className: "right-0 bottom-0 h-6 w-6 cursor-nwse-resize z-30",
-  },
-  {
-    direction: "SouthWest",
-    cursor: "neswResize",
-    className: "bottom-0 left-0 h-6 w-6 cursor-nesw-resize z-30",
-  },
-];
 
 // function DockAttentionLayer() {
 //   useDockAttention();
@@ -77,7 +17,6 @@ function App() {
   const isMacOS =
     typeof window !== "undefined" &&
     /Mac|iPhone|iPad|iPod/.test(window.navigator.userAgent);
-  const appWindow = getCurrentWindow();
 
   useEffect(() => {
     const root = document.documentElement;
@@ -92,15 +31,6 @@ function App() {
     delete root.dataset.platform;
   }, [isMacOS]);
 
-  const handleResizeStart = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    direction: ResizeDirection,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void appWindow.startResizeDragging(direction);
-  };
-
   return (
     <ThemeProvider defaultTheme="dark">
       <TooltipProvider>
@@ -111,28 +41,6 @@ function App() {
               isMacOS && "relative sb-window-shell",
             )}
           >
-            {isMacOS ? (
-              <div className="pointer-events-none absolute inset-0 z-20">
-                {RESIZE_HANDLES.map((handle) => (
-                  <button
-                    key={handle.direction}
-                    type="button"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    className={cn(
-                      "pointer-events-auto absolute rounded-none border-0 bg-transparent p-0 outline-none",
-                      handle.className,
-                    )}
-                    onMouseDown={(event) =>
-                      handleResizeStart(event, handle.direction)
-                    }
-                    onMouseEnter={() => void appWindow.setCursorIcon(handle.cursor)}
-                    onMouseLeave={() => void appWindow.setCursorIcon("default")}
-                  />
-                ))}
-              </div>
-            ) : null}
-
             <div
               className={cn(
                 "h-full min-h-0 flex-1",

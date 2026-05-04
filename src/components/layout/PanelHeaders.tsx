@@ -364,7 +364,10 @@ export function RightPanelHeader({
       data-tauri-drag-region
       className="flex h-10 shrink-0 select-none items-center gap-2 border-b bg-card/95 px-2 font-sans text-xs"
     >
-      <div className="min-w-0 flex-1 truncate px-1 text-xs font-medium text-muted-foreground">
+      <div
+        data-tauri-drag-region
+        className="h-full min-w-0 flex-1 truncate px-1 text-xs font-medium leading-10 text-muted-foreground"
+      >
         Inspector
       </div>
 

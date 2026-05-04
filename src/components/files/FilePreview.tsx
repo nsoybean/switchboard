@@ -1,6 +1,12 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useId, useState, useRef, type CSSProperties } from "react";
 import { File, X } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/theme-provider";
 import { fileCommands } from "../../lib/tauri-commands";
 import { createHighlighter, type Highlighter } from "shiki";
@@ -55,6 +61,11 @@ function getLanguage(path: string): string {
   return LANG_MAP[ext] ?? "text";
 }
 
+function isMarkdownFile(path: string): boolean {
+  const name = path.split("/").pop()?.toLowerCase() ?? "";
+  return name.endsWith(".md");
+}
+
 /** Lazy singleton highlighter */
 let highlighterPromise: Promise<Highlighter> | null = null;
 const loadedLangs = new Set<string>();
@@ -102,11 +113,15 @@ export function FilePreview({
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [markdownPreview, setMarkdownPreview] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const previewSwitchId = useId();
   const { theme } = useTheme();
 
   const fileName = filePath.split("/").pop() ?? filePath;
   const language = getLanguage(filePath);
+  const canPreviewMarkdown = isMarkdownFile(filePath);
+  const showingMarkdownPreview = canPreviewMarkdown && markdownPreview;
   const shikiTheme =
     theme === "dark" ? "github-dark-default" : "github-light-default";
 
@@ -117,6 +132,7 @@ export function FilePreview({
     setError(null);
     setContent(null);
     setHighlightedHtml(null);
+    setMarkdownPreview(false);
 
     fileCommands
       .readFile(filePath)
@@ -140,7 +156,7 @@ export function FilePreview({
 
   // Highlight when content or theme changes
   useEffect(() => {
-    if (!content) return;
+    if (!content || showingMarkdownPreview) return;
     let cancelled = false;
 
     highlight(content, language, shikiTheme).then((html) => {
@@ -150,7 +166,7 @@ export function FilePreview({
     return () => {
       cancelled = true;
     };
-  }, [content, language, shikiTheme]);
+  }, [content, language, shikiTheme, showingMarkdownPreview]);
 
   return (
     <div className="flex h-full flex-col bg-background font-sans">
@@ -160,7 +176,24 @@ export function FilePreview({
           <span className="text-xs font-medium truncate flex-1 font-mono">
             {fileName}
           </span>
-          <span className="text-[10px] text-muted-foreground/60">{language}</span>
+          {canPreviewMarkdown ? (
+            <Label
+              htmlFor={previewSwitchId}
+              className="gap-1.5 text-[10px] font-normal text-muted-foreground"
+            >
+              Preview
+              <Switch
+                id={previewSwitchId}
+                checked={showingMarkdownPreview}
+                onCheckedChange={setMarkdownPreview}
+                aria-label="Toggle markdown preview"
+              />
+            </Label>
+          ) : (
+            <span className="text-[10px] text-muted-foreground/60">
+              {language}
+            </span>
+          )}
           {onClose ? (
             <Button
               variant="ghost"
@@ -175,6 +208,23 @@ export function FilePreview({
       ) : null}
 
       {/* Content */}
+      {canPreviewMarkdown && !showHeader ? (
+        <div className="flex shrink-0 items-center justify-end border-b bg-card/85 px-3 py-1.5">
+          <Label
+            htmlFor={previewSwitchId}
+            className="gap-1.5 text-[10px] font-normal text-muted-foreground"
+          >
+            Preview
+            <Switch
+              id={previewSwitchId}
+              checked={showingMarkdownPreview}
+              onCheckedChange={setMarkdownPreview}
+              aria-label="Toggle markdown preview"
+            />
+          </Label>
+        </div>
+      ) : null}
+
       <div className="flex-1 min-h-0 overflow-auto">
         {loading && (
           <div className="p-4 text-xs text-muted-foreground">Loading...</div>
@@ -182,13 +232,16 @@ export function FilePreview({
         {error && (
           <div className="p-4 text-xs text-destructive">{error}</div>
         )}
-        {content !== null && highlightedHtml ? (
+        {content !== null && showingMarkdownPreview ? (
+          <MarkdownPreview content={content} filePath={filePath} />
+        ) : null}
+        {content !== null && !showingMarkdownPreview && highlightedHtml ? (
           <div
             ref={containerRef}
             className="shiki-preview text-[13px] leading-relaxed [&_pre]:!bg-transparent [&_pre]:p-4 [&_pre]:m-0 [&_code]:font-[JetBrains_Mono,monospace] [&_.line]:before:content-[attr(data-line)] [&_.line]:before:inline-block [&_.line]:before:w-10 [&_.line]:before:text-right [&_.line]:before:pr-4 [&_.line]:before:text-[var(--foreground)]/20 [&_.line]:before:select-none"
             dangerouslySetInnerHTML={{ __html: highlightedHtml }}
           />
-        ) : content !== null ? (
+        ) : content !== null && !showingMarkdownPreview ? (
           /* Fallback while shiki loads */
           <pre className="p-4 text-[13px] font-[JetBrains_Mono,monospace] leading-relaxed whitespace-pre-wrap break-words">
             {content.split("\n").map((line, i) => (
@@ -204,4 +257,183 @@ export function FilePreview({
       </div>
     </div>
   );
+}
+
+function MarkdownPreview({
+  content,
+  filePath,
+}: {
+  content: string;
+  filePath: string;
+}) {
+  return (
+    <div className="mx-auto w-full max-w-4xl px-6 py-5 font-sans text-sm leading-6 text-foreground">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
+        components={{
+          h1: ({ children }) => (
+            <h1 className="mb-4 border-b pb-2 text-2xl font-semibold leading-tight">
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mb-3 mt-6 border-b pb-1.5 text-xl font-semibold leading-tight">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mb-2 mt-5 text-base font-semibold">{children}</h3>
+          ),
+          h4: ({ children }) => (
+            <h4 className="mb-2 mt-4 text-sm font-semibold">{children}</h4>
+          ),
+          p: ({ children, ...props }) => {
+            const htmlProps = props as { align?: unknown };
+            const align =
+              typeof htmlProps.align === "string" ? htmlProps.align : undefined;
+
+            return (
+              <p
+                className="mb-3 whitespace-pre-wrap break-words"
+                style={align ? { textAlign: markdownTextAlign(align) } : undefined}
+              >
+                {children}
+              </p>
+            );
+          },
+          img: ({ src, alt, width, height }) => (
+            <img
+              src={resolveMarkdownImageSrc(src, filePath)}
+              alt={alt ?? ""}
+              width={width}
+              height={height}
+              className="my-3 inline-block max-w-full rounded-md border object-contain"
+            />
+          ),
+          ul: ({ children }) => (
+            <ul className="mb-3 ml-5 list-disc space-y-1">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="mb-3 ml-5 list-decimal space-y-1">{children}</ol>
+          ),
+          li: ({ children }) => (
+            <li className="whitespace-normal break-words">{children}</li>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              className="text-primary underline underline-offset-2"
+            >
+              {children}
+            </a>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="mb-3 border-l-2 pl-3 text-muted-foreground">
+              {children}
+            </blockquote>
+          ),
+          code: ({ children, className }) => {
+            const isBlock = className?.startsWith("language-");
+
+            if (isBlock) {
+              return (
+                <code className="font-mono text-[12px] leading-relaxed">
+                  {children}
+                </code>
+              );
+            }
+
+            return (
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]">
+                {children}
+              </code>
+            );
+          },
+          pre: ({ children }) => (
+            <pre className="mb-3 overflow-x-auto rounded-md border bg-muted/40 p-3">
+              {children}
+            </pre>
+          ),
+          hr: () => <hr className="my-5 border-border" />,
+          table: ({ children }) => (
+            <div className="mb-3 overflow-x-auto">
+              <table className="w-full border-collapse text-left text-sm">
+                {children}
+              </table>
+            </div>
+          ),
+          th: ({ children }) => (
+            <th className="border px-2 py-1.5 font-semibold">{children}</th>
+          ),
+          td: ({ children }) => (
+            <td className="border px-2 py-1.5 align-top">{children}</td>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function resolveMarkdownImageSrc(src: string | undefined, filePath: string) {
+  if (!src || isExternalMarkdownSrc(src)) return src;
+
+  const decodedSrc = decodeUriPath(src);
+  const imagePath = isAbsolutePath(decodedSrc)
+    ? decodedSrc
+    : normalizePath(`${dirname(filePath)}/${decodedSrc}`);
+
+  try {
+    return convertFileSrc(imagePath);
+  } catch {
+    return `file://${imagePath}`;
+  }
+}
+
+function isExternalMarkdownSrc(src: string) {
+  return /^(?:[a-z][a-z0-9+.-]*:|#|\/\/)/i.test(src);
+}
+
+function isAbsolutePath(path: string) {
+  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
+}
+
+function dirname(path: string) {
+  const normalized = path.replace(/\\/g, "/");
+  const index = normalized.lastIndexOf("/");
+  return index === -1 ? "." : normalized.slice(0, index);
+}
+
+function normalizePath(path: string) {
+  const isAbsolute = path.startsWith("/");
+  const parts = path.replace(/\\/g, "/").split("/");
+  const normalized: string[] = [];
+
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      normalized.pop();
+      continue;
+    }
+    normalized.push(part);
+  }
+
+  return `${isAbsolute ? "/" : ""}${normalized.join("/")}`;
+}
+
+function decodeUriPath(path: string) {
+  try {
+    return decodeURI(path);
+  } catch {
+    return path;
+  }
+}
+
+function markdownTextAlign(align: string): CSSProperties["textAlign"] {
+  if (align === "center" || align === "left" || align === "right") {
+    return align;
+  }
+  return undefined;
 }
