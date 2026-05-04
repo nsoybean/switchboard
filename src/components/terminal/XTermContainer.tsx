@@ -40,27 +40,27 @@ const DARK_THEME = {
 
 const LIGHT_THEME = {
   background: "#ffffff",
-  foreground: "#1a1a1a",
-  cursor: "#1a1a1a",
+  foreground: "#111111",
+  cursor: "#111111",
   cursorAccent: "#ffffff",
   selectionBackground: "#0451a5",
   selectionForeground: "#ffffff",
   selectionInactiveBackground: "#0451a580",
-  black: "#1a1a1a",
+  black: "#111111",
   blue: "#0451a5",
-  brightBlack: "#4b4b4b",
+  brightBlack: "#4a5563",
   brightBlue: "#0366d6",
   brightCyan: "#0b7285",
   brightGreen: "#1a7f37",
   brightMagenta: "#7c3aed",
   brightRed: "#cf222e",
-  brightWhite: "#d4d4d4",
+  brightWhite: "#4a4a4a",
   brightYellow: "#9a6700",
   cyan: "#0b6e6e",
   green: "#116329",
   magenta: "#7c3aed",
   red: "#b31d28",
-  white: "#a0a0a0",
+  white: "#5f6368",
   yellow: "#845306",
 };
 
@@ -243,7 +243,7 @@ function XTermContainerComponent({
       fontWeightBold: "bold",
       lineHeight: 1.3,
       macOptionIsMeta: true,
-      minimumContrastRatio: 1,
+      minimumContrastRatio: isDarkRef.current ? 1 : 4.5,
       scrollback: 200000,
       theme: isDarkRef.current ? DARK_THEME : LIGHT_THEME,
     });
@@ -631,6 +631,7 @@ function XTermContainerComponent({
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (terminalRef.current) {
+      terminalRef.current.options.minimumContrastRatio = isDark ? 1 : 4.5;
       terminalRef.current.options.theme = isDark ? DARK_THEME : LIGHT_THEME;
     }
   }, [isDark]);
