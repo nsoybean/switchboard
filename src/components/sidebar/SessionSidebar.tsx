@@ -205,7 +205,6 @@ export function SessionSidebar({
   const sessionGitSummaries = useSessionGitSummaries(allSessions);
   const [renameTarget, setRenameTarget] = useState<Session | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
   const [historyOpenInternal, setHistoryOpenInternal] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
@@ -429,11 +428,13 @@ export function SessionSidebar({
     closeRenameDialog();
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteTarget || !onDeleteSession) return;
-    await onDeleteSession(deleteTarget);
-    setDeleteTarget(null);
-  };
+  const handleDeleteSession = useCallback(
+    async (session: Session) => {
+      if (!onDeleteSession) return;
+      await onDeleteSession(session);
+    },
+    [onDeleteSession],
+  );
 
   const toggleHistorySelection = useCallback((sessionId: string) => {
     setSelectedHistoryIds((prev) => {
@@ -633,7 +634,11 @@ export function SessionSidebar({
                               setRenameTarget(session);
                               setRenameValue(session.label);
                             }}
-                            onDelete={() => setDeleteTarget(session)}
+                            onDelete={
+                              onDeleteSession
+                                ? () => void handleDeleteSession(session)
+                                : undefined
+                            }
                             onClick={() => {
                               if (isHistorySession) {
                                 void handleViewSession(session);
@@ -792,7 +797,11 @@ export function SessionSidebar({
                                 setRenameTarget(session);
                                 setRenameValue(session.label);
                               }}
-                              onDelete={() => setDeleteTarget(session)}
+                              onDelete={
+                                onDeleteSession
+                                  ? () => void handleDeleteSession(session)
+                                  : undefined
+                              }
                               onClick={() => {
                                 if (isHistorySession) {
                                   void handleViewSession(session);
@@ -949,32 +958,6 @@ export function SessionSidebar({
         </DialogContent>
       </Dialog>
 
-      {/* Delete dialog */}
-      <Dialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-      >
-        <DialogContent className="sm:max-w-[360px]">
-          <DialogHeader>
-            <DialogTitle>Delete Session</DialogTitle>
-            <DialogDescription>
-              Remove this agent from the sidebar history.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void handleDeleteConfirm()}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* History dialog */}
       <Dialog
         open={effectiveHistoryOpen}
@@ -1084,7 +1067,14 @@ export function SessionSidebar({
                                     setRenameTarget(session);
                                     setRenameValue(session.label);
                                   }}
-                                  onDelete={() => setDeleteTarget(session)}
+                                  onDelete={
+                                    onDeleteSession
+                                      ? () => {
+                                          setHistoryOpen(false);
+                                          void handleDeleteSession(session);
+                                        }
+                                      : undefined
+                                  }
                                   onClick={() => {
                                     setHistoryOpen(false);
                                     void handleViewSession(session);
