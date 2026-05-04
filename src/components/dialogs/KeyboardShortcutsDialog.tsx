@@ -59,12 +59,12 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
           <DialogTitle>Keyboard Shortcuts</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-8 overflow-y-auto max-h-[60vh] pr-1">
-          <ShortcutGroup title="Sessions">
-            <ShortcutRow keys={["Cmd", "N"]} label="New session" />
-            <ShortcutRow keys={["Cmd", "W"]} label="Close session / transcript" />
-            <ShortcutRow keys={["Cmd", "1–9"]} label="Switch to session" />
-            <ShortcutRow keys={["Ctrl", "Tab"]} label="Next session" />
-            <ShortcutRow keys={["Ctrl", "⇧", "Tab"]} label="Previous session" />
+          <ShortcutGroup title="Agents">
+            <ShortcutRow keys={["Cmd", "N"]} label="New agent" />
+            <ShortcutRow keys={["Cmd", "W"]} label="Close agent / transcript" />
+            <ShortcutRow keys={["Cmd", "1–9"]} label="Switch to agent" />
+            <ShortcutRow keys={["Ctrl", "Tab"]} label="Next agent" />
+            <ShortcutRow keys={["Ctrl", "⇧", "Tab"]} label="Previous agent" />
           </ShortcutGroup>
           <ShortcutGroup title="Navigation">
             <ShortcutRow keys={["Cmd", "B"]} label="Toggle sidebar" />

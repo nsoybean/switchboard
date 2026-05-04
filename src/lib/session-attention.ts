@@ -2,6 +2,26 @@ import type { Session, SessionStatus } from "@/state/types";
 
 export type SessionRailBucket = "active" | "ready-for-review" | "history";
 
+export type AgentState = "running" | "idle" | "needs-input" | "finished" | "failed";
+
+export function getAgentState(status: SessionStatus): AgentState {
+  switch (status) {
+    case "running":
+      return "running";
+    case "idle":
+      return "idle";
+    case "needs-input":
+      return "needs-input";
+    case "done":
+    case "stopped":
+      return "finished";
+    case "error":
+      return "failed";
+    default:
+      return "finished";
+  }
+}
+
 export function getSessionRailBucket(status: SessionStatus): SessionRailBucket {
   switch (status) {
     case "running":
@@ -23,14 +43,14 @@ export function getSessionStatusLabel(status: SessionStatus): string {
     case "running":
       return "Running";
     case "idle":
+      return "Idle";
     case "needs-input":
-      return "Ready for review";
+      return "Needs input";
     case "done":
-      return "Done";
-    case "error":
-      return "Error";
     case "stopped":
-      return "Stopped";
+      return "Finished";
+    case "error":
+      return "Failed";
     default:
       return status;
   }

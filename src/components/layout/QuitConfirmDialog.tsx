@@ -31,8 +31,8 @@ export function QuitConfirmDialog({
           <DialogTitle>Quit Switchboard?</DialogTitle>
           <DialogDescription>
             {liveSessions.length === 1
-              ? "1 session is still running."
-              : `${liveSessions.length} sessions are still running.`}{" "}
+              ? "1 agent is still running."
+              : `${liveSessions.length} agents are still running.`}{" "}
             Quitting will stop them.
           </DialogDescription>
         </DialogHeader>
@@ -42,7 +42,7 @@ export function QuitConfirmDialog({
             <div key={session.id} className="flex items-center gap-2 py-1">
               <AgentIcon agent={session.agent} className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate font-medium">
-                {session.label || "New session"}
+                {session.label || "New agent"}
               </span>
               <StatusDot status={session.status} />
             </div>
