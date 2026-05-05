@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
+import { open } from "@tauri-apps/plugin-shell";
 import {
   Archive,
   ArrowDown,
@@ -16,6 +17,7 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { fileCommands, gitCommands, type ChangedFile, type StashEntry } from "../../lib/tauri-commands";
 import { BranchPicker } from "./BranchPicker";
@@ -130,6 +132,7 @@ export const GitPanel = memo(function GitPanel({
   const [pushPending, setPushPending] = useState(false);
   const [fetchPending, setFetchPending] = useState(false);
   const [stashPending, setStashPending] = useState(false);
+  const [manualPrPending, setManualPrPending] = useState(false);
   const [viewMode, setViewMode] = useState<ChangesViewMode>("flat");
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
@@ -269,7 +272,8 @@ export const GitPanel = memo(function GitPanel({
         : hasChanges;
   const canPush = git.aheadBehind.ahead > 0;
   const canPull = git.aheadBehind.behind > 0;
-  const canCreatePr = Boolean(githubToken && onCreatePr);
+  const canCreatePr = Boolean(git.branch && githubToken && onCreatePr);
+  const canManualPr = Boolean(git.branch);
   const anyGitPending =
     git.branchActionPending ||
     Boolean(git.pendingAction) ||
@@ -277,6 +281,7 @@ export const GitPanel = memo(function GitPanel({
     pushPending ||
     fetchPending ||
     stashPending ||
+    manualPrPending ||
     commitPending;
   const isNotGitRepo =
     git.error !== null &&
@@ -364,6 +369,29 @@ export const GitPanel = memo(function GitPanel({
       await git.stash();
     } finally {
       setStashPending(false);
+    }
+  };
+
+  const handleCreatePr = async () => {
+    if (!canCreatePr || anyGitPending) return;
+    onCreatePr?.();
+  };
+
+  const handleManualPr = async () => {
+    if (!canManualPr || manualPrPending || anyGitPending) return;
+    setManualPrPending(true);
+    try {
+      const publish = gitCommands.manualPrUrl(cwd);
+      toast.promise(publish, {
+        loading: "Publishing branch...",
+        success: "Opening pull request page",
+        error: (err) => `Failed to publish branch: ${String(err)}`,
+      });
+      const url = await publish;
+      await open(url);
+      await git.refresh();
+    } finally {
+      setManualPrPending(false);
     }
   };
 
@@ -840,10 +868,17 @@ export const GitPanel = memo(function GitPanel({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   disabled={!canCreatePr}
-                  onSelect={() => onCreatePr?.()}
+                  onSelect={() => void handleCreatePr()}
                 >
                   <GitPullRequest />
                   Create Pull Request
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canManualPr || manualPrPending}
+                  onSelect={() => void handleManualPr()}
+                >
+                  {manualPrPending ? <Spinner className="size-3.5" /> : <GitPullRequest />}
+                  Publish & Open Pull Request
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
