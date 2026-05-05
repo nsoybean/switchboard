@@ -541,6 +541,35 @@ pub fn git_create_pr(
         .ok_or_else(|| "GitHub API did not return a PR URL".to_string())
 }
 
+/// Push the current branch and return the GitHub web compare URL for manual PR creation.
+#[tauri::command]
+pub fn git_manual_pr_url(cwd: String) -> Result<String, String> {
+    let branch = run_git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])?
+        .trim()
+        .to_string();
+
+    if branch == "HEAD" {
+        return Err("Cannot create a pull request from a detached HEAD".to_string());
+    }
+
+    git_push(cwd.clone())?;
+
+    let remote_url = run_git(&cwd, &["remote", "get-url", "origin"])?
+        .trim()
+        .to_string();
+    let (owner, repo) = parse_github_remote(&remote_url)
+        .ok_or_else(|| format!("Could not parse GitHub remote from: {}", remote_url))?;
+    let base = default_remote_branch(&cwd).unwrap_or_else(|| "main".to_string());
+
+    Ok(format!(
+        "https://github.com/{}/{}/compare/{}...{}?expand=1",
+        owner,
+        repo,
+        url_component(&base),
+        url_component(&branch),
+    ))
+}
+
 /// Parse a GitHub remote URL (SSH or HTTPS) into (owner, repo)
 fn parse_github_remote(url: &str) -> Option<(String, String)> {
     let url = url.trim();
@@ -562,6 +591,26 @@ fn parse_github_remote(url: &str) -> Option<(String, String)> {
         }
     }
     None
+}
+
+fn default_remote_branch(cwd: &str) -> Option<String> {
+    let reference = run_git(cwd, &["symbolic-ref", "refs/remotes/origin/HEAD"]).ok()?;
+    reference
+        .trim()
+        .strip_prefix("refs/remotes/origin/")
+        .map(|branch| branch.to_string())
+}
+
+fn url_component(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            _ => format!("%{:02X}", byte),
+        })
+        .collect()
 }
 
 // ─── New types ───────────────────────────────────────────────────────────────

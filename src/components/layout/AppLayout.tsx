@@ -77,6 +77,14 @@ function getDurableHistorySessionId(session: Session): string | null {
   return null;
 }
 
+function shouldDiscardEmptyAgentSession(session: Session): boolean {
+  return (
+    (session.agent === "claude-code" || session.agent === "codex") &&
+    !session.label.trim() &&
+    session.isAutoLabel !== false
+  );
+}
+
 function getCodexInitialPrompt(session: Session): string | null {
   if (session.agent !== "codex" || session.args.length === 0) {
     return null;
@@ -571,6 +579,7 @@ export function AppLayout() {
           id: session.id,
           agent: session.agent,
           label: session.label,
+          is_auto_label: session.isAutoLabel ?? false,
           status: session.status,
           exit_code: session.exitCode,
           resume_target_id: session.resumeTargetId,
@@ -744,6 +753,36 @@ export function AppLayout() {
     [dispatch, persistSession],
   );
 
+  const sessionHasDurableHistory = useCallback(
+    async (session: Session): Promise<boolean> => {
+      if (session.agent === "claude-code") {
+        const sessionId = session.resumeTargetId ?? session.id;
+        return await invoke<boolean>("claude_session_file_exists", { sessionId });
+      }
+
+      if (session.agent === "codex") {
+        const sessionId = session.resumeTargetId ?? (await syncCodexResumeTarget(session));
+        return Boolean(sessionId);
+      }
+
+      return true;
+    },
+    [syncCodexResumeTarget],
+  );
+
+  const removeLocalSession = useCallback(
+    async (session: Session) => {
+      await invoke("close_terminal", { tileId: session.id }).catch(() => {});
+      await invoke("delete_session", { id: session.id }).catch(() => {});
+      dispatch({ type: "REMOVE_SESSION", id: session.id });
+      setViewingSession((current) =>
+        current?.id === session.id ? null : current,
+      );
+      dispatch({ type: "SET_PREVIEW_FILE", path: null });
+    },
+    [dispatch],
+  );
+
   const handleResumeSession = useCallback(
     async (session: Session) => {
       const existingSession = state.sessions[session.id];
@@ -759,6 +798,35 @@ export function AppLayout() {
 
       const resumeTargetId =
         session.resumeTargetId ?? (await syncCodexResumeTarget(session));
+      if (!resumeTargetId) {
+        if (shouldDiscardEmptyAgentSession(session) && state.sessions[session.id]) {
+          await removeLocalSession(session);
+          toast.message("Removed empty session", {
+            description: "No agent conversation was created, so there is nothing to resume.",
+          });
+        }
+        return;
+      }
+
+      if (session.agent === "claude-code") {
+        const exists = await invoke<boolean>("claude_session_file_exists", {
+          sessionId: resumeTargetId,
+        }).catch(() => false);
+        if (!exists) {
+          if (shouldDiscardEmptyAgentSession(session) && state.sessions[session.id]) {
+            await removeLocalSession(session);
+            toast.message("Removed empty session", {
+              description: "No Claude conversation was created, so there is nothing to resume.",
+            });
+          } else {
+            toast.error("Cannot resume session", {
+              description: "The Claude transcript for this session could not be found.",
+            });
+          }
+          return;
+        }
+      }
+
       const resumeConfig = buildResumeArgs(session.agent, resumeTargetId);
       if (!resumeConfig) {
         return;
@@ -805,7 +873,7 @@ export function AppLayout() {
       dispatch({ type: "ADD_SESSION", session: nextSession });
       await persistSession(nextSession);
     },
-    [dispatch, persistSession, state.sessions, syncCodexResumeTarget],
+    [dispatch, persistSession, removeLocalSession, state.sessions, syncCodexResumeTarget],
   );
 
   const openSettings = useCallback(() => setSettingsOpen(true), []);
@@ -1060,6 +1128,47 @@ export function AppLayout() {
   const handleSessionExit = useCallback(
     (sessionId: string) => (code: number | null) => {
       const session = sessionsRef.current[sessionId];
+      if (session && shouldDiscardEmptyAgentSession(session)) {
+        void sessionHasDurableHistory(session)
+          .then((hasHistory) => {
+            if (!hasHistory) {
+              void removeLocalSession(session);
+            } else {
+              const status: SessionStatus =
+                code === 0 || code === null ? "done" : "error";
+              dispatch({
+                type: "UPDATE_STATUS",
+                id: sessionId,
+                status,
+                exitCode: code,
+              });
+              void persistSession({
+                ...session,
+                status,
+                exitCode: code,
+              });
+            }
+          })
+          .catch(() => {
+            const status: SessionStatus =
+              code === 0 || code === null ? "done" : "error";
+            dispatch({
+              type: "UPDATE_STATUS",
+              id: sessionId,
+              status,
+              exitCode: code,
+            });
+            void persistSession({
+              ...session,
+              status,
+              exitCode: code,
+            });
+          });
+
+        void invoke("close_terminal", { tileId: sessionId }).catch(() => {});
+        return;
+      }
+
       const currentStatus = sessionsRef.current[sessionId]?.status;
       const status: SessionStatus =
         currentStatus === "stopped"
@@ -1086,23 +1195,11 @@ export function AppLayout() {
         void syncCodexResumeTarget(session);
       }
 
-      // Auto-clean empty Claude sessions that never produced a conversation.
-      if (session?.agent === "claude-code") {
-        void invoke<boolean>("claude_session_file_exists", {
-          sessionId: session.resumeTargetId ?? sessionId,
-        }).then((exists) => {
-          if (!exists) {
-            void invoke("delete_session", { id: sessionId }).catch(() => {});
-            dispatch({ type: "REMOVE_SESSION", id: sessionId });
-          }
-        }).catch(() => {});
-      }
-
       void invoke("close_terminal", { tileId: sessionId }).catch(() => {
         // Terminal records can already be gone if the session was stopped manually.
       });
     },
-    [dispatch, persistSession, syncCodexResumeTarget],
+    [dispatch, persistSession, removeLocalSession, sessionHasDurableHistory, syncCodexResumeTarget],
   );
 
   const handleSessionStart = useCallback(
@@ -1126,6 +1223,14 @@ export function AppLayout() {
 
       try {
         await invoke("close_terminal", { tileId: sessionId });
+        if (shouldDiscardEmptyAgentSession(session)) {
+          const hasHistory = await sessionHasDurableHistory(session);
+          if (!hasHistory) {
+            await removeLocalSession(session);
+            return;
+          }
+        }
+
         dispatch({
           type: "UPDATE_STATUS",
           id: sessionId,
@@ -1145,7 +1250,7 @@ export function AppLayout() {
         });
       }
     },
-    [dispatch, persistSession, syncCodexResumeTarget],
+    [dispatch, persistSession, removeLocalSession, sessionHasDurableHistory, syncCodexResumeTarget],
   );
 
   const handleStopCanvasSession = useCallback(

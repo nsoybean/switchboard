@@ -76,6 +76,7 @@ pub fn run() {
             commands::git::git_create_branch,
             commands::git::git_checkout_branch,
             commands::git::git_create_pr,
+            commands::git::git_manual_pr_url,
             commands::git::git_status_summary,
             commands::git::git_ahead_behind,
             commands::git::git_log,

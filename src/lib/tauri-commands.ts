@@ -90,6 +90,7 @@ export interface PersistedSession {
   id: string;
   agent: string;
   label: string;
+  is_auto_label?: boolean | null;
   status?: string | null;
   exit_code?: number | null;
   resume_target_id?: string | null;
@@ -134,6 +135,8 @@ export const gitCommands = {
     invoke<void>("git_checkout_branch", { cwd, name }),
   createPr: (cwd: string, title: string, body: string, base: string, token: string) =>
     invoke<string>("git_create_pr", { cwd, title, body, base, token }),
+  manualPrUrl: (cwd: string) =>
+    invoke<string>("git_manual_pr_url", { cwd }),
   statusSummary: (cwd: string, branch?: string) =>
     invoke<GitStatusSummary>("git_status_summary", { cwd, branch }),
   aheadBehind: (cwd: string) =>

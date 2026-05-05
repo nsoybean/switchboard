@@ -82,6 +82,7 @@ function hydratePersistedSession(session: PersistedSession): Session | null {
     id: session.id,
     agent: session.agent,
     label: session.label,
+    isAutoLabel: session.is_auto_label ?? !session.label.trim(),
     status: toHydratedStatus(session.status),
     resumeTargetId: session.resume_target_id ?? null,
     worktreePath,

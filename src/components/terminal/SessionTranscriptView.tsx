@@ -25,6 +25,7 @@ export function SessionTranscriptView({
   const [events, setEvents] = useState<SessionTranscriptEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const sessionTitle = session.label || "New agent";
 
   useEffect(() => {
     let cancelled = false;
@@ -93,9 +94,9 @@ export function SessionTranscriptView({
           <AgentIcon agent={session.agent} className="size-4 shrink-0" />
           <span
             className="min-w-0 max-w-[40ch] truncate font-semibold"
-            title={session.label}
+            title={sessionTitle}
           >
-            {session.label}
+            {sessionTitle}
           </span>
           <Badge variant="outline" className="text-[11px]">
             <Eye data-icon="inline-start" />
