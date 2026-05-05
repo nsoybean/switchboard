@@ -957,7 +957,7 @@ export function PaneWorkspace({
         id: `transcript:${transcriptSession.resumeTargetId ?? transcriptSession.id}`,
         kind: "transcript",
         session: transcriptSession,
-        title: transcriptSession.label,
+        title: transcriptSession.label || "New agent",
         closable: true,
       });
     }

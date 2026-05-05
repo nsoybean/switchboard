@@ -10,6 +10,8 @@ pub struct PersistedSession {
     pub agent: String,
     pub label: String,
     #[serde(default)]
+    pub is_auto_label: Option<bool>,
+    #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
     pub exit_code: Option<i32>,

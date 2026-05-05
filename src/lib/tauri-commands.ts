@@ -90,6 +90,7 @@ export interface PersistedSession {
   id: string;
   agent: string;
   label: string;
+  is_auto_label?: boolean | null;
   status?: string | null;
   exit_code?: number | null;
   resume_target_id?: string | null;

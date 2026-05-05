@@ -74,9 +74,10 @@ export function buildResumeArgs(
   }
 
   if (agent === "codex") {
+    if (!resumeTargetId) return null;
     return {
       command: "codex",
-      args: resumeTargetId ? ["resume", resumeTargetId] : ["resume", "--last"],
+      args: ["resume", resumeTargetId],
     };
   }
 
