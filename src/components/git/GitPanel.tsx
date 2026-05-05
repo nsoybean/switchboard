@@ -804,7 +804,6 @@ export const GitPanel = memo(function GitPanel({
                   <DropdownMenuItem onSelect={() => void handleFetch()}>
                     <RefreshCw />
                     Fetch
-                    <DropdownMenuShortcut>⌃G ⌃G</DropdownMenuShortcut>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={!canPull}
@@ -878,7 +877,7 @@ export const GitPanel = memo(function GitPanel({
                   onSelect={() => void handleManualPr()}
                 >
                   {manualPrPending ? <Spinner className="size-3.5" /> : <GitPullRequest />}
-                  Publish & Open Pull Request
+                  Manual Publish and Create Pull Request
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
